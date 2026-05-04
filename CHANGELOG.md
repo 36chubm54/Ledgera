@@ -7,6 +7,37 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [1.14.0] - 2026-05-04
+
+### Added
+
+- Added reusable UI shell helpers in `gui/ui_theme.py`, including card-section builders, spacing tokens, Treeview zebra helpers, and deeper palette application for shell widgets
+- Added stronger theme propagation for Canvas, Treeview, and Combobox popdown widgets across the desktop shell
+
+### Changed
+
+- Redesigned the desktop interface shell with more consistent card-based layouts, refreshed spacing, and cleaner visual hierarchy across major tabs
+- Refreshed `Operations`, `Debts`, `Budget`, `Reports`, `Analytics`, and `Settings` layouts to better fit the updated theme system
+- Updated `gui/tkinter_gui.py` so shell initialization, DPI bootstrap wiring, and theme application live closer to the GUI layer
+- Tightened dark/light theme styling for notebook tabs, headings, status bar controls, inline panels, and tables
+
+### Fixed
+
+- Improved desktop-shell consistency so tab content, auxiliary canvases, and list-heavy views follow the active palette more reliably
+- Stabilized migration/runtime tests around the current SQLite migration paths and audit/runtime expectations
+
+### Tests
+
+- Updated regression coverage for redesigned shell behavior, runtime storage paths, audit expectations, and JSON→SQLite migration flows
+
+### Docs
+
+- Updated `README.md`, `README_EN.md`, and `docs/architecture.md` for `v1.14.0` and the redesigned desktop shell
+
+No breaking changes.
+
+---
+
 ## [1.13.0] - 2026-04-29
 
 ### Added

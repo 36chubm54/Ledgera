@@ -2,7 +2,7 @@
 
 Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, бюджетами, долгами, активами и целями.
 
-Текущий релиз `v1.13.0` добавляет систему горячих клавиш, которая значительно улучшает пользовательский опыт за счёт быстрого доступа к основным функциям приложения.
+Текущий релиз `v1.14.0` посвящён редизайну desktop shell: обновлены визуальная система темы, layout основных вкладок и shell-level поведение Tkinter-приложения. Интерфейс стал более карточным и консистентным, Treeview-таблицы получили zebra/highlight styling, а light/dark palette system теперь глубже применяется к shell, canvas-виджетам, combobox popdown и рабочим вкладкам.
 
 ## 🚀 Быстрый старт
 
@@ -62,6 +62,8 @@ python main.py
 - Внешние языковые пакеты `locales/*.txt` и единый i18n-loader с fallback-цепочкой
 - Runtime `theme` / `language` preferences с сохранением в SQLite schema metadata
 - Light / dark theme system и live theme-aware shell, status bar, audit views и диалоги
+- Redesign desktop shell: card-based sections, обновлённые spacing tokens, более чистые notebook/treeview/status patterns
+- Улучшенное theme application для Treeview, Canvas и Combobox popdown widgets
 - Поддержка пользовательской иконки окна (`.ico` + `iconphoto` fallback) и подготовка к иконке будущего `exe`
 - Section-aware `JSON` import: records-only restore не затирает несвязанные `debts/assets/goals/budgets`
 - Более безопасная persistence-слой логика: quarantine для битых JSON-файлов, `.error` copies при save-failure, atomic backup/export paths
@@ -112,10 +114,11 @@ python main.py
 | `infrastructure.sqlite_repository.SQLiteRecordRepository` | Основной runtime repository |
 | `storage.sqlite_storage.SQLiteStorage` | Низкоуровневый SQLite adapter / schema bootstrap |
 
-Практические акценты для `v1.12.0`:
+Практические акценты для `v1.14.0`:
 
 - `FinancialController.save_theme_preference(...)` / `save_language_preference(...)` — runtime UI preferences, сохраняемые в SQLite
-- `gui.ui_theme` — централизованная light/dark palette system с runtime switching
+- `gui.ui_theme` — централизованная light/dark palette system, card helpers, spacing tokens и Treeview theming helpers
+- `gui.tkinter_gui` — главный shell orchestration layer, применяющий theme, status bar и tab rebuild/runtime hooks
 - `FinanceService.get_import_capabilities()` — единая capability-модель для import pipeline вместо ad-hoc проверок по атрибутам
 - `FinancialController.load_debts()` и `related_debt_id` в `create_income(...)` / `create_expense(...)` — важные точки для debt-aware import/restore flows
 - `SQLiteRecordRepository.replace_records_and_transfers(...)` — безопасная bulk-замена операций с ремапом связанных debt-payment ссылок

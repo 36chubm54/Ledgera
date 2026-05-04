@@ -25,6 +25,7 @@ Supported business areas include:
 - monthly distribution
 - strategic assets and goals
 - runtime UI preferences, theming, and localization
+- desktop shell layout and themed widget composition
 - analytics, reports, and audit
 - import / export / backup / migration
 
@@ -57,6 +58,7 @@ Important startup concerns:
 - JSON export/backup synchronization
 - OneDrive-aware export timing and WAL/SHM coherence
 - applying saved runtime theme/language preferences before shell build
+- applying shell-wide theme styling to cards, tables, canvases, and popdown controls
 - optional currency refresh
 - auto-application of mandatory payments
 - deferred GUI work and safe `after(...)` scheduling
@@ -233,7 +235,30 @@ This subsystem is responsible for:
 - live rebuilding of shell strings and theme-aware widgets/dialogs
 - keeping Tk styling, localized strings, and shell state synchronized during runtime preference changes
 
-### 4.9 Hotkeys
+As of `v1.14.0`, it also owns the shared desktop-shell design primitives:
+
+- spacing tokens and card-style section composition
+- Treeview zebra-striping and palette-aware list/table styling
+- shell-level theme application for `Canvas` and Combobox dropdown widgets
+
+### 4.9 Desktop Shell Layout
+
+Core modules:
+
+- `gui/tkinter_gui.py`
+- `gui/ui_theme.py`
+- `gui/tabs/operations_tab.py`
+- `gui/tabs/debts_tab.py`
+- `gui/tabs/settings_tab.py`
+
+This subsystem is responsible for:
+
+- composing the main shell, status area, notebook, and tab containers
+- keeping tab layouts visually consistent through shared card helpers and spacing tokens
+- coordinating shell rebuilds when runtime theme/language state changes
+- applying redesign conventions across form-heavy and table-heavy tabs
+
+### 4.10 Hotkeys
 
 Core modules:
 

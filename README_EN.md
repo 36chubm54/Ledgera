@@ -2,7 +2,7 @@
 
 Graphical application for personal financial accounting with multicurrency support, import/export, budgets, debts, assets, and goals.
 
-The current `v1.13.0` release adds a hotkey system that significantly improves the user experience by providing quick access to the application's core features.
+The current `v1.14.0` release focuses on a redesigned desktop shell: the visual theme system, major tab layouts, and shell-level Tkinter behavior were refreshed together. The UI is now more card-based and consistent, Treeview tables use stronger zebra/highlight styling, and the light/dark palette system is applied more deeply across the shell, canvas widgets, combobox popdowns, and working tabs.
 
 ## 🚀 Quick Start
 
@@ -62,6 +62,8 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. Core tabs can be 
 - External `locales/*.txt` language packs with a shared i18n loader and fallback chain
 - Runtime `theme` / `language` preferences persisted in SQLite schema metadata
 - Light / dark theme system with live theme-aware shell, status bar, audit views, and dialogs
+- Redesigned desktop shell with card-based sections, updated spacing tokens, and cleaner notebook/treeview/status patterns
+- Improved theme application for Treeview, Canvas, and Combobox popdown widgets
 - Custom window icon support (`.ico` + `iconphoto` fallback) with forward compatibility for packaged `exe` icon usage
 - Section-aware `JSON` import so records-only restore does not wipe unrelated `debts/assets/goals/budgets`
 - Safer persistence behavior: corrupt JSON quarantine, `.error` copies on save failure, atomic backup/export paths
@@ -112,10 +114,11 @@ Also important:
 | `infrastructure.sqlite_repository.SQLiteRecordRepository` | Primary runtime repository |
 | `storage.sqlite_storage.SQLiteStorage` | Low-level SQLite adapter / schema bootstrap |
 
-Practical `v1.12.0` highlights:
+Practical `v1.14.0` highlights:
 
 - `FinancialController.save_theme_preference(...)` / `save_language_preference(...)` — runtime UI preferences persisted in SQLite
-- `gui.ui_theme` — centralized light/dark palette system with runtime switching
+- `gui.ui_theme` — centralized light/dark palette system, card helpers, spacing tokens, and Treeview theming helpers
+- `gui.tkinter_gui` — the main shell orchestration layer applying theme, status bar, and tab rebuild/runtime hooks
 - `FinanceService.get_import_capabilities()` — a single capability model for the import pipeline instead of ad-hoc attribute probing
 - `FinancialController.load_debts()` and `related_debt_id` in `create_income(...)` / `create_expense(...)` — important hooks for debt-aware import/restore flows
 - `SQLiteRecordRepository.replace_records_and_transfers(...)` — safe bulk operation replacement with debt-payment link remapping
