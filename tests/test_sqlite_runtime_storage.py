@@ -209,7 +209,9 @@ def test_sqlite_storage_proxy_supports_backup_and_concurrent_selects(tmp_path: P
             try:
                 for _ in range(25):
                     cursor = source._conn.execute("SELECT COUNT(*) FROM wallets")
-                    assert cursor.fetchone()[0] == 1
+                    row = cursor.fetchone()
+                    assert row is not None
+                    assert row[0] == 1
             except Exception as exc:  # pragma: no cover - assertion path reported below
                 errors.append(exc)
 

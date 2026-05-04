@@ -215,7 +215,8 @@ def _check_target_is_empty(sqlite_storage: SQLiteStorage) -> None:
         "debt_payments",
     )
     for table in tables:
-        count = int(sqlite_storage.query_one(f"SELECT COUNT(*) FROM {table}")[0])
+        row = sqlite_storage.query_one(f"SELECT COUNT(*) FROM {table}")
+        count = int(row[0]) if row else 0
         if count > 0:
             raise RuntimeError(
                 f"Target SQLite is not empty: table '{table}' already contains {count} rows"
@@ -236,7 +237,9 @@ def _has_any_data(sqlite_storage: SQLiteStorage) -> bool:
         "debts",
         "debt_payments",
     ):
-        if int(sqlite_storage.query_one(f"SELECT COUNT(*) FROM {table}")[0]) > 0:
+        row = sqlite_storage.query_one(f"SELECT COUNT(*) FROM {table}")
+        count = int(row[0]) if row else 0
+        if count > 0:
             return True
     return False
 
@@ -247,7 +250,8 @@ def _all_positive_unique_ids(items: list, id_getter) -> bool:
 
 
 def _set_sqlite_sequence(sqlite_storage: SQLiteStorage, table: str) -> None:
-    max_id = int(sqlite_storage.query_one(f"SELECT COALESCE(MAX(id), 0) FROM {table}")[0])
+    row = sqlite_storage.query_one(f"SELECT COALESCE(MAX(id), 0) FROM {table}")
+    max_id = int(row[0]) if row else 0
     sqlite_storage.execute(
         """
         INSERT OR REPLACE INTO sqlite_sequence(name, seq) VALUES(?, ?)
@@ -892,28 +896,23 @@ def _insert_goals(sqlite_storage: SQLiteStorage, goals: list[Goal]) -> dict[int,
 
 
 def _counts_from_sqlite(sqlite_storage: SQLiteStorage) -> dict[str, int]:
+    def _get_counts(table_name: str) -> int:
+        row = sqlite_storage.query_one(f"SELECT COUNT(*) FROM {table_name}")
+        return int(row[0]) if row else 0
     return {
-        "wallets": int(sqlite_storage.query_one("SELECT COUNT(*) FROM wallets")[0]),
-        "transfers": int(sqlite_storage.query_one("SELECT COUNT(*) FROM transfers")[0]),
-        "records": int(sqlite_storage.query_one("SELECT COUNT(*) FROM records")[0]),
-        "mandatory_expenses": int(
-            sqlite_storage.query_one("SELECT COUNT(*) FROM mandatory_expenses")[0]
-        ),
-        "budgets": int(sqlite_storage.query_one("SELECT COUNT(*) FROM budgets")[0]),
-        "debts": int(sqlite_storage.query_one("SELECT COUNT(*) FROM debts")[0]),
-        "debt_payments": int(sqlite_storage.query_one("SELECT COUNT(*) FROM debt_payments")[0]),
-        "assets": int(sqlite_storage.query_one("SELECT COUNT(*) FROM assets")[0]),
-        "asset_snapshots": int(sqlite_storage.query_one("SELECT COUNT(*) FROM asset_snapshots")[0]),
-        "goals": int(sqlite_storage.query_one("SELECT COUNT(*) FROM goals")[0]),
-        "distribution_items": int(
-            sqlite_storage.query_one("SELECT COUNT(*) FROM distribution_items")[0]
-        ),
-        "distribution_subitems": int(
-            sqlite_storage.query_one("SELECT COUNT(*) FROM distribution_subitems")[0]
-        ),
-        "distribution_snapshots": int(
-            sqlite_storage.query_one("SELECT COUNT(*) FROM distribution_snapshots")[0]
-        ),
+        "wallets": _get_counts("wallets"),
+        "transfers": _get_counts("transfers"),
+        "records": _get_counts("records"),
+        "mandatory_expenses": _get_counts("mandatory_expenses"),
+        "budgets": _get_counts("budgets"),
+        "debts": _get_counts("debts"),
+        "debt_payments": _get_counts("debt_payments"),
+        "assets": _get_counts("assets"),
+        "asset_snapshots": _get_counts("asset_snapshots"),
+        "goals": _get_counts("goals"),
+        "distribution_items": _get_counts("distribution_items"),
+        "distribution_subitems": _get_counts("distribution_subitems"),
+        "distribution_snapshots": _get_counts("distribution_snapshots"),
     }
 
 

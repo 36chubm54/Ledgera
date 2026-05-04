@@ -181,7 +181,9 @@ def _build_repo(
 
 
 def _count_rows(repo: SQLiteRecordRepository, table: str) -> int:
-    return int(repo.query_one(f"SELECT COUNT(*) FROM {table}")[0])
+    row = repo.query_one(f"SELECT COUNT(*) FROM {table}")
+    assert row is not None
+    return int(row[0])
 
 
 def test_get_wallet_balance_returns_initial_balance_when_no_records(tmp_path: Path) -> None:

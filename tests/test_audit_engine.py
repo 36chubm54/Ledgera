@@ -761,19 +761,25 @@ def test_audit_report_is_clean_false_when_errors_exist(tmp_path: Path) -> None:
 def test_audit_does_not_write_to_db(tmp_path: Path) -> None:
     repo, report = _run_audit(tmp_path)
     try:
+        # Helper to safely get count
+        def _get_count(table: str) -> int:
+            row = repo.query_one(f"SELECT COUNT(*) FROM {table}")
+            assert row is not None
+            return int(row[0])
+
         before = {
-            "wallets": int(repo.query_one("SELECT COUNT(*) FROM wallets")[0]),
-            "records": int(repo.query_one("SELECT COUNT(*) FROM records")[0]),
-            "transfers": int(repo.query_one("SELECT COUNT(*) FROM transfers")[0]),
-            "mandatory_expenses": int(repo.query_one("SELECT COUNT(*) FROM mandatory_expenses")[0]),
+            "wallets": _get_count("wallets"),
+            "records": _get_count("records"),
+            "transfers": _get_count("transfers"),
+            "mandatory_expenses": _get_count("mandatory_expenses"),
         }
         _ = report
         second_report = FinancialController(repo, CurrencyService(use_online=False)).run_audit()
         after = {
-            "wallets": int(repo.query_one("SELECT COUNT(*) FROM wallets")[0]),
-            "records": int(repo.query_one("SELECT COUNT(*) FROM records")[0]),
-            "transfers": int(repo.query_one("SELECT COUNT(*) FROM transfers")[0]),
-            "mandatory_expenses": int(repo.query_one("SELECT COUNT(*) FROM mandatory_expenses")[0]),
+            "wallets": _get_count("wallets"),
+            "records": _get_count("records"),
+            "transfers": _get_count("transfers"),
+            "mandatory_expenses": _get_count("mandatory_expenses"),
         }
         assert second_report.findings
         assert before == after

@@ -18,6 +18,12 @@ from storage.sqlite_storage import SQLiteStorage
 from utils.backup_utils import export_full_backup_to_json
 
 
+def _query_one(storage: SQLiteStorage, sql: str):
+    row = storage.query_one(sql)
+    assert row is not None
+    return row
+
+
 def _build_json_fixture(json_path: str) -> None:
     repo = JsonFileRecordRepository(json_path)
     wallets = [
@@ -101,10 +107,10 @@ def test_dry_run_does_not_insert(tmp_path) -> None:
 
     sqlite_storage = SQLiteStorage(str(sqlite_path))
     sqlite_storage.initialize_schema(str(schema_path))
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM wallets")[0] == 0
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM transfers")[0] == 0
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM records")[0] == 0
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM mandatory_expenses")[0] == 0
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM wallets")[0] == 0
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM transfers")[0] == 0
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM records")[0] == 0
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM mandatory_expenses")[0] == 0
     sqlite_storage.close()
 
 
@@ -126,17 +132,18 @@ def test_migration_moves_all_data_and_preserves_ids(tmp_path) -> None:
 
     sqlite_storage = SQLiteStorage(str(sqlite_path))
     sqlite_storage.initialize_schema(str(schema_path))
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM wallets")[0] == 2
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM transfers")[0] == 1
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM records")[0] == 2
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM mandatory_expenses")[0] == 1
-    row = sqlite_storage.query_one(
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM wallets")[0] == 2
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM transfers")[0] == 1
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM records")[0] == 2
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM mandatory_expenses")[0] == 1
+    row = _query_one(
+        sqlite_storage,
         """
         SELECT date, auto_pay, amount_original_minor, amount_kzt_minor, rate_at_operation_text
         FROM mandatory_expenses
         ORDER BY id
         LIMIT 1
-        """
+        """,
     )
     assert row[0] == "2026-03-15"
     assert row[1] == 1
@@ -144,15 +151,18 @@ def test_migration_moves_all_data_and_preserves_ids(tmp_path) -> None:
     assert row[3] == 5000
     assert row[4] == "1.000000"
 
-    wallet_row = sqlite_storage.query_one("SELECT initial_balance_minor FROM wallets WHERE id = 1")
+    wallet_row = _query_one(
+        sqlite_storage, "SELECT initial_balance_minor FROM wallets WHERE id = 1"
+    )
     assert wallet_row[0] == 100000
 
-    transfer_row = sqlite_storage.query_one(
+    transfer_row = _query_one(
+        sqlite_storage,
         """
         SELECT amount_original_minor, amount_kzt_minor, rate_at_operation_text
         FROM transfers
         WHERE id = 1
-        """
+        """,
     )
     assert transfer_row[0] == 10000
     assert transfer_row[1] == 10000
@@ -236,10 +246,10 @@ def test_migration_is_safe_to_rerun_on_equivalent_dataset(tmp_path) -> None:
 
     sqlite_storage = SQLiteStorage(str(sqlite_path))
     sqlite_storage.initialize_schema(str(schema_path))
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM wallets")[0] == 2
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM transfers")[0] == 1
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM records")[0] == 2
-    assert sqlite_storage.query_one("SELECT COUNT(*) FROM mandatory_expenses")[0] == 1
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM wallets")[0] == 2
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM transfers")[0] == 1
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM records")[0] == 2
+    assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM mandatory_expenses")[0] == 1
     sqlite_storage.close()
 
 
@@ -319,17 +329,19 @@ def test_migration_moves_distribution_snapshots_from_full_backup_json(tmp_path) 
 
     sqlite_storage = SQLiteStorage(str(sqlite_path))
     sqlite_storage.initialize_schema(str(schema_path))
-    snapshot_row = sqlite_storage.query_one(
-        "SELECT month, auto_fixed FROM distribution_snapshots ORDER BY month LIMIT 1"
+    snapshot_row = _query_one(
+        sqlite_storage,
+        "SELECT month, auto_fixed FROM distribution_snapshots ORDER BY month LIMIT 1",
     )
     assert snapshot_row[0] == "2026-02"
     assert snapshot_row[1] == 1
-    value_row = sqlite_storage.query_one(
+    value_row = _query_one(
+        sqlite_storage,
         """
         SELECT column_key, value_text
         FROM distribution_snapshot_values
         WHERE snapshot_month = '2026-02' AND column_key = 'item_1'
-        """
+        """,
     )
     assert value_row[0] == "item_1"
     assert value_row[1] == "100"
@@ -375,13 +387,14 @@ def test_migration_moves_budgets_from_full_backup_json(tmp_path) -> None:
 
     sqlite_storage = SQLiteStorage(str(sqlite_path))
     sqlite_storage.initialize_schema(str(schema_path))
-    budget_row = sqlite_storage.query_one(
+    budget_row = _query_one(
+        sqlite_storage,
         """
         SELECT category, start_date, end_date, limit_kzt_minor, include_mandatory
         FROM budgets
         ORDER BY id
         LIMIT 1
-        """
+        """,
     )
     assert budget_row[0] == "Food"
     assert budget_row[1] == "2026-03-01"
@@ -506,24 +519,26 @@ def test_migration_moves_debts_and_debt_payments_from_full_backup_json(tmp_path)
 
     sqlite_storage = SQLiteStorage(str(sqlite_path))
     sqlite_storage.initialize_schema(str(schema_path))
-    debt_row = sqlite_storage.query_one(
-        "SELECT contact_name, total_amount_minor, remaining_amount_minor FROM debts WHERE id = 1"
+    debt_row = _query_one(
+        sqlite_storage,
+        "SELECT contact_name, total_amount_minor, remaining_amount_minor FROM debts WHERE id = 1",
     )
     assert debt_row[0] == "Alex"
     assert debt_row[1] == 10000
     assert debt_row[2] == 7500
-    payment_row = sqlite_storage.query_one(
+    payment_row = _query_one(
+        sqlite_storage,
         """
         SELECT debt_id, record_id, operation_type, principal_paid_minor
         FROM debt_payments
         WHERE id = 5
-        """
+        """,
     )
     assert payment_row[0] == 1
     assert payment_row[1] == 10
     assert payment_row[2] == "debt_repay"
     assert payment_row[3] == 2500
-    record_row = sqlite_storage.query_one("SELECT related_debt_id FROM records WHERE id = 10")
+    record_row = _query_one(sqlite_storage, "SELECT related_debt_id FROM records WHERE id = 10")
     assert record_row[0] == 1
     sqlite_storage.close()
 
@@ -586,26 +601,29 @@ def test_migration_moves_assets_snapshots_and_goals_from_full_backup_json(tmp_pa
 
     sqlite_storage = SQLiteStorage(str(sqlite_path))
     sqlite_storage.initialize_schema(str(schema_path))
-    asset_row = sqlite_storage.query_one(
-        "SELECT name, category, currency, is_active FROM assets WHERE id = 1"
+    asset_row = _query_one(
+        sqlite_storage,
+        "SELECT name, category, currency, is_active FROM assets WHERE id = 1",
     )
     assert asset_row[0] == "Deposit"
     assert asset_row[1] == "bank"
     assert asset_row[2] == "KZT"
     assert asset_row[3] == 1
-    snapshot_row = sqlite_storage.query_one(
-        "SELECT asset_id, snapshot_date, value_minor, note FROM asset_snapshots WHERE id = 2"
+    snapshot_row = _query_one(
+        sqlite_storage,
+        "SELECT asset_id, snapshot_date, value_minor, note FROM asset_snapshots WHERE id = 2",
     )
     assert snapshot_row[0] == 1
     assert snapshot_row[1] == "2026-04-06"
     assert snapshot_row[2] == 500000
     assert snapshot_row[3] == "Initial"
-    goal_row = sqlite_storage.query_one(
+    goal_row = _query_one(
+        sqlite_storage,
         """
         SELECT title, target_amount_minor, currency, target_date, is_completed
         FROM goals
         WHERE id = 3
-        """
+        """,
     )
     assert goal_row[0] == "Emergency Fund"
     assert goal_row[1] == 1000000
