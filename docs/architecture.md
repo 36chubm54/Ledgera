@@ -20,6 +20,7 @@ At a high level:
 Supported business areas include:
 
 - records, transfers, wallets
+- tags and record-tag assignments
 - budgets
 - debts and loans
 - monthly distribution
@@ -33,7 +34,7 @@ Supported business areas include:
 
 | Layer | Purpose | Main modules |
 | --- | --- | --- |
-| `domain` | Immutable entities, enums, validation rules, report DTOs | `records.py`, `wallets.py`, `budget.py`, `debt.py`, `asset.py`, `goal.py`, `reports.py`, `audit.py`, `validation.py` |
+| `domain` | Immutable entities, enums, validation rules, report DTOs | `records.py`, `tags.py`, `wallets.py`, `budget.py`, `debt.py`, `asset.py`, `goal.py`, `reports.py`, `audit.py`, `validation.py` |
 | `app` | Use cases, application contracts, and orchestration | `use_cases.py`, `use_case_support.py`, `finance_service.py`, `record_service.py`, `services.py` |
 | `services` | Focused business subsystems and read-only engines | `import_service.py`, `audit_service.py`, `balance_service.py`, `metrics_service.py`, `timeline_service.py`, `budget_service.py`, `debt_service.py`, `distribution_service.py`, `asset_service.py`, `goal_service.py`, `dashboard_service.py` |
 | `infrastructure` | Runtime repository implementation | `sqlite_repository.py`, `repositories.py` |
@@ -81,7 +82,7 @@ Examples:
 There are three main read-only analytics layers:
 
 - `BalanceService` — balances and net worth
-- `MetricsService` — rates, category summaries, month summaries
+- `MetricsService` — rates, category summaries, tag coverage, month summaries
 - `TimelineService` — month-by-month historical aggregates
 
 Report UI uses:
@@ -96,6 +97,12 @@ Export uses:
 - `utils/csv_utils.py`
 - `utils/excel_utils.py`
 - `utils/pdf_utils.py`
+
+Recent tag-specific additions:
+
+- `services/report_service.py` now builds tag-aware grouped export payloads
+- `services/metrics_service.py` now provides tag coverage aggregates for analytics
+- export helpers treat tag grouping as overlapping coverage, not as an additive partition of expenses
 
 ### 3.4 Import / Backup / Migration
 
@@ -138,6 +145,28 @@ Core modules:
 
 These form the base event history used by reports and analytics.
 
+### 4.1.1 Tags
+
+Core modules:
+
+- `domain/tags.py`
+- `utils/tag_utils.py`
+- `infrastructure/sqlite_repository.py`
+- `storage/sqlite_storage.py`
+
+This subsystem is responsible for:
+
+- normalizing tag names and validating invalid inputs such as numeric-only tags
+- storing tag metadata (`color`, `usage_count`, `last_used_at`)
+- maintaining `record_tags` assignments for operation records
+- exposing tag search/list/rename/delete/color APIs to controllers and UI
+
+Current scope:
+
+- tags are attached to `records` only
+- transfers, budgets, assets, goals, and debts are not tagged as standalone entities
+- tag analytics and tag budgets build on top of record-tag assignments
+
 As of `v1.12.0`, this area also owns the most sensitive import/relink logic:
 
 - repository-level bulk replacement through `replace_records_and_transfers(...)`
@@ -152,7 +181,14 @@ Core modules:
 - `services/budget_service.py`
 - `gui/tabs/budget_tab.py`
 
-Budgets are date-ranged category limits with live execution tracking.
+Budgets are date-ranged limits with live execution tracking.
+
+As of the current working tree, the subsystem supports:
+
+- `scope_type="category"`
+- `scope_type="tag"`
+
+Tag budgets reuse the same pace/forecast pipeline, but their spend queries are resolved through `record_tags` rather than direct category predicates.
 
 ### 4.3 Debts and Loans
 
@@ -213,6 +249,7 @@ Core modules:
 This subsystem is responsible for:
 
 - payload parsing and `json_sections_present` awareness
+- tag-aware import/export of `tags` and `record_tags`
 - capability negotiation via `ImportCapabilities`
 - rollback-safe import transactions
 - corruption quarantine and save-failure handling for JSON repositories
@@ -240,6 +277,12 @@ As of `v1.14.0`, it also owns the shared desktop-shell design primitives:
 - spacing tokens and card-style section composition
 - Treeview zebra-striping and palette-aware list/table styling
 - shell-level theme application for `Canvas` and Combobox dropdown widgets
+
+Tag-heavy UI also lives close to this layer:
+
+- operations tag entry with suggestions and color selection
+- analytics tag coverage mode
+- tag-aware report filters
 
 ### 4.9 Desktop Shell Layout
 
@@ -285,6 +328,8 @@ Main SQLite tables:
 
 - `wallets`
 - `records`
+- `tags`
+- `record_tags`
 - `transfers`
 - `mandatory_expenses`
 - `budgets`
@@ -302,6 +347,7 @@ Important data-model notes:
 - money values often use dual storage: human-readable values plus exact `*_minor`
 - records may reference `transfer_id` and `related_debt_id`
 - debt, asset, and goal data affect read-only wealth calculations
+- tag groups are overlapping coverage views, not mutually exclusive accounting partitions
 - schema/bootstrap compatibility must be preserved for older SQLite databases
 - full-backup payloads may omit sections intentionally, so import code must distinguish "section absent" from "section present but empty"
 

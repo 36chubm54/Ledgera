@@ -226,8 +226,8 @@ def test_audit_reports_14_checks_on_clean_db(tmp_path: Path) -> None:
     try:
         controller = FinancialController(repo, CurrencyService(use_online=False))
         report = controller.run_audit()
-        assert len(report.findings) == 14
-        assert len(report.passed) == 13
+        assert len(report.findings) == 15
+        assert len(report.passed) == 14
     finally:
         repo.close()
 

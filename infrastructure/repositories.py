@@ -14,8 +14,10 @@ from typing import TypeVar, cast
 from domain.debt import Debt, DebtKind, DebtOperationType, DebtPayment, DebtStatus
 from domain.errors import DomainError
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
+from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
+from utils.tag_utils import color_for_tag, normalize_tag_name, normalize_tag_names
 
 T = TypeVar("T", bound=Record)
 
@@ -24,6 +26,45 @@ SYSTEM_WALLET_ID = 1
 
 
 class RecordRepository(ABC):
+    @abstractmethod
+    def list_tags(self) -> list[Tag]:
+        """Return all known tags."""
+        pass
+
+    @abstractmethod
+    def search_tags(self, prefix: str) -> list[Tag]:
+        """Return tags matching a prefix."""
+        pass
+
+    @abstractmethod
+    def load_tags_for_record_ids(self, record_ids: list[int]) -> dict[int, tuple[str, ...]]:
+        """Return tag names grouped by record id."""
+        pass
+
+    @abstractmethod
+    def replace_record_tags(self, record_id: int, names: list[str] | tuple[str, ...]) -> None:
+        """Replace tags for a single record."""
+        pass
+
+    @abstractmethod
+    def rename_tag(self, old_name: str, new_name: str) -> None:
+        """Rename a tag everywhere."""
+        pass
+
+    @abstractmethod
+    def delete_tag(self, name: str) -> None:
+        """Delete a tag and its assignments."""
+        pass
+
+    @abstractmethod
+    def get_records_by_tag(self, name: str) -> list[Record]:
+        """Return all records assigned to a tag."""
+        pass
+
+    def set_tag_color(self, name: str, color: str) -> None:
+        """Optional: update color for a known tag."""
+        return None
+
     @abstractmethod
     def save_debt(self, debt: Debt) -> None:
         """Save debt aggregate."""
@@ -658,6 +699,7 @@ class JsonFileRecordRepository(RecordRepository):
             "amount_kzt": record.amount_kzt,
             "category": record.category,
             "description": str(getattr(record, "description", "") or ""),
+            "tags": list(normalize_tag_names(tuple(getattr(record, "tags", ()) or ()))),
         }
         if isinstance(record, MandatoryExpenseRecord):
             payload["period"] = record.period
@@ -699,7 +741,114 @@ class JsonFileRecordRepository(RecordRepository):
             "amount_kzt": amount_kzt,
             "category": str(item.get("category", "General") or "General"),
             "description": str(item.get("description", "") or ""),
+            "tags": normalize_tag_names(tuple(item.get("tags", []) or [])),
         }
+
+    def list_tags(self) -> list[Tag]:
+        records = self.load_all()
+        latest_by_tag: dict[str, str] = {}
+        usage_by_tag: dict[str, int] = {}
+        for record in records:
+            record_date = str(getattr(record, "date", "") or "")
+            for name in normalize_tag_names(tuple(getattr(record, "tags", ()) or ())):
+                usage_by_tag[name] = int(usage_by_tag.get(name, 0)) + 1
+                if record_date >= latest_by_tag.get(name, ""):
+                    latest_by_tag[name] = record_date
+        tags = sorted(
+            usage_by_tag.keys(),
+            key=lambda name: (
+                latest_by_tag.get(name, ""),
+                int(usage_by_tag.get(name, 0)),
+                name.casefold(),
+            ),
+            reverse=True,
+        )
+        return [
+            Tag(
+                id=index,
+                name=name,
+                color=color_for_tag(name),
+                usage_count=int(usage_by_tag.get(name, 0)),
+                last_used_at=str(latest_by_tag.get(name, "")),
+            )
+            for index, name in enumerate(tags, start=1)
+        ]
+
+    def search_tags(self, prefix: str) -> list[Tag]:
+        needle = normalize_tag_name(prefix).casefold()
+        tags = self.list_tags()
+        if not needle:
+            return tags
+        return [tag for tag in tags if tag.name.casefold().startswith(needle)]
+
+    def load_tags_for_record_ids(self, record_ids: list[int]) -> dict[int, tuple[str, ...]]:
+        wanted = {int(record_id) for record_id in record_ids}
+        return {
+            int(record.id): tuple(record.tags)
+            for record in self.load_all()
+            if int(record.id) in wanted and tuple(record.tags)
+        }
+
+    def replace_record_tags(self, record_id: int, names: list[str] | tuple[str, ...]) -> None:
+        target_id = int(record_id)
+        with self._lock:
+            data = self._load_data()
+            updated = False
+            for item in data.get("records", []):
+                if isinstance(item, dict) and self._as_int(item.get("id"), 0) == target_id:
+                    item["tags"] = list(normalize_tag_names(tuple(names)))
+                    updated = True
+                    break
+            if not updated:
+                raise ValueError(f"Record not found: {record_id}")
+            self._save_data(data)
+
+    def rename_tag(self, old_name: str, new_name: str) -> None:
+        old_tag = normalize_tag_name(old_name)
+        new_tag = normalize_tag_name(new_name)
+        if not old_tag or not new_tag:
+            raise ValueError("Tag name must not be empty")
+        with self._lock:
+            data = self._load_data()
+            for item in data.get("records", []):
+                if not isinstance(item, dict):
+                    continue
+                tags = normalize_tag_names(tuple(item.get("tags", []) or []))
+                replaced = [
+                    new_tag if tag.casefold() == old_tag.casefold() else tag for tag in tags
+                ]
+                item["tags"] = list(normalize_tag_names(replaced))
+            self._save_data(data)
+
+    def delete_tag(self, name: str) -> None:
+        target = normalize_tag_name(name)
+        if not target:
+            return
+        with self._lock:
+            data = self._load_data()
+            for item in data.get("records", []):
+                if not isinstance(item, dict):
+                    continue
+                tags = [
+                    tag
+                    for tag in normalize_tag_names(tuple(item.get("tags", []) or []))
+                    if tag.casefold() != target.casefold()
+                ]
+                item["tags"] = tags
+            self._save_data(data)
+
+    def get_records_by_tag(self, name: str) -> list[Record]:
+        target = normalize_tag_name(name).casefold()
+        if not target:
+            return []
+        return [
+            record
+            for record in self.load_all()
+            if any(tag.casefold() == target for tag in tuple(getattr(record, "tags", ()) or ()))
+        ]
+
+    def set_tag_color(self, name: str, color: str) -> None:
+        del name, color
 
     def load_wallets(self) -> list[Wallet]:
         data = self._load_data()

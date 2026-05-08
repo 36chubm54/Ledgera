@@ -20,6 +20,7 @@ from storage.json_storage import JsonStorage
 from storage.sqlite_storage import SQLiteStorage
 from utils.backup_utils import unwrap_backup_payload
 from utils.money import minor_to_money, rate_to_text, to_minor_units, to_money_float, to_rate_float
+from utils.tag_utils import normalize_tag_name, normalize_tag_names
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
@@ -635,6 +636,8 @@ def _insert_budgets(sqlite_storage: SQLiteStorage, budgets: list[Budget]) -> Non
     for budget in budgets:
         payload = (
             str(budget.category),
+            str(budget.scope_type),
+            str(budget.scope_value),
             str(budget.start_date),
             str(budget.end_date),
             to_money_float(budget.limit_kzt),
@@ -645,10 +648,10 @@ def _insert_budgets(sqlite_storage: SQLiteStorage, budgets: list[Budget]) -> Non
             sqlite_storage.execute(
                 """
                 INSERT INTO budgets (
-                    id, category, start_date, end_date,
+                    id, category, scope_type, scope_value, start_date, end_date,
                     limit_kzt, limit_kzt_minor, include_mandatory
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (int(budget.id), *payload),
             )
@@ -656,10 +659,10 @@ def _insert_budgets(sqlite_storage: SQLiteStorage, budgets: list[Budget]) -> Non
             sqlite_storage.execute(
                 """
                 INSERT INTO budgets (
-                    category, start_date, end_date,
+                    category, scope_type, scope_value, start_date, end_date,
                     limit_kzt, limit_kzt_minor, include_mandatory
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 payload,
             )
@@ -899,6 +902,7 @@ def _counts_from_sqlite(sqlite_storage: SQLiteStorage) -> dict[str, int]:
     def _get_counts(table_name: str) -> int:
         row = sqlite_storage.query_one(f"SELECT COUNT(*) FROM {table_name}")
         return int(row[0]) if row else 0
+
     return {
         "wallets": _get_counts("wallets"),
         "transfers": _get_counts("transfers"),
@@ -1365,6 +1369,8 @@ def _budget_signatures_from_json(budgets: list[Budget]) -> list[tuple]:
         (
             int(budget.id),
             str(budget.category),
+            str(budget.scope_type),
+            str(budget.scope_value),
             str(budget.start_date),
             str(budget.end_date),
             float(budget.limit_kzt),
@@ -1378,7 +1384,8 @@ def _budget_signatures_from_json(budgets: list[Budget]) -> list[tuple]:
 def _budget_signatures_from_sqlite(sqlite_storage: SQLiteStorage) -> list[tuple]:
     rows = sqlite_storage.query_all(
         """
-        SELECT id, category, start_date, end_date, limit_kzt, limit_kzt_minor, include_mandatory
+        SELECT id, category, scope_type, scope_value,
+               start_date, end_date, limit_kzt, limit_kzt_minor, include_mandatory
         FROM budgets
         ORDER BY id
         """
@@ -1389,9 +1396,11 @@ def _budget_signatures_from_sqlite(sqlite_storage: SQLiteStorage) -> list[tuple]
             str(row[1]),
             str(row[2]),
             str(row[3]),
-            float(row[4]),
-            int(row[5]),
-            bool(row[6]),
+            str(row[4]),
+            str(row[5]),
+            float(row[6]),
+            int(row[7]),
+            bool(row[8]),
         )
         for row in rows
     ]
@@ -1875,10 +1884,16 @@ def _load_budgets_from_json(path: str) -> list[Budget]:
         if budget_id in seen_ids:
             raise ValueError(f"Duplicate budget id: {budget_id}")
         category = str(item.get("category", "") or "").strip()
+        scope_type = str(item.get("scope_type", "category") or "category").strip().lower()
+        scope_value = str(item.get("scope_value", category) or category).strip()
         start_date = str(item.get("start_date", "") or "").strip()
         end_date = str(item.get("end_date", "") or "").strip()
         if not category:
             raise ValueError(f"Budget #{budget_id} has empty category")
+        if scope_type not in {"category", "tag"}:
+            raise ValueError(f"Budget #{budget_id} has invalid scope_type")
+        if not scope_value:
+            raise ValueError(f"Budget #{budget_id} has empty scope_value")
         if not start_date or not end_date:
             raise ValueError(f"Budget #{budget_id} is missing start_date/end_date")
         limit_kzt = to_money_float(item.get("limit_kzt", 0.0) or 0.0)
@@ -1892,6 +1907,8 @@ def _load_budgets_from_json(path: str) -> list[Budget]:
                 limit_kzt=limit_kzt,
                 limit_kzt_minor=limit_kzt_minor,
                 include_mandatory=bool(item.get("include_mandatory", False)),
+                scope_type=scope_type,
+                scope_value=scope_value,
             )
         )
         seen_ids.add(budget_id)
@@ -2083,6 +2100,36 @@ def _load_source_dataset(
     with open(json_path, encoding="utf-8") as fp:
         raw_payload = json.load(fp)
     payload = unwrap_backup_payload(raw_payload, force=True)
+    raw_tags = payload.get("tags", [])
+    raw_record_tags = payload.get("record_tags", [])
+    if isinstance(raw_tags, list) and isinstance(raw_record_tags, list):
+        tags_by_id: dict[int, str] = {}
+        for item in raw_tags:
+            if not isinstance(item, dict):
+                continue
+            tag_id = int(item.get("id", 0) or 0)
+            tag_name = normalize_tag_name(item.get("name"))
+            if tag_id > 0 and tag_name:
+                tags_by_id[tag_id] = tag_name
+        record_tag_names: dict[int, list[str]] = {}
+        for item in raw_record_tags:
+            if not isinstance(item, dict):
+                continue
+            record_id = int(item.get("record_id", 0) or 0)
+            tag_id = int(item.get("tag_id", 0) or 0)
+            inline_name = normalize_tag_name(item.get("name"))
+            tag_name = inline_name or tags_by_id.get(tag_id, "")
+            if record_id > 0 and tag_name:
+                record_tag_names.setdefault(record_id, []).append(tag_name)
+        if isinstance(payload.get("records"), list):
+            for item in payload["records"]:
+                if not isinstance(item, dict):
+                    continue
+                record_id = int(item.get("id", 0) or 0)
+                merged = tuple(item.get("tags", []) or ()) + tuple(
+                    record_tag_names.get(record_id, [])
+                )
+                item["tags"] = list(normalize_tag_names(merged))
 
     with tempfile.NamedTemporaryFile(
         mode="w",

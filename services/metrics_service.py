@@ -18,6 +18,16 @@ class CategorySpend:
 
 
 @dataclass(frozen=True)
+class TagSpend:
+    """Aggregated expense allocation for a single tag."""
+
+    tag: str
+    total_kzt: float
+    record_count: int
+    color: str = ""
+
+
+@dataclass(frozen=True)
 class MonthlySummary:
     """Income, expenses, cashflow, and savings rate for a single calendar month."""
 
@@ -152,6 +162,53 @@ class MetricsService:
                 category=str(row[0]),
                 total_kzt=round(float(row[1]) / 100.0, 2),
                 record_count=int(row[2]),
+            )
+            for row in rows
+        ]
+
+    def get_spending_by_tag(
+        self,
+        start_date: str,
+        end_date: str,
+        *,
+        limit: int | None = None,
+    ) -> list[TagSpend]:
+        """
+        Total expenses per tag, sorted by total descending.
+
+        Only expense and mandatory_expense records are included.
+        Transfer-linked records are excluded.
+        If a record has multiple tags, each tag receives the full record amount.
+        Optional limit truncates the result list.
+        """
+        limit_clause = f"LIMIT {int(limit)}" if limit is not None else ""
+        rows = self._repo.query_all(
+            f"""
+            SELECT
+                t.name AS tag_name,
+                COALESCE(t.color, '') AS color,
+                COALESCE(SUM({minor_amount_expr("r.amount_kzt")}), 0.0) AS total_kzt,
+                COUNT(DISTINCT r.id) AS record_count
+            FROM records AS r
+            JOIN record_tags AS rt
+              ON rt.record_id = r.id
+            JOIN tags AS t
+              ON t.id = rt.tag_id
+            WHERE r.type IN ('expense', 'mandatory_expense')
+              AND r.transfer_id IS NULL
+              AND r.date >= ? AND r.date <= ?
+            GROUP BY t.id, t.name, t.color
+            ORDER BY total_kzt DESC, t.name COLLATE NOCASE, t.name
+            {limit_clause}
+            """,
+            (str(start_date), str(end_date)),
+        )
+        return [
+            TagSpend(
+                tag=str(row[0]),
+                color=str(row[1] or ""),
+                total_kzt=round(float(row[2]) / 100.0, 2),
+                record_count=int(row[3]),
             )
             for row in rows
         ]

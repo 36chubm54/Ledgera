@@ -12,6 +12,7 @@ from domain.import_policy import ImportPolicy
 from domain.records import MandatoryExpenseRecord, Record
 from domain.reports import Report
 from services.import_parser import parse_transfer_row
+from services.report_service import build_tag_group_reports
 from utils.csv_utils import (
     _restore_missing_transfers,
     _validate_transfer_integrity,
@@ -30,6 +31,7 @@ from utils.tabular_utils import (
     report_record_type_label,
     resolve_get_rate,
 )
+from utils.tag_utils import format_tags_inline
 
 logger = logging.getLogger(__name__)
 MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -45,6 +47,7 @@ DATA_HEADERS = [
     "rate_at_operation",
     "amount_kzt",
     "description",
+    "tags",
     "period",
     "transfer_id",
     "from_wallet_id",
@@ -160,10 +163,19 @@ def _should_add_by_category_sheet(report: Report, groups: dict[str, Report]) -> 
     return len(list(only_subreport.records())) < len(list(report.records()))
 
 
+def _should_add_by_tag_sheet(report: Report, groups: dict[str, Report]) -> bool:
+    if len(groups) > 1:
+        return True
+    if len(groups) != 1:
+        return False
+    only_subreport = next(iter(groups.values()))
+    return len(list(only_subreport.records())) < len(list(report.display_records()))
+
+
 def _append_debts_sheet(wb: Workbook, debts: list[Debt]) -> None:
     if not debts:
         return
-    ws = wb.create_sheet("Debts", index=2)
+    ws = wb.create_sheet("Debts", index=len(wb.sheetnames))
     ws.append(
         [
             "Contact",
@@ -208,17 +220,17 @@ def report_to_xlsx(report: Report, filepath: str, *, debts: list[Debt] | None = 
     ws = wb.active
     if ws is not None:
         ws.title = "Report"
-        ws.append([report.statement_title, "", "", ""])
-        _style_title_row(ws, 1, columns=4)
-        ws.append(["Date", "Type", "Category", "Amount (KZT)"])
+        ws.append([report.statement_title, "", "", "", ""])
+        _style_title_row(ws, 1, columns=5)
+        ws.append(["Date", "Type", "Category", "Amount (KZT)", "Tags"])
         _style_header_row(ws, 2)
-        ws.append(["", "", "", "Fixed amounts by operation-time FX rates"])
+        ws.append(["", "", "", "", "Fixed amounts by operation-time FX rates"])
         ws["D3"].alignment = Alignment(horizontal="right", vertical="center")
         ws["D3"].font = Font(italic=True, color="666666")
         ws.freeze_panes = "A3"
 
     if (getattr(report, "initial_balance", 0) != 0 or report.is_opening_balance) and ws is not None:
-        ws.append(["", report.balance_label, "", report.initial_balance])
+        ws.append(["", report.balance_label, "", report.initial_balance, ""])
         _style_total_row(ws, ws.max_row, fill=SECTION_FILL, amount_columns=(4,))
 
     for record in sorted(
@@ -235,6 +247,7 @@ def report_to_xlsx(report: Report, filepath: str, *, debts: list[Debt] | None = 
                     report_record_type_label(record),
                     record.category,
                     record.amount_kzt,
+                    format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
                 ]
             )
             _style_data_row(ws, ws.max_row, amount_columns=(4,))
@@ -242,11 +255,11 @@ def report_to_xlsx(report: Report, filepath: str, *, debts: list[Debt] | None = 
     total = report.total_fixed()
     records_total = sum(r.signed_amount_kzt() for r in report.records())
     if ws is not None:
-        ws.append(["SUBTOTAL", "", "", records_total])
+        ws.append(["SUBTOTAL", "", "", records_total, ""])
         _style_total_row(ws, ws.max_row, fill=SUBTOTAL_FILL, amount_columns=(4,))
-        ws.append(["FINAL BALANCE", "", "", total])
+        ws.append(["FINAL BALANCE", "", "", total, ""])
         _style_total_row(ws, ws.max_row, fill=TOTAL_FILL, amount_columns=(4,))
-        ws.auto_filter.ref = f"A2:D{ws.max_row}"
+        ws.auto_filter.ref = f"A2:E{ws.max_row}"
         _set_auto_width(ws)
 
     summary_year, monthly_rows = report.monthly_income_expense_rows()
@@ -306,6 +319,49 @@ def report_to_xlsx(report: Report, filepath: str, *, debts: list[Debt] | None = 
         _set_auto_width(bycat_ws)
     elif grouped_warning:
         _append_warning_sheet(wb, grouped_warning)
+
+    tag_groups = build_tag_group_reports(report)
+    if _should_add_by_tag_sheet(report, tag_groups):
+        bytag_ws = wb.create_sheet(title="By Tag", index=2)
+        for tag, subreport in sorted(tag_groups.items(), key=lambda item: item[0].casefold()):
+            bytag_ws.append([f"Tag: #{tag}"])
+            tag_row = bytag_ws.max_row
+            bytag_ws.merge_cells(
+                start_row=tag_row,
+                start_column=1,
+                end_row=tag_row,
+                end_column=5,
+            )
+            bytag_ws.cell(row=tag_row, column=1).font = Font(bold=True, color="1F1F1F")
+            bytag_ws.cell(row=tag_row, column=1).fill = SECTION_FILL
+            bytag_ws.cell(row=tag_row, column=1).border = THIN_BORDER
+            bytag_ws.append(["Date", "Type", "Category", "Amount (KZT)", "Tags"])
+            _style_header_row(bytag_ws, bytag_ws.max_row)
+            records_total = 0.0
+            for record in sorted(
+                subreport.records(),
+                key=lambda rr: (0, rr.date) if isinstance(rr.date, dt_date) else (1, dt_date.max),
+            ):
+                amount = float(getattr(record, "amount_kzt", 0.0) or 0.0)
+                records_total += float(record.signed_amount_kzt())
+                display_date = getattr(record, "date", "")
+                if isinstance(display_date, dt_date):
+                    display_date = display_date.isoformat()
+                bytag_ws.append(
+                    [
+                        display_date,
+                        report_record_type_label(record),
+                        str(getattr(record, "category", "") or ""),
+                        abs(amount),
+                        format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
+                    ]
+                )
+                _style_data_row(bytag_ws, bytag_ws.max_row, amount_columns=(4,))
+            bytag_ws.append(["SUBTOTAL", "", "", abs(records_total), ""])
+            _style_total_row(bytag_ws, bytag_ws.max_row, fill=SUBTOTAL_FILL, amount_columns=(4,))
+            bytag_ws.append([""])
+        bytag_ws.freeze_panes = "A2"
+        _set_auto_width(bytag_ws)
 
     _append_debts_sheet(wb, debts_for_report_period(report, list(debts or [])))
 
@@ -384,7 +440,7 @@ def export_records_to_xlsx(
             _style_data_row(ws, ws.max_row, amount_columns=(5, 7, 8))
 
     if ws is not None and ws.max_row >= 1:
-        ws.auto_filter.ref = f"A1:M{ws.max_row}"
+        ws.auto_filter.ref = f"A1:N{ws.max_row}"
         _set_auto_width(ws)
 
     os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None

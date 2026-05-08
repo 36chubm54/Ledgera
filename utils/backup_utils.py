@@ -17,10 +17,12 @@ from domain.distribution import DistributionItem, DistributionSubitem, FrozenDis
 from domain.goal import Goal
 from domain.import_policy import ImportPolicy
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
+from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
 from utils.import_core import ImportSummary, parse_import_row, record_type_name
 from utils.money import to_money_float, to_rate_float
+from utils.tag_utils import color_for_tag, normalize_tag_name, normalize_tag_names
 from version import __version__
 
 logger = logging.getLogger(__name__)
@@ -87,6 +89,7 @@ def _record_to_payload(record: Record) -> dict:
         "rate_at_operation": record.rate_at_operation,
         "amount_kzt": record.amount_kzt,
         "description": str(getattr(record, "description", "") or ""),
+        "tags": list(normalize_tag_names(tuple(getattr(record, "tags", ()) or ()))),
         "period": "",
     }
     if isinstance(record, MandatoryExpenseRecord):
@@ -124,6 +127,8 @@ def _budget_to_payload(budget: Budget) -> dict[str, Any]:
     return {
         "id": int(budget.id),
         "category": str(budget.category),
+        "scope_type": str(budget.scope_type),
+        "scope_value": str(budget.scope_value),
         "start_date": str(budget.start_date),
         "end_date": str(budget.end_date),
         "limit_kzt": to_money_float(budget.limit_kzt),
@@ -228,6 +233,31 @@ def _goal_to_payload(goal: Goal) -> dict[str, Any]:
         "created_at": str(goal.created_at),
         "description": str(goal.description or ""),
     }
+
+
+def _tag_to_payload(tag: Tag) -> dict[str, Any]:
+    return {
+        "id": int(tag.id),
+        "name": str(tag.name),
+        "color": str(tag.color or ""),
+        "usage_count": int(tag.usage_count or 0),
+        "last_used_at": str(tag.last_used_at or ""),
+    }
+
+
+def _record_tag_to_payload(record_id: int, tag_id: int) -> dict[str, Any]:
+    return {
+        "record_id": int(record_id),
+        "tag_id": int(tag_id),
+    }
+
+
+def _as_positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
 
 
 def compute_checksum(data: dict) -> str:
@@ -416,10 +446,26 @@ def export_full_backup_to_json(
                 is_active=True,
             )
         ]
+    tags_by_name: dict[str, Tag] = {}
+    record_tag_rows: list[dict[str, Any]] = []
+    next_tag_id = 1
+    for record in records:
+        record_id = int(record.id)
+        for tag_name in normalize_tag_names(tuple(getattr(record, "tags", ()) or ())):
+            existing = tags_by_name.get(tag_name.casefold())
+            if existing is None:
+                existing = Tag(id=next_tag_id, name=tag_name, color=color_for_tag(tag_name))
+                tags_by_name[tag_name.casefold()] = existing
+                next_tag_id += 1
+            record_tag_rows.append(_record_tag_to_payload(record_id, existing.id))
     data_payload = {
         "wallets": [_wallet_to_payload(wallet) for wallet in normalized_wallets],
         "records": [_record_to_payload(record) for record in records],
         "mandatory_expenses": [_record_to_payload(expense) for expense in mandatory_expenses],
+        "tags": [
+            _tag_to_payload(tag) for tag in sorted(tags_by_name.values(), key=lambda item: item.id)
+        ],
+        "record_tags": record_tag_rows,
         "budgets": [_budget_to_payload(budget) for budget in budgets],
         "debts": [_debt_to_payload(debt) for debt in debts],
         "debt_payments": [_debt_payment_to_payload(payment) for payment in debt_payments],
@@ -506,6 +552,8 @@ def import_full_backup_from_json(
     raw_assets = source_payload.get("assets", [])
     raw_asset_snapshots = source_payload.get("asset_snapshots", [])
     raw_goals = source_payload.get("goals", [])
+    raw_tags = source_payload.get("tags", [])
+    raw_record_tags = source_payload.get("record_tags", [])
 
     if not isinstance(raw_records, list) or not isinstance(raw_mandatory, list):
         raise BackupFormatError(
@@ -534,10 +582,45 @@ def import_full_backup_from_json(
         raise BackupFormatError(
             "Invalid backup JSON structure: assets, asset_snapshots, and goals must be arrays"
         )
+    if not isinstance(raw_tags, list) or not isinstance(raw_record_tags, list):
+        raise BackupFormatError(
+            "Invalid backup JSON structure: tags and record_tags must be arrays"
+        )
 
     errors: list[str] = []
     skipped = 0
     imported = 0
+    tags_by_id: dict[int, str] = {}
+    for idx, item in enumerate(raw_tags, start=1):
+        if not isinstance(item, dict):
+            skipped += 1
+            errors.append(f"tags[{idx}]: invalid item type")
+            continue
+        tag_id = _as_positive_int(item.get("id"))
+        tag_name = normalize_tag_name(item.get("name"))
+        if tag_id is None or not tag_name:
+            skipped += 1
+            errors.append(f"tags[{idx}]: invalid tag")
+            continue
+        tags_by_id[tag_id] = tag_name
+        imported += 1
+
+    record_tag_names: dict[int, list[str]] = {}
+    for idx, item in enumerate(raw_record_tags, start=1):
+        if not isinstance(item, dict):
+            skipped += 1
+            errors.append(f"record_tags[{idx}]: invalid item type")
+            continue
+        record_id = _as_positive_int(item.get("record_id"))
+        tag_id = _as_positive_int(item.get("tag_id"))
+        inline_name = normalize_tag_name(item.get("name"))
+        tag_name = inline_name or tags_by_id.get(int(tag_id or 0), "")
+        if record_id is None or not tag_name:
+            skipped += 1
+            errors.append(f"record_tags[{idx}]: invalid record-tag assignment")
+            continue
+        record_tag_names.setdefault(record_id, []).append(tag_name)
+        imported += 1
 
     wallets: list[Wallet] = []
     if raw_wallets:
@@ -601,6 +684,13 @@ def import_full_backup_from_json(
         record_payload = dict(item)
         if "wallet_id" not in record_payload:
             record_payload["wallet_id"] = SYSTEM_WALLET_ID
+        record_id = _as_positive_int(record_payload.get("id"))
+        record_payload["tags"] = list(
+            normalize_tag_names(
+                tuple(record_payload.get("tags", []) or [])
+                + tuple(record_tag_names.get(int(record_id or 0), []))
+            )
+        )
         record, _, error = parse_import_row(
             record_payload,
             row_label=f"records[{idx}]",

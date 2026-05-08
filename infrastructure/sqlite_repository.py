@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date as dt_date
@@ -8,11 +9,13 @@ from domain.asset import Asset, AssetCategory, AssetSnapshot
 from domain.debt import Debt, DebtKind, DebtOperationType, DebtPayment, DebtStatus
 from domain.goal import Goal
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
+from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
 from infrastructure.repositories import RecordRepository
 from storage.sqlite_storage import SQLiteStorage
 from utils.money import rate_to_text, to_minor_units, to_money_float, to_rate_float
+from utils.tag_utils import color_for_tag, normalize_tag_name, normalize_tag_names
 
 SYSTEM_WALLET_ID = 1
 
@@ -93,6 +96,130 @@ class SQLiteRecordRepository(RecordRepository):
 
     def commit(self) -> None:
         self._conn.commit()
+
+    def list_tags(self) -> list[Tag]:
+        rows = self._conn.execute(
+            """
+            SELECT id, name, color, usage_count, last_used_at
+            FROM tags
+            ORDER BY last_used_at DESC, usage_count DESC, name COLLATE NOCASE, name
+            """
+        ).fetchall()
+        return [
+            Tag(
+                id=int(row["id"]),
+                name=str(row["name"]),
+                color=str(row["color"] or ""),
+                usage_count=int(row["usage_count"] or 0),
+                last_used_at=str(row["last_used_at"] or ""),
+            )
+            for row in rows
+        ]
+
+    def search_tags(self, prefix: str) -> list[Tag]:
+        needle = normalize_tag_name(prefix)
+        if not needle:
+            return self.list_tags()
+        rows = self._conn.execute(
+            """
+            SELECT id, name, color, usage_count, last_used_at
+            FROM tags
+            WHERE lower(name) LIKE lower(?)
+            ORDER BY last_used_at DESC, usage_count DESC, name COLLATE NOCASE, name
+            """,
+            (f"{needle}%",),
+        ).fetchall()
+        return [
+            Tag(
+                id=int(row["id"]),
+                name=str(row["name"]),
+                color=str(row["color"] or ""),
+                usage_count=int(row["usage_count"] or 0),
+                last_used_at=str(row["last_used_at"] or ""),
+            )
+            for row in rows
+        ]
+
+    def load_tags_for_record_ids(self, record_ids: list[int]) -> dict[int, tuple[str, ...]]:
+        return self._record_tags_map(record_ids)
+
+    def replace_record_tags(self, record_id: int, names: list[str] | tuple[str, ...]) -> None:
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT 1 FROM records WHERE id = ?",
+                (int(record_id),),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Record not found: {record_id}")
+            self._replace_record_tags_many({int(record_id): normalize_tag_names(tuple(names))})
+
+    def rename_tag(self, old_name: str, new_name: str) -> None:
+        old_tag = normalize_tag_name(old_name)
+        new_tag = normalize_tag_name(new_name)
+        if not old_tag or not new_tag:
+            raise ValueError("Tag name must not be empty")
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT id FROM tags WHERE lower(name) = lower(?) LIMIT 1",
+                (old_tag,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Tag not found: {old_name}")
+            old_id = int(row["id"])
+            existing = self._conn.execute(
+                "SELECT id FROM tags WHERE lower(name) = lower(?) LIMIT 1",
+                (new_tag,),
+            ).fetchone()
+            if existing is not None and int(existing["id"]) != old_id:
+                new_id = int(existing["id"])
+                record_rows = self._conn.execute(
+                    "SELECT record_id FROM record_tags WHERE tag_id = ?",
+                    (old_id,),
+                ).fetchall()
+                for record_row in record_rows:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO record_tags (record_id, tag_id) VALUES (?, ?)",
+                        (int(record_row["record_id"]), new_id),
+                    )
+                self._conn.execute("DELETE FROM record_tags WHERE tag_id = ?", (old_id,))
+                self._conn.execute("DELETE FROM tags WHERE id = ?", (old_id,))
+            else:
+                self._conn.execute("UPDATE tags SET name = ? WHERE id = ?", (new_tag, old_id))
+            self._refresh_tag_metrics()
+            self._prune_orphan_tags()
+
+    def delete_tag(self, name: str) -> None:
+        target = normalize_tag_name(name)
+        if not target:
+            return
+        with self._conn:
+            row: sqlite3.Row | None = self._conn.execute(
+                "SELECT id FROM tags WHERE lower(name) = lower(?) LIMIT 1",
+                (target,),
+            ).fetchone()
+            if row is None:
+                return
+            self._conn.execute("DELETE FROM tags WHERE id = ?", (int(row["id"]),))
+            self._refresh_tag_metrics()
+
+    def set_tag_color(self, name: str, color: str) -> None:
+        target = normalize_tag_name(name)
+        normalized_color = str(color or "").strip()
+        if not target or not normalized_color:
+            return
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT id FROM tags WHERE lower(name) = lower(?) LIMIT 1",
+                (target,),
+            ).fetchone()
+            if row is None:
+                tag_id = self._ensure_tag_id(target)
+            else:
+                tag_id = int(row["id"])
+            self._conn.execute(
+                "UPDATE tags SET color = ? WHERE id = ?",
+                (normalized_color, int(tag_id)),
+            )
 
     @contextmanager
     def transaction(self):
@@ -262,13 +389,20 @@ class SQLiteRecordRepository(RecordRepository):
 
     def _normalize_existing_ids_from_one_if_needed(self) -> None:
         tables = ("wallets", "records", "transfers", "mandatory_expenses", "debts", "debt_payments")
-        if all(self._ids_are_normalized_from_one(table) for table in tables):
+        if (
+            all(self._ids_are_normalized_from_one(table) for table in tables)
+            and self._tag_ids_are_normalized_from_one()
+        ):
             return
         self._renormalize_current_ids()
 
+    def _tag_ids_are_normalized_from_one(self) -> bool:
+        rows = self._conn.execute("SELECT id FROM tags ORDER BY id").fetchall()
+        return all(int(row[0]) == index for index, row in enumerate(rows, start=1))
+
     def _renormalize_current_ids(self) -> None:
         wallets = self._storage.get_wallets()
-        records = self._storage.get_records()
+        records = self.load_all()
         transfers = self._storage.get_transfers()
         mandatory_expenses = self._storage.get_mandatory_expenses()
         debts = self.load_debts()
@@ -281,8 +415,178 @@ class SQLiteRecordRepository(RecordRepository):
             debts=debts,
             debt_payments=debt_payments,
         )
+        self._normalize_tag_ids()
 
-    def _record_from_row(self, row) -> Record:
+    @staticmethod
+    def _select_record_columns() -> str:
+        return """
+            id,
+            type,
+            date,
+            wallet_id,
+            transfer_id,
+            related_debt_id,
+            amount_original,
+            amount_original_minor,
+            currency,
+            rate_at_operation,
+            rate_at_operation_text,
+            amount_kzt,
+            amount_kzt_minor,
+            category,
+            description,
+            period
+        """
+
+    def _records_base_rows(self) -> list:
+        return self._conn.execute(
+            f"""
+            SELECT {self._select_record_columns()}
+            FROM records
+            ORDER BY id
+            """
+        ).fetchall()
+
+    def _record_tags_map(
+        self, record_ids: list[int] | tuple[int, ...]
+    ) -> dict[int, tuple[str, ...]]:
+        if not record_ids:
+            return {}
+        placeholders = ", ".join("?" for _ in record_ids)
+        rows = self._conn.execute(
+            f"""
+            SELECT rt.record_id, t.name
+            FROM record_tags AS rt
+            JOIN tags AS t
+              ON t.id = rt.tag_id
+            WHERE rt.record_id IN ({placeholders})
+            ORDER BY rt.record_id, t.name COLLATE NOCASE, t.name
+            """,
+            tuple(int(record_id) for record_id in record_ids),
+        ).fetchall()
+        grouped: dict[int, list[str]] = {}
+        for row in rows:
+            grouped.setdefault(int(row["record_id"]), []).append(str(row["name"]))
+        return {
+            record_id: normalize_tag_names(tuple(names))
+            for record_id, names in grouped.items()
+            if names
+        }
+
+    def _replace_record_tags_many(
+        self,
+        record_tags: dict[int, tuple[str, ...]],
+        *,
+        clear_missing: bool = False,
+    ) -> None:
+        if clear_missing:
+            if record_tags:
+                placeholders = ", ".join("?" for _ in record_tags)
+                self._conn.execute(
+                    f"DELETE FROM record_tags WHERE record_id NOT IN ({placeholders})",
+                    tuple(int(record_id) for record_id in record_tags),
+                )
+            else:
+                self._conn.execute("DELETE FROM record_tags")
+        for record_id, names in record_tags.items():
+            self._conn.execute("DELETE FROM record_tags WHERE record_id = ?", (int(record_id),))
+            normalized = normalize_tag_names(tuple(names))
+            for tag_name in normalized:
+                tag_id = self._ensure_tag_id(tag_name)
+                self._conn.execute(
+                    """
+                    INSERT OR IGNORE INTO record_tags (record_id, tag_id)
+                    VALUES (?, ?)
+                    """,
+                    (int(record_id), int(tag_id)),
+                )
+        self._refresh_tag_metrics()
+        self._prune_orphan_tags()
+
+    def _ensure_tag_id(self, name: str) -> int:
+        normalized = normalize_tag_name(name)
+        if not normalized:
+            raise ValueError("Tag name must not be empty")
+        row = self._conn.execute(
+            "SELECT id, name FROM tags WHERE lower(name) = lower(?) LIMIT 1",
+            (normalized,),
+        ).fetchone()
+        if row is not None:
+            tag_id = int(row["id"])
+            stored_name = str(row["name"])
+            if stored_name != normalized:
+                self._conn.execute(
+                    "UPDATE tags SET name = ? WHERE id = ?",
+                    (normalized, tag_id),
+                )
+            return tag_id
+        cursor = self._conn.execute(
+            "INSERT INTO tags (name, color, usage_count, last_used_at) VALUES (?, ?, 0, '')",
+            (normalized, color_for_tag(normalized)),
+        )
+        return self._require_lastrowid(cursor.lastrowid, "tags")
+
+    def _prune_orphan_tags(self) -> None:
+        self._conn.execute(
+            """
+            DELETE FROM tags
+            WHERE id NOT IN (SELECT DISTINCT tag_id FROM record_tags)
+            """
+        )
+        self._normalize_tag_ids()
+
+    def _normalize_tag_ids(self) -> None:
+        rows = self._conn.execute("SELECT id FROM tags ORDER BY id").fetchall()
+        remap: list[tuple[int, int]] = []
+        for next_id, row in enumerate(rows, start=1):
+            current_id = int(row["id"])
+            if current_id != next_id:
+                remap.append((current_id, next_id))
+        if not remap:
+            self._reset_autoincrement("tags")
+            return
+
+        for current_id, next_id in remap:
+            self._conn.execute(
+                "UPDATE tags SET id = ? WHERE id = ?",
+                (-int(next_id), int(current_id)),
+            )
+        for _current_id, next_id in remap:
+            self._conn.execute(
+                "UPDATE tags SET id = ? WHERE id = ?",
+                (int(next_id), -int(next_id)),
+            )
+        self._reset_autoincrement("tags")
+
+    def _refresh_tag_metrics(self) -> None:
+        self._conn.execute(
+            """
+            UPDATE tags
+            SET usage_count = COALESCE((
+                    SELECT COUNT(*)
+                    FROM record_tags AS rt
+                    WHERE rt.tag_id = tags.id
+                ), 0),
+                last_used_at = COALESCE((
+                    SELECT MAX(r.date)
+                    FROM record_tags AS rt
+                    JOIN records AS r
+                      ON r.id = rt.record_id
+                    WHERE rt.tag_id = tags.id
+                ), '')
+            WHERE 1 = 1
+            """
+        )
+        rows = self._conn.execute(
+            "SELECT id, name, color FROM tags WHERE length(trim(COALESCE(color, ''))) = 0"
+        ).fetchall()
+        for row in rows:
+            self._conn.execute(
+                "UPDATE tags SET color = ? WHERE id = ?",
+                (color_for_tag(str(row["name"] or "")), int(row["id"])),
+            )
+
+    def _record_from_row(self, row, *, tags: tuple[str, ...] = ()) -> Record:
         payload = {
             "id": int(row["id"]),
             "date": str(row["date"]),
@@ -299,6 +603,7 @@ class SQLiteRecordRepository(RecordRepository):
             "amount_kzt": self._storage._money_from_row(row, "amount_kzt", "amount_kzt_minor"),
             "category": str(row["category"]),
             "description": str(row["description"] or ""),
+            "tags": tags,
         }
         if str(row["type"]) == "income":
             return IncomeRecord(**payload)
@@ -1604,15 +1909,22 @@ class SQLiteRecordRepository(RecordRepository):
                     transfer_id = int(transfer_id_map[original_transfer_id])
                 new_record_id = self._insert_record_row(record, transfer_id=transfer_id)
                 record_id_map[int(record.id)] = int(new_record_id)
+            self._replace_record_tags_many(
+                {int(record_id_map[int(record.id)]): tuple(record.tags) for record in records},
+                clear_missing=True,
+            )
             self._remap_debt_payment_record_ids(record_id_map, payment_record_links)
 
     def save(self, record: Record) -> None:
         with self._conn:
             transfer_id = int(record.transfer_id) if record.transfer_id is not None else None
-            self._insert_record_row(record, transfer_id=transfer_id)
+            record_id = self._insert_record_row(record, transfer_id=transfer_id)
+            self._replace_record_tags_many({int(record_id): tuple(record.tags)})
 
     def load_all(self) -> list[Record]:
-        return self._storage.get_records()
+        rows = self._records_base_rows()
+        tags_map = self._record_tags_map([int(row["id"]) for row in rows])
+        return [self._record_from_row(row, tags=tags_map.get(int(row["id"]), ())) for row in rows]
 
     def list_all(self) -> list[Record]:
         return self.load_all()
@@ -1644,8 +1956,32 @@ class SQLiteRecordRepository(RecordRepository):
             (record_id,),
         ).fetchone()
         if row is not None:
-            return self._record_from_row(row)
+            tags = self._record_tags_map([record_id]).get(record_id, ())
+            return self._record_from_row(row, tags=tags)
         raise ValueError(f"Record not found: {record_id}")
+
+    def get_records_by_tag(self, name: str) -> list[Record]:
+        tag_name = normalize_tag_name(name)
+        if not tag_name:
+            return []
+        rows = self._conn.execute(
+            f"""
+            SELECT {self._select_record_columns()}
+            FROM records
+            WHERE EXISTS (
+                SELECT 1
+                FROM record_tags AS rt
+                JOIN tags AS t
+                  ON t.id = rt.tag_id
+                WHERE rt.record_id = records.id
+                  AND lower(t.name) = lower(?)
+            )
+            ORDER BY id
+            """,
+            (tag_name,),
+        ).fetchall()
+        tags_map = self._record_tags_map([int(row["id"]) for row in rows])
+        return [self._record_from_row(row, tags=tags_map.get(int(row["id"]), ())) for row in rows]
 
     def get_transfer_id_by_record_index(self, index: int) -> int | None:
         if int(index) < 0:
@@ -1680,6 +2016,7 @@ class SQLiteRecordRepository(RecordRepository):
                 transfer_id=transfer_id,
                 related_debt_id=related_debt_id,
             )
+            self._replace_record_tags_many({record_id: tuple(record.tags)})
 
     def delete_by_index(self, index: int) -> bool:
         if int(index) < 0:
@@ -1704,6 +2041,7 @@ class SQLiteRecordRepository(RecordRepository):
         with self._conn:
             self._conn.execute("DELETE FROM records")
             self._reset_autoincrement("records")
+            self._prune_orphan_tags()
 
     def save_initial_balance(self, balance: float) -> None:
         with self._conn:
@@ -1850,6 +2188,10 @@ class SQLiteRecordRepository(RecordRepository):
                     related_debt_id=related_debt_id,
                 )
                 record_id_map[int(record.id)] = int(new_record_id)
+            self._replace_record_tags_many(
+                {int(record_id_map[int(record.id)]): tuple(record.tags) for record in records},
+                clear_missing=True,
+            )
             self._remap_debt_payment_record_ids(record_id_map, payment_record_links)
 
     def _load_debt_payment_record_links(self) -> dict[int, int]:
@@ -1925,6 +2267,7 @@ class SQLiteRecordRepository(RecordRepository):
             )
             self._replace_all_mandatory_expenses(mandatory_expenses, wallet_id_map)
             self._replace_all_debt_payments(normalized_debt_payments, debt_id_map, record_id_map)
+            self._prune_orphan_tags()
 
     def _normalize_replace_all_data_inputs(
         self,
@@ -1964,6 +2307,8 @@ class SQLiteRecordRepository(RecordRepository):
         )
 
     def _truncate_replace_all_tables(self) -> None:
+        self._conn.execute("DELETE FROM record_tags")
+        self._conn.execute("DELETE FROM tags")
         self._conn.execute("DELETE FROM debt_payments")
         self._conn.execute("DELETE FROM debts")
         self._conn.execute("DELETE FROM records")
@@ -2039,6 +2384,10 @@ class SQLiteRecordRepository(RecordRepository):
                 related_debt_id=related_debt_id,
             )
             record_id_map[int(record.id)] = new_record_id
+        self._replace_record_tags_many(
+            {int(record_id_map[int(record.id)]): tuple(record.tags) for record in records},
+            clear_missing=True,
+        )
         return record_id_map
 
     def _replace_all_mandatory_expenses(

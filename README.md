@@ -1,6 +1,6 @@
 # FinAccountingApp
 
-Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, бюджетами, долгами, активами и целями.
+Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, тегами, бюджетами, долгами, активами и целями.
 
 Текущий релиз `v1.14.0` посвящён редизайну desktop shell: обновлены визуальная система темы, layout основных вкладок и shell-level поведение Tkinter-приложения. Интерфейс стал более карточным и консистентным, Treeview-таблицы получили zebra/highlight styling, а light/dark palette system теперь глубже применяется к shell, canvas-виджетам, combobox popdown и рабочим вкладкам.
 
@@ -51,14 +51,15 @@ python main.py
 
 - Учёт доходов, расходов, обязательных платежей и переводов между кошельками
 - Мультивалютные записи с пересчётом в базовую валюту `KZT`
-- Отчёты с fixed-rate и current-rate итогами, grouped view и экспортом в `CSV` / `XLSX` / `PDF`
-- Финансовая аналитика: `net worth`, cashflow, category breakdown, monthly summary
-- Бюджеты по категориям с live progress и pace tracking
+- Теги операций: свободный ввод, нормализация, автоподсказки, цветовая индикация и sidecar-отображение в журнале
+- Отчёты с fixed-rate и current-rate итогами, grouped view, tag filters и экспортом в `CSV` / `XLSX` / `PDF`
+- Финансовая аналитика: `net worth`, cashflow, category breakdown, tag coverage, monthly summary
+- Бюджеты по категориям и тегам с live progress, pace tracking и forecast-status
 - Учёт долгов и ссуд с историей погашений и write-off сценариями
 - Distribution System для monthly net-income allocation
 - Wealth layer: `Assets`, `Goals`, wealth `Dashboard`
 - Full backup / import / migration для `JSON` ↔ `SQLite`
-- Read-only Data Audit Engine для проверки консистентности данных
+- Read-only Data Audit Engine для проверки консистентности данных, включая tag integrity
 - Внешние языковые пакеты `locales/*.txt` и единый i18n-loader с fallback-цепочкой
 - Runtime `theme` / `language` preferences с сохранением в SQLite schema metadata
 - Light / dark theme system и live theme-aware shell, status bar, audit views и диалоги
@@ -72,9 +73,9 @@ python main.py
 ## 🖥️ Вкладки приложения
 
 - `Infographics` — быстрый визуальный обзор расходов и cashflow по дням/месяцам
-- `Operations` — добавление, редактирование, удаление, импорт и экспорт операций
-- `Reports` — генерация отчётов, grouped summary, wallet/category filters, export
-- `Analytics` — метрики за период: `net worth`, savings rate, burn rate, monthly summary
+- `Operations` — добавление, редактирование, удаление, импорт и экспорт операций, теги и inline-edit
+- `Reports` — генерация отчётов, grouped summary, wallet/category/tag filters, export
+- `Analytics` — метрики за период: `net worth`, savings rate, burn rate, category breakdown и tag coverage
 - `Dashboard` — wealth overview: `Assets`, `Goals`, allocation, compact net-worth trend
 - `Budget` — лимиты по категориям и live tracking исполнения
 - `Debts` — долги и ссуды: создание, погашение, write off, close, history, progress
@@ -85,7 +86,7 @@ python main.py
 
 | Слой | Ответственность |
 | --- | --- |
-| `domain` | Immutable-модели и бизнес-правила: records, wallets, budgets, debts, assets, goals, reports |
+| `domain` | Immutable-модели и бизнес-правила: records, tags, wallets, budgets, debts, assets, goals, reports |
 | `app` | Use cases и orchestration между GUI, сервисами и репозиторием |
 | `services` | Специализированные сценарии: import, audit, analytics, budget/debt/distribution/wealth logic |
 | `infrastructure` + `storage` | SQLite/JSON persistence, schema bootstrap, repository/storage adapters |
@@ -107,8 +108,8 @@ python main.py
 | `services.import_service.ImportService` | Реальный import pipeline: dry-run, validation, commit |
 | `services.audit_service.AuditService` | Read-only проверка целостности SQLite-данных |
 | `services.balance_service.BalanceService` | Балансы кошельков, total balance, cashflow |
-| `services.metrics_service.MetricsService` | Savings rate, burn rate, monthly/category analytics |
-| `services.budget_service.BudgetService` | Budget CRUD и live tracking |
+| `services.metrics_service.MetricsService` | Savings rate, burn rate, monthly/category/tag analytics |
+| `services.budget_service.BudgetService` | Budget CRUD, category/tag budgets и live tracking |
 | `services.debt_service.DebtService` | Debt/loan lifecycle |
 | `services.distribution_service.DistributionService` | Monthly distribution и frozen rows |
 | `infrastructure.sqlite_repository.SQLiteRecordRepository` | Основной runtime repository |
@@ -121,6 +122,7 @@ python main.py
 - `gui.tkinter_gui` — главный shell orchestration layer, применяющий theme, status bar и tab rebuild/runtime hooks
 - `FinanceService.get_import_capabilities()` — единая capability-модель для import pipeline вместо ad-hoc проверок по атрибутам
 - `FinancialController.load_debts()` и `related_debt_id` в `create_income(...)` / `create_expense(...)` — важные точки для debt-aware import/restore flows
+- `FinancialController.list_tags()` / `search_tags()` / `set_tag_color()` — app-level entry points для tag-aware UI и аналитики
 - `SQLiteRecordRepository.replace_records_and_transfers(...)` — безопасная bulk-замена операций с ремапом связанных debt-payment ссылок
 - `gui.logging_utils.log_ui_error(...)` — общий structured logging helper для GUI ошибок и деградаций
 
@@ -206,12 +208,14 @@ pytest --cov=. --cov-report=term-missing
 - Pipeline: `parse -> dry-run validation -> user confirmation -> SQLite transaction`
 - Поддерживаются `CSV`, `XLSX`, `JSON`
 - Для `JSON` full backup восстанавливаются runtime-сущности, включая `budgets`, `debts`, `debt_payments`, distribution/wealth payloads, если подсистемы поддерживаются репозиторием
+- `JSON` backup/import теперь включает `tags` и `record_tags`
 - Для readonly snapshot требуется `force=True`
 - Для `JSON` под `ImportPolicy.CURRENT_RATE` fast bulk-replace path тоже разрешён, если репозиторий его поддерживает
 - `ImportCapabilities` определяет, какие bulk-replace и load-* операции реально доступны конкретному runtime-service
 - Partial `JSON` import стал section-aware: если payload содержит только `records`, текущие `debts/assets/goals/budgets/distribution` не стираются
+- Legacy `JSON` без `tags` / `record_tags` по-прежнему поддерживается и трактуется как payload без тегов
 - Если секция `debts` явно отсутствует, pipeline старается сохранить существующие `related_debt_id` связи; если секция есть — ссылки нормализуются только по допустимым debt IDs
-- `CSV` / `XLSX` import по-прежнему идёт через create-path и не использует bulk replace; `related_debt_id` теперь корректно прокидывается и там
+- `CSV` / `XLSX` import по-прежнему идёт через create-path и не использует bulk replace; `related_debt_id` и `tags` теперь корректно прокидываются и там
 - `v1.10.1` усиливает раннюю валидацию import payload: битые ссылочные связи, дубликаты `wallet.id`, несколько `system` wallets и невалидные/дублированные `distribution_snapshots` теперь отсекаются раньше
 
 ### Backup
@@ -219,6 +223,7 @@ pytest --cov=. --cov-report=term-missing
 - Full backup хранится в `JSON`
 - Базовый low-level parser: `import_full_backup_from_json(...)`
 - `import_backup(...)` оставлен только как deprecated compatibility wrapper
+- Snapshot backup и startup-export paths включают теги и их связи с операциями
 - JSON export и backup-copy paths записываются atomically через temporary file + `fsync` + `os.replace`
 - `backup.export_to_json(...)` теперь поднимает `BackupExportError`, чтобы bootstrap/UI различали export-failure и другие startup-проблемы
 - При ошибке сохранения JSON repository пишет `.error` snapshot с несохранённым payload и поднимает `RepositorySaveError`
@@ -233,6 +238,7 @@ python migrate_json_to_sqlite.py --json-path data.json --sqlite-path finance.db
 ```
 
 - Скрипт переносит JSON payload в SQLite в одной явной транзакции
+- При наличии `tags` / `record_tags` миграция переносит и их; при отсутствии этих секций завершается без ошибки
 - Pre-schema compatibility поддерживает старые SQLite БД, где таблица `records` ещё без `related_debt_id`
 - Migration и bootstrap должны идти в паре с актуальным `db/schema.sql`
 - На OneDrive-путях bootstrap дополнительно учитывает sync/coherence риски, выполняет `PRAGMA quick_check` и для больших БД может форсировать synchronous export вместо фонового

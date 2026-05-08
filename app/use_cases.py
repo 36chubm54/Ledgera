@@ -23,6 +23,7 @@ from domain.wallets import Wallet
 from infrastructure.repositories import RecordRepository
 from services.audit_service import AuditService
 from utils.money import minor_to_money, quantize_money, to_money_float, to_rate_float
+from utils.tag_utils import find_numeric_only_tags
 
 from .services import CurrencyService
 
@@ -61,8 +62,13 @@ class CreateIncome:
         amount_kzt: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
+        tags: tuple[str, ...] = (),
     ) -> None:
         """Create and persist an income record."""
+        invalid_tags = find_numeric_only_tags(tags)
+        if invalid_tags:
+            invalid_label = ", ".join(f'"{tag}"' for tag in invalid_tags)
+            raise ValueError(f"Invalid tag: tags must not contain numbers only ({invalid_label})")
         wallet = wallet_by_id(self._repository, wallet_id)
         if not wallet.is_active:
             raise ValueError("Cannot create operation for inactive wallet")
@@ -80,6 +86,7 @@ class CreateIncome:
             amount_kzt=to_money_float(amount_kzt),
             category=category,
             description=description,
+            tags=tags,
         )
         self._repository.save(record)
         logger.info(
@@ -108,8 +115,13 @@ class CreateExpense:
         amount_kzt: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
+        tags: tuple[str, ...] = (),
     ) -> None:
         """Create and persist an expense record."""
+        invalid_tags = find_numeric_only_tags(tags)
+        if invalid_tags:
+            invalid_label = ", ".join(f'"{tag}"' for tag in invalid_tags)
+            raise ValueError(f"Invalid tag: tags must not contain numbers only ({invalid_label})")
         wallet = wallet_by_id(self._repository, wallet_id)
         if not wallet.is_active:
             raise ValueError("Cannot create operation for inactive wallet")
@@ -136,6 +148,7 @@ class CreateExpense:
             amount_kzt=amount_kzt_value,
             category=category,
             description=description,
+            tags=tags,
         )
         self._repository.save(record)
         logger.info(
@@ -1101,6 +1114,8 @@ class CreateBudget:
         limit_kzt: float,
         *,
         include_mandatory: bool = False,
+        scope_type: str = "category",
+        scope_value: str = "",
     ) -> "Budget":
         return self._service.create_budget(
             category,
@@ -1108,6 +1123,8 @@ class CreateBudget:
             end_date,
             limit_kzt,
             include_mandatory=include_mandatory,
+            scope_type=scope_type,
+            scope_value=scope_value,
         )
 
 

@@ -119,3 +119,35 @@ def test_report_pdf_logs_visible_group_warning(caplog, monkeypatch):
         assert "grouping unavailable" in caplog.text
     finally:
         os.unlink(path)
+
+
+def test_report_pdf_includes_group_report_on_tag(monkeypatch):
+    captured_titles: list[str] = []
+    real_table = __import__("utils.pdf_utils", fromlist=["Table"]).Table
+
+    def _capturing_table(data, *args, **kwargs):
+        if isinstance(data, list) and data and isinstance(data[0], list) and data[0]:
+            first = data[0][0]
+            if isinstance(first, str):
+                captured_titles.append(first)
+        return real_table(data, *args, **kwargs)
+
+    monkeypatch.setattr("utils.pdf_utils.Table", _capturing_table)
+    report = Report(
+        [
+            ExpenseRecord(
+                date="2025-01-02", _amount_init=30.0, category="Food", tags=("food", "home")
+            ),
+            IncomeRecord(date="2025-01-03", _amount_init=100.0, category="Salary", tags=("work",)),
+        ],
+        initial_balance=25.0,
+    )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        path = tmp.name
+    try:
+        report_to_pdf(report, path)
+        assert os.path.getsize(path) > 0
+        assert "Group report on tag" in captured_titles
+    finally:
+        os.unlink(path)

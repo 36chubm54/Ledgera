@@ -10,7 +10,9 @@ from reportlab.platypus import SimpleDocTemplate, Spacer, Table, TableStyle
 from domain.debt import Debt
 from domain.records import IncomeRecord, MandatoryExpenseRecord
 from domain.reports import Report
+from services.report_service import build_tag_group_rows
 from utils.debt_report_utils import debt_progress_percent, debts_for_report_period
+from utils.tag_utils import format_tags_inline
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,10 @@ def _should_add_by_category_section(report: Report, groups: dict[str, Report]) -
         return False
     only_subreport = next(iter(groups.values()))
     return len(list(only_subreport.records())) < len(list(report.records()))
+
+
+def _should_add_by_tag_section(tag_rows: list) -> bool:
+    return bool(tag_rows)
 
 
 def _append_debt_summary(
@@ -204,12 +210,14 @@ def report_to_pdf(report: Report, filepath: str, *, debts: list[Debt] | None = N
     """Export report as PDF (fixed amounts by operation-time FX rates)."""
     # Build table data
     data = []
-    header = ["Date", "Type", "Category", "Amount (KZT, fixed)"]
+    header = ["Date", "Type", "Category", "Amount (KZT, fixed)", "Tags"]
     data.append(header)
 
-    data.append(["", "", "", "Fixed amounts by operation-time FX rates"])
+    data.append(["", "", "", "", "Fixed amounts by operation-time FX rates"])
     if getattr(report, "initial_balance", 0) != 0 or report.is_opening_balance:
-        data.append([f"{report.balance_label.upper()}", "", "", f"{report.initial_balance:.2f}"])
+        data.append(
+            [f"{report.balance_label.upper()}", "", "", f"{report.initial_balance:.2f}", ""]
+        )
 
     for record in sorted(report.records(), key=lambda r: r.date):
         if isinstance(record, IncomeRecord):
@@ -224,13 +232,14 @@ def report_to_pdf(report: Report, filepath: str, *, debts: list[Debt] | None = N
                 record_type,
                 _safe_str(record.category),
                 f"{record.amount_kzt:.2f}",
+                format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
             ]
         )
 
     total = report.total_fixed()
     records_total = sum(r.signed_amount_kzt() for r in report.records())
-    data.append(["SUBTOTAL", "", "", f"{records_total:.2f}"])
-    data.append(["FINAL BALANCE", "", "", f"{total:.2f}"])
+    data.append(["SUBTOTAL", "", "", f"{records_total:.2f}", ""])
+    data.append(["FINAL BALANCE", "", "", f"{total:.2f}", ""])
 
     # Ensure directory
     os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
@@ -246,10 +255,11 @@ def report_to_pdf(report: Report, filepath: str, *, debts: list[Debt] | None = N
     )
     available_width = A4[0] - 60
     col_widths = [
+        available_width * 0.16,
         available_width * 0.18,
-        available_width * 0.22,
-        available_width * 0.40,
+        available_width * 0.28,
         available_width * 0.20,
+        available_width * 0.18,
     ]
 
     font_name = _register_cyrillic_font()
@@ -384,6 +394,49 @@ def report_to_pdf(report: Report, filepath: str, *, debts: list[Debt] | None = N
             )
             cat_table.setStyle(cat_style)
             elems.append(cat_table)
+
+    tag_rows = build_tag_group_rows(report)
+    if _should_add_by_tag_section(tag_rows):
+        elems.append(Spacer(1, 8))  # type: ignore
+        tag_title = Table([["Group report on tag"]], colWidths=[available_width])
+        tag_title.setStyle(
+            TableStyle(
+                [
+                    ("FONT", (0, 0), (-1, -1), font_name),
+                    ("FONTSIZE", (0, 0), (-1, -1), 12),
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.lightgrey),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ]
+            )
+        )
+        elems.append(tag_title)
+        tag_data = [["Tag", "Operations", "Total (KZT)"], ["", "", "Grouped tag totals"]]
+        for row in tag_rows:
+            tag_data.append(
+                [f"#{row.tag}", str(int(row.operations_count)), f"{float(row.total_kzt):.2f}"]
+            )
+        tag_table = Table(
+            tag_data,
+            colWidths=[available_width * 0.52, available_width * 0.18, available_width * 0.30],
+            repeatRows=1,
+        )
+        tag_table.setStyle(
+            TableStyle(
+                [
+                    ("FONT", (0, 0), (-1, -1), font_name),
+                    ("FONTSIZE", (0, 0), (-1, -1), 10),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ]
+            )
+        )
+        elems.append(tag_table)
 
     _append_debt_summary(
         elems,

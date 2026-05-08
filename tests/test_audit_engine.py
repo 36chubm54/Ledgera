@@ -21,6 +21,8 @@ def build_test_db(
     records: list[dict],
     transfers: list[dict],
     mandatory_expenses: list[dict],
+    tags: list[dict] | None = None,
+    record_tags: list[dict] | None = None,
     debts: list[dict] | None = None,
     debt_payments: list[dict] | None = None,
     assets: list[dict] | None = None,
@@ -95,6 +97,35 @@ def build_test_db(
                     record.get("category", "General"),
                     record.get("description", ""),
                     record.get("period"),
+                ),
+            )
+
+        for tag in tags or []:
+            conn.execute(
+                """
+                INSERT INTO tags (
+                    id, name, color, usage_count, last_used_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    tag["id"],
+                    tag["name"],
+                    tag.get("color", ""),
+                    tag.get("usage_count", 0),
+                    tag.get("last_used_at", ""),
+                ),
+            )
+
+        for item in record_tags or []:
+            conn.execute(
+                """
+                INSERT INTO record_tags (
+                    record_id, tag_id
+                ) VALUES (?, ?)
+                """,
+                (
+                    item["record_id"],
+                    item["tag_id"],
                 ),
             )
 
@@ -382,6 +413,8 @@ def _run_audit(
     records: list[dict] | None = None,
     transfers: list[dict] | None = None,
     mandatory_expenses: list[dict] | None = None,
+    tags: list[dict] | None = None,
+    record_tags: list[dict] | None = None,
     debts: list[dict] | None = None,
     debt_payments: list[dict] | None = None,
     assets: list[dict] | None = None,
@@ -397,6 +430,8 @@ def _run_audit(
         mandatory_expenses=(
             mandatory_expenses if mandatory_expenses is not None else _clean_mandatory_expenses()
         ),
+        tags=tags,
+        record_tags=record_tags,
         debts=debts,
         debt_payments=debt_payments,
         assets=assets if assets is not None else _clean_assets(),
@@ -417,9 +452,60 @@ def test_clean_db_all_checks_pass(tmp_path: Path) -> None:
     repo, report = _run_audit(tmp_path)
     try:
         assert report.is_clean is True
-        assert len(report.findings) == 14
-        assert len(report.passed) == 14
+        assert len(report.findings) == 15
+        assert len(report.passed) == 15
         assert all(finding.severity == AuditSeverity.OK for finding in report.findings)
+    finally:
+        repo.close()
+
+
+def test_tag_assignment_missing_record_reports_error(tmp_path: Path) -> None:
+    repo, report = _run_audit(
+        tmp_path,
+        tags=[{"id": 1, "name": "food", "usage_count": 1}],
+        record_tags=[{"record_id": 999, "tag_id": 1}],
+    )
+    try:
+        findings = _findings_by_check(report, "tag_integrity")
+        assert any(
+            finding.severity == AuditSeverity.ERROR and "missing record" in finding.message.lower()
+            for finding in findings
+        )
+    finally:
+        repo.close()
+
+
+def test_duplicate_tag_name_reports_error(tmp_path: Path) -> None:
+    repo, report = _run_audit(
+        tmp_path,
+        tags=[
+            {"id": 1, "name": "food", "usage_count": 0},
+            {"id": 2, "name": "Food", "usage_count": 0},
+        ],
+    )
+    try:
+        findings = _findings_by_check(report, "tag_integrity")
+        assert any(
+            finding.severity == AuditSeverity.ERROR
+            and "duplicate tag names" in finding.message.lower()
+            for finding in findings
+        )
+    finally:
+        repo.close()
+
+
+def test_tag_usage_count_mismatch_reports_warning(tmp_path: Path) -> None:
+    repo, report = _run_audit(
+        tmp_path,
+        tags=[{"id": 1, "name": "food", "usage_count": 5}],
+        record_tags=[{"record_id": 1, "tag_id": 1}],
+    )
+    try:
+        findings = _findings_by_check(report, "tag_integrity")
+        assert any(
+            finding.severity == AuditSeverity.WARNING and "usage_count" in finding.message
+            for finding in findings
+        )
     finally:
         repo.close()
 

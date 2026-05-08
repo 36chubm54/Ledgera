@@ -55,6 +55,14 @@ class BudgetTabBindings:
     delete_budget: Callable[[], None]
 
 
+def _visual_budget_state(result: BudgetResult) -> str:
+    if result.status == BudgetStatus.FUTURE:
+        return "future"
+    if result.status == BudgetStatus.EXPIRED:
+        return "expired"
+    return result.pace_status.value
+
+
 def _draw_progress_bars(canvas: tk.Canvas, results: list[BudgetResult]) -> None:
     palette = get_palette()
     pace_fill = {
@@ -98,11 +106,11 @@ def _draw_progress_bars(canvas: tk.Canvas, results: list[BudgetResult]) -> None:
 
         fill_w = min(bar_w, max(0, int(bar_w * result.usage_pct / 100.0)))
         if fill_w > 0:
-            fill_color = (
-                palette.text_muted
-                if result.status != BudgetStatus.ACTIVE
-                else pace_fill.get(result.pace_status, palette.success)
-            )
+            visual_state = _visual_budget_state(result)
+            if visual_state in {"future", "expired"}:
+                fill_color = palette.text_muted
+            else:
+                fill_color = pace_fill.get(result.pace_status, palette.success)
             canvas.create_rectangle(
                 pad_l,
                 y,
@@ -147,6 +155,19 @@ def build_budget_tab(
     category_combo = ttk.Combobox(form_frame, state="normal", width=20)
     category_combo.grid(row=0, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
+    scope_type_var = tk.StringVar(value="category")
+    ttk.Label(form_frame, text=tr("budget.scope", "Тип:")).grid(
+        row=1, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
+    )
+    scope_type_combo = ttk.Combobox(
+        form_frame,
+        state="readonly",
+        textvariable=scope_type_var,
+        values=("category", "tag"),
+        width=16,
+    )
+    scope_type_combo.grid(row=1, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+
     ttk.Label(form_frame, text=tr("common.from", "С даты:")).grid(
         row=0, column=2, sticky="w", padx=PAD_SM, pady=PAD_XS
     )
@@ -160,10 +181,10 @@ def build_budget_tab(
     end_date_entry.grid(row=0, column=5, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
     ttk.Label(form_frame, text=tr("budget.limit_kzt", "Лимит (KZT):")).grid(
-        row=1, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
+        row=2, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
     )
     limit_entry = ttk.Entry(form_frame, width=16)
-    limit_entry.grid(row=1, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    limit_entry.grid(row=2, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
     include_mandatory_var = tk.BooleanVar(value=False)
     include_mandatory_check = ttk.Checkbutton(
@@ -172,7 +193,7 @@ def build_budget_tab(
         variable=include_mandatory_var,
     )
     include_mandatory_check.grid(
-        row=1, column=2, columnspan=2, sticky="w", padx=PAD_SM, pady=PAD_XS
+        row=2, column=2, columnspan=2, sticky="w", padx=PAD_SM, pady=PAD_XS
     )
     Tooltip(
         include_mandatory_check,
@@ -211,7 +232,7 @@ def build_budget_tab(
         ("remaining", tr("budget.remaining", "Остаток"), 100, "e"),
         ("usage", tr("budget.usage_short", "%"), 65, "center"),
         ("pace", tr("budget.pace", "Темп"), 85, "center"),
-        ("status", tr("common.status", "Статус"), 80, "center"),
+        ("status", tr("common.status", "Статус"), 250, "center"),
     ):
         budget_tree.heading(col, text=text)
         budget_tree.column(col, width=width, anchor=anchor)  # type: ignore[arg-type]
@@ -244,7 +265,8 @@ def build_budget_tab(
         list_frame,
         text=tr(
             "budget.legend",
-            "Зеленый: норма, янтарный: выше темпа, красный: перерасход, синяя линия: прошедшая часть периода.",  # noqa: E501
+            "Зеленый: норма, янтарный: выше темпа, красный: перерасход, синяя линия: прошедшая часть периода."  # noqa: E501
+            "\nСтатус 'Выше темпа' включается, когда расход опережает линию времени более чем на 10 п.п.",  # noqa: E501
         ),
         style="Subtle.TLabel",
     )
@@ -258,17 +280,14 @@ def build_budget_tab(
 
     def _clear_form() -> None:
         category_combo.set("")
+        scope_type_var.set("category")
         start_date_entry.delete(0, tk.END)
         end_date_entry.delete(0, tk.END)
         limit_entry.delete(0, tk.END)
         include_mandatory_var.set(False)
 
     def _row_tag(result: BudgetResult) -> str:
-        if result.status == BudgetStatus.FUTURE:
-            return "future"
-        if result.status == BudgetStatus.EXPIRED:
-            return "expired"
-        return result.pace_status.value
+        return _visual_budget_state(result)
 
     def _display_pace_status(pace_status: PaceStatus) -> str:
         return {
@@ -284,12 +303,30 @@ def build_budget_tab(
             BudgetStatus.EXPIRED: tr("budget.status_value.expired", "Завершен"),
         }.get(status, str(status.value))
 
+    def _display_forecast_status(result: BudgetResult) -> str | None:
+        if not result.forecast_status_key:
+            return None
+        params = dict(result.forecast_status_params or {})
+        fallbacks = {
+            "budget.forecast.overspend_in_days": "Прогноз перерасхода через {days} дн.",
+            "budget.forecast.overspend": "Прогноз перерасхода",
+            "budget.forecast.remaining": "Прогноз остатка: {amount_kzt:,.0f} KZT",
+        }
+        return tr(
+            result.forecast_status_key,
+            fallbacks.get(result.forecast_status_key, ""),
+            **params,
+        )
+
     def _refresh() -> None:
         nonlocal last_results
         try:
-            categories = set(context.controller.get_expense_categories())
-            categories.update(context.controller.get_mandatory_expense_categories())
-            category_combo["values"] = sorted(categories, key=lambda value: value.casefold())
+            if scope_type_var.get() == "tag":
+                category_combo["values"] = [tag.name for tag in context.controller.list_tags()]
+            else:
+                categories = set(context.controller.get_expense_categories())
+                categories.update(context.controller.get_mandatory_expense_categories())
+                category_combo["values"] = sorted(categories, key=lambda value: value.casefold())
         except (ValueError, TypeError, RuntimeError, tk.TclError):
             logger.debug("Failed to refresh budget category suggestions", exc_info=True)
 
@@ -303,6 +340,7 @@ def build_budget_tab(
         budget_tree.delete(*budget_tree.get_children())
         for result in results:
             budget = result.budget
+            forecast_status = _display_forecast_status(result)
             budget_tree.insert(
                 "",
                 "end",
@@ -316,7 +354,7 @@ def build_budget_tab(
                     f"{result.remaining_kzt:,.0f}",
                     f"{result.usage_pct:.1f}%",
                     _display_pace_status(result.pace_status),
-                    _display_budget_status(result.status),
+                    forecast_status if forecast_status else _display_budget_status(result.status),
                 ),
                 tags=(_row_tag(result),),
             )
@@ -347,6 +385,7 @@ def build_budget_tab(
 
     def _add_budget() -> None:
         category = category_combo.get().strip()
+        scope_type = scope_type_var.get().strip() or "category"
         start_date = start_date_entry.get().strip()
         end_date = end_date_entry.get().strip()
         raw_limit = limit_entry.get().strip()
@@ -377,6 +416,8 @@ def build_budget_tab(
                 end_date=end_date,
                 limit_kzt=limit_kzt,
                 include_mandatory=include_mandatory_var.get(),
+                scope_type=scope_type,
+                scope_value=category,
             )
         except ValueError as error:
             show_error(str(error), title=tr("budget.error.title", "Ошибка бюджета"))
@@ -442,10 +483,12 @@ def build_budget_tab(
         text=tr("budget.create", "Создать бюджет"),
         style="Primary.TButton",
         command=_add_budget,
-    ).grid(row=1, column=4, padx=6, pady=4)
+    ).grid(row=2, column=4, padx=6, pady=4)
     ttk.Button(form_frame, text=tr("budget.clear", "Очистить"), command=_clear_form).grid(
-        row=1, column=5, padx=6, pady=4
+        row=2, column=5, padx=6, pady=4
     )
+
+    scope_type_combo.bind("<<ComboboxSelected>>", lambda _event: _refresh())
     ttk.Button(
         btn_frame,
         text=tr("budget.edit_limit", "Изменить лимит"),

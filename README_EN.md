@@ -1,6 +1,6 @@
 # FinAccountingApp
 
-Graphical application for personal financial accounting with multicurrency support, import/export, budgets, debts, assets, and goals.
+Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals.
 
 The current `v1.14.0` release focuses on a redesigned desktop shell: the visual theme system, major tab layouts, and shell-level Tkinter behavior were refreshed together. The UI is now more card-based and consistent, Treeview tables use stronger zebra/highlight styling, and the light/dark palette system is applied more deeply across the shell, canvas widgets, combobox popdowns, and working tabs.
 
@@ -51,14 +51,15 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. Core tabs can be 
 
 - Track income, expenses, mandatory payments, and wallet-to-wallet transfers
 - Multi-currency records normalized into base currency `KZT`
-- Reports with fixed-rate and current-rate totals, grouped view, and `CSV` / `XLSX` / `PDF` export
-- Financial analytics: `net worth`, cashflow, category breakdown, monthly summary
-- Category budgets with live progress and pace tracking
+- Operation tags with free-form entry, normalization, suggestions, color coding, and sidecar display in the journal
+- Reports with fixed-rate and current-rate totals, grouped view, tag filters, and `CSV` / `XLSX` / `PDF` export
+- Financial analytics: `net worth`, cashflow, category breakdown, tag coverage, and monthly summary
+- Category and tag budgets with live progress, pace tracking, and forecast status
 - Debt and loan tracking with repayment history and write-off flows
 - Distribution System for monthly net-income allocation
 - Wealth layer: `Assets`, `Goals`, and a dedicated wealth `Dashboard`
 - Full backup / import / migration for `JSON` ↔ `SQLite`
-- Read-only Data Audit Engine for runtime consistency checks
+- Read-only Data Audit Engine for runtime consistency checks, including tag integrity
 - External `locales/*.txt` language packs with a shared i18n loader and fallback chain
 - Runtime `theme` / `language` preferences persisted in SQLite schema metadata
 - Light / dark theme system with live theme-aware shell, status bar, audit views, and dialogs
@@ -72,9 +73,9 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. Core tabs can be 
 ## 🖥️ Application Tabs
 
 - `Infographics` — quick visual view of expenses and cashflow by day/month
-- `Operations` — add, edit, delete, import, and export operations
-- `Reports` — build reports, grouped summaries, wallet/category filters, export
-- `Analytics` — period metrics: `net worth`, savings rate, burn rate, monthly summary
+- `Operations` — add, edit, delete, import, and export operations, tags, and inline editing
+- `Reports` — build reports, grouped summaries, wallet/category/tag filters, export
+- `Analytics` — period metrics: `net worth`, savings rate, burn rate, category breakdown, and tag coverage
 - `Dashboard` — wealth overview: `Assets`, `Goals`, allocation, compact net-worth trend
 - `Budget` — category limits and live budget tracking
 - `Debts` — debts and loans: create, repay, write off, close, view history, track progress
@@ -85,7 +86,7 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. Core tabs can be 
 
 | Layer | Responsibility |
 | --- | --- |
-| `domain` | Immutable models and business rules: records, wallets, budgets, debts, assets, goals, reports |
+| `domain` | Immutable models and business rules: records, tags, wallets, budgets, debts, assets, goals, reports |
 | `app` | Use cases and orchestration between GUI, services, and repository |
 | `services` | Specialized flows: import, audit, analytics, budget/debt/distribution/wealth logic |
 | `infrastructure` + `storage` | SQLite/JSON persistence, schema bootstrap, repository/storage adapters |
@@ -107,8 +108,8 @@ Also important:
 | `services.import_service.ImportService` | Real import pipeline: dry-run, validation, commit |
 | `services.audit_service.AuditService` | Read-only SQLite integrity checks |
 | `services.balance_service.BalanceService` | Wallet balances, total balance, cashflow |
-| `services.metrics_service.MetricsService` | Savings rate, burn rate, monthly/category analytics |
-| `services.budget_service.BudgetService` | Budget CRUD and live tracking |
+| `services.metrics_service.MetricsService` | Savings rate, burn rate, monthly/category/tag analytics |
+| `services.budget_service.BudgetService` | Budget CRUD, category/tag budgets, and live tracking |
 | `services.debt_service.DebtService` | Debt/loan lifecycle |
 | `services.distribution_service.DistributionService` | Monthly distribution and frozen rows |
 | `infrastructure.sqlite_repository.SQLiteRecordRepository` | Primary runtime repository |
@@ -121,6 +122,7 @@ Practical `v1.14.0` highlights:
 - `gui.tkinter_gui` — the main shell orchestration layer applying theme, status bar, and tab rebuild/runtime hooks
 - `FinanceService.get_import_capabilities()` — a single capability model for the import pipeline instead of ad-hoc attribute probing
 - `FinancialController.load_debts()` and `related_debt_id` in `create_income(...)` / `create_expense(...)` — important hooks for debt-aware import/restore flows
+- `FinancialController.list_tags()` / `search_tags()` / `set_tag_color()` — app-level entry points for tag-aware UI and analytics
 - `SQLiteRecordRepository.replace_records_and_transfers(...)` — safe bulk operation replacement with debt-payment link remapping
 - `gui.logging_utils.log_ui_error(...)` — shared structured logging helper for GUI errors and degraded flows
 
@@ -206,12 +208,14 @@ pytest --cov=. --cov-report=term-missing
 - Pipeline: `parse -> dry-run validation -> user confirmation -> SQLite transaction`
 - Supports `CSV`, `XLSX`, `JSON`
 - `JSON` full backup restores runtime entities including `budgets`, `debts`, `debt_payments`, and distribution/wealth payloads when supported by the repository
+- `JSON` backup/import now also includes `tags` and `record_tags`
 - Readonly snapshots require `force=True`
 - For `JSON` under `ImportPolicy.CURRENT_RATE`, the fast bulk-replace path is still allowed when the repository supports it
 - `ImportCapabilities` defines which bulk-replace and load-* operations are actually available for the current runtime service
 - Partial `JSON` import is now section-aware: when a payload only contains `records`, current `debts/assets/goals/budgets/distribution` data is preserved
+- Legacy `JSON` payloads without `tags` / `record_tags` are still accepted and treated as tag-less data
 - If the `debts` section is explicitly absent, the pipeline tries to preserve existing `related_debt_id` links; if the section is present, links are normalized only against allowed debt IDs
-- `CSV` / `XLSX` imports still use the create-path instead of bulk replace, and `related_debt_id` is now propagated there as well
+- `CSV` / `XLSX` imports still use the create-path instead of bulk replace, and both `related_debt_id` and `tags` are now propagated there
 - `v1.10.1` adds stricter early payload validation: broken references, duplicate `wallet.id`, multiple `system` wallets, and invalid/duplicate `distribution_snapshots` are rejected earlier in the import pipeline
 
 ### Backup
@@ -219,6 +223,7 @@ pytest --cov=. --cov-report=term-missing
 - Full backup is stored as `JSON`
 - Main low-level parser: `import_full_backup_from_json(...)`
 - `import_backup(...)` remains only as a deprecated compatibility wrapper
+- Snapshot backups and startup-export paths now include tags and record-tag links
 - JSON export and backup-copy paths are written atomically through a temporary file plus `fsync` and `os.replace`
 - `backup.export_to_json(...)` now raises `BackupExportError` so bootstrap and the GUI can distinguish export failures from other startup issues
 - On JSON repository save failure, an `.error` snapshot of the unsaved payload is written and `RepositorySaveError` is raised
@@ -233,6 +238,7 @@ python migrate_json_to_sqlite.py --json-path data.json --sqlite-path finance.db
 ```
 
 - The script migrates a JSON payload into SQLite in one explicit transaction
+- When `tags` / `record_tags` exist in the payload, they are migrated too; when they are absent, migration still succeeds cleanly
 - Pre-schema compatibility supports legacy SQLite databases where `records` still lacks `related_debt_id`
 - Migration and bootstrap should stay aligned with the current `db/schema.sql`
 - On OneDrive-managed paths, bootstrap also accounts for sync/coherence risks, runs `PRAGMA quick_check`, and may force synchronous export for large databases instead of background export

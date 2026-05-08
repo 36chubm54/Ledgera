@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from tkinter import ttk
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from gui.i18n import tr
 from gui.tooltip import Tooltip
@@ -21,6 +21,7 @@ from gui.ui_theme import (
     enable_treeview_zebra,
     get_palette,
 )
+from utils.tag_utils import display_tag_name
 
 logger = logging.getLogger(__name__)
 
@@ -134,12 +135,20 @@ def _draw_net_worth_line(canvas: tk.Canvas, data: list) -> None:
     )
 
 
-def _draw_category_pie(canvas: tk.Canvas, data: list) -> None:
-    """Draw a pie chart of category spending."""
+def _draw_breakdown_pie(canvas: tk.Canvas, data: list) -> None:
+    """Draw a pie chart for category or tag breakdown data."""
     canvas.delete("all")
     palette = get_palette()
     canvas.configure(bg=palette.surface_elevated, highlightbackground=palette.border_soft)
     if not data:
+        canvas.create_text(
+            10,
+            10,
+            anchor="nw",
+            text=tr("common.empty_short", "Нет данных"),
+            fill=palette.chart_empty,
+            font=("Segoe UI", 11),
+        )
         return
     total = sum(float(getattr(item, "total_kzt", 0.0)) for item in data)
     if total <= 0:
@@ -155,7 +164,9 @@ def _draw_category_pie(canvas: tk.Canvas, data: list) -> None:
     for i, item in enumerate(data[:10]):
         value = float(getattr(item, "total_kzt", 0.0))
         sweep = value / total * 360.0
-        color = palette.chart_series[i % len(palette.chart_series)]
+        color = str(
+            getattr(item, "color", "") or palette.chart_series[i % len(palette.chart_series)]
+        )
         canvas.create_arc(
             cx - r,
             cy - r,
@@ -170,13 +181,86 @@ def _draw_category_pie(canvas: tk.Canvas, data: list) -> None:
         angle -= sweep
 
 
+def _draw_tag_bar_chart(canvas: tk.Canvas, data: list) -> None:
+    """Draw a horizontal bar chart for tag coverage."""
+    canvas.delete("all")
+    palette = get_palette()
+    canvas.configure(bg=palette.surface_elevated, highlightbackground=palette.border_soft)
+    if not data:
+        canvas.create_text(
+            10,
+            10,
+            anchor="nw",
+            text=tr("common.empty_short", "Нет данных"),
+            fill=palette.chart_empty,
+            font=("Segoe UI", 11),
+        )
+        return
+
+    rows = list(data[:8])
+    max_value = max(float(getattr(item, "total_kzt", 0.0)) for item in rows)
+    if max_value <= 0:
+        return
+
+    width = max(canvas.winfo_width(), 420)
+    height = max(canvas.winfo_height(), 260)
+    max_label_len = max(len(display_tag_name(str(getattr(item, "tag", "") or ""))) for item in rows)
+    left_pad = max(96, min(150, 44 + max_label_len * 8))
+    right_pad = 64
+    top_pad = 18
+    row_gap = 12
+    bar_height = max(22, min(30, (height - top_pad * 2) // max(1, len(rows)) - row_gap))
+
+    for index, item in enumerate(rows):
+        y = top_pad + index * (bar_height + row_gap)
+        value = float(getattr(item, "total_kzt", 0.0))
+        ratio = value / max_value if max_value > 0 else 0.0
+        bar_width = max(2, int((width - left_pad - right_pad) * ratio))
+        label = display_tag_name(str(getattr(item, "tag", "") or ""))
+        color = str(getattr(item, "color", "") or palette.accent_blue)
+
+        canvas.create_text(
+            left_pad - 10,
+            y + bar_height / 2,
+            text=label,
+            anchor="e",
+            fill=color,
+            font=("Segoe UI", 9, "bold"),
+        )
+        canvas.create_rectangle(
+            left_pad,
+            y,
+            width - right_pad,
+            y + bar_height,
+            fill=palette.surface_alt,
+            outline="",
+        )
+        canvas.create_rectangle(
+            left_pad,
+            y,
+            left_pad + bar_width,
+            y + bar_height,
+            fill=color,
+            outline="",
+        )
+        text_x = min(width - right_pad + 2, left_pad + bar_width + 8)
+        canvas.create_text(
+            text_x,
+            y + bar_height / 2,
+            text=f"{value:,.0f}",
+            anchor="w",
+            fill=palette.text_primary,
+            font=("Segoe UI", 9),
+        )
+
+
 def build_analytics_tab(
     parent: tk.Frame | ttk.Frame,
     context: AnalyticsTabContext,
 ) -> AnalyticsTabBindings:
     palette = get_palette()
-    parent.grid_columnconfigure(0, weight=1)
-    parent.grid_columnconfigure(1, weight=1)
+    parent.grid_columnconfigure(0, weight=1, uniform="analytics_columns")
+    parent.grid_columnconfigure(1, weight=1, uniform="analytics_columns")
     parent.grid_rowconfigure(1, weight=1)
     parent.grid_rowconfigure(2, weight=2)
 
@@ -194,6 +278,14 @@ def build_analytics_tab(
 
     refresh_button = ttk.Button(top, text=tr("analytics.refresh", "Обновить"))
     refresh_button.grid(row=0, column=4, sticky="w")
+
+    breakdown_by_tags_var = tk.BooleanVar(value=False)
+    breakdown_by_tags_check = ttk.Checkbutton(
+        top,
+        text=tr("analytics.breakdown_by_tags", "Разбивка по тегам"),
+        variable=breakdown_by_tags_var,
+    )
+    breakdown_by_tags_check.grid(row=0, column=5, sticky="e")
 
     default_start = datetime.now().strftime("%Y-01-01")
     default_end = datetime.now().strftime("%Y-%m-%d")
@@ -336,7 +428,8 @@ def build_analytics_tab(
         parent, tr("analytics.breakdown", "Разбивка по категориям")
     )
     breakdown_card.grid(row=2, column=0, sticky="nsew", padx=(PAD_XL, PAD_SM), pady=(0, PAD_LG))
-    breakdown_frame = breakdown_card.winfo_children()[-1]
+    breakdown_frame = cast(ttk.Frame, breakdown_card.winfo_children()[-1])
+    breakdown_title_label = cast(ttk.Label, breakdown_card.winfo_children()[0])
     breakdown_frame.grid_columnconfigure(0, weight=3)
     breakdown_frame.grid_columnconfigure(1, weight=2)
     breakdown_frame.grid_rowconfigure(0, weight=1)
@@ -345,13 +438,17 @@ def build_analytics_tab(
     breakdown_left.grid(row=0, column=0, sticky="nsew")
     breakdown_left.grid_columnconfigure(0, weight=1)
 
+    category_breakdown_frame = ttk.Frame(breakdown_left)
+    category_breakdown_frame.grid(row=0, column=0, sticky="nsew")
+    category_breakdown_frame.grid_columnconfigure(0, weight=1)
+
     ttk.Label(
-        breakdown_left,
+        category_breakdown_frame,
         text=tr("analytics.expenses", "Расходы"),
         font=("Segoe UI", 10, "bold"),
     ).grid(row=0, column=0, sticky="w")
     spending_tree = ttk.Treeview(
-        breakdown_left,
+        category_breakdown_frame,
         columns=("category", "total", "count"),
         show="headings",
         height=4,
@@ -365,16 +462,16 @@ def build_analytics_tab(
     spending_tree.column("total", width=120, minwidth=120, anchor="e")
     spending_tree.column("count", width=60, minwidth=60, anchor="center")
     attach_treeview_scrollbars(
-        breakdown_left, spending_tree, row=1, column=0, horizontal=False, pady=0
+        category_breakdown_frame, spending_tree, row=1, column=0, horizontal=False, pady=0
     )
 
     ttk.Label(
-        breakdown_left,
+        category_breakdown_frame,
         text=tr("analytics.income", "Доходы"),
         font=("Segoe UI", 10, "bold"),
     ).grid(row=2, column=0, sticky="w")
     income_tree = ttk.Treeview(
-        breakdown_left,
+        category_breakdown_frame,
         columns=("category", "total", "count"),
         show="headings",
         height=4,
@@ -388,8 +485,44 @@ def build_analytics_tab(
     income_tree.column("total", width=120, minwidth=120, anchor="e")
     income_tree.column("count", width=60, minwidth=60, anchor="center")
     attach_treeview_scrollbars(
-        breakdown_left, income_tree, row=3, column=0, horizontal=False, pady=0
+        category_breakdown_frame, income_tree, row=3, column=0, horizontal=False, pady=0
     )
+
+    tag_breakdown_frame = ttk.Frame(breakdown_left)
+    tag_breakdown_frame.grid(row=0, column=0, sticky="nsew")
+    tag_breakdown_frame.grid_columnconfigure(0, weight=1)
+    tag_breakdown_frame.grid_rowconfigure(1, weight=1)
+
+    ttk.Label(
+        tag_breakdown_frame,
+        text=tr("analytics.tags_expenses", "Теги расходов"),
+        font=("Segoe UI", 10, "bold"),
+    ).grid(row=0, column=0, sticky="w")
+    tag_tree = ttk.Treeview(
+        tag_breakdown_frame,
+        columns=("tag", "total", "count"),
+        show="headings",
+        height=9,
+    )
+    enable_treeview_zebra(tag_tree)
+    tag_tree.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+    tag_tree.heading("tag", text=tr("common.tags", "Теги"))
+    tag_tree.heading("total", text=tr("analytics.total_kzt", "Сумма KZT"))
+    tag_tree.heading("count", text=tr("common.count_short", "#"))
+    tag_tree.column("tag", width=100, minwidth=100)
+    tag_tree.column("total", width=90, minwidth=90, anchor="e")
+    tag_tree.column("count", width=50, minwidth=50, anchor="center")
+    attach_treeview_scrollbars(
+        tag_breakdown_frame, tag_tree, row=1, column=0, horizontal=False, pady=0
+    )
+    ttk.Label(
+        tag_breakdown_frame,
+        text=tr(
+            "analytics.tags_split_hint",
+            "Суммы по тегам не складываются в общий итог: одна запись может одновременно входить в несколько тегов.",  # noqa: E501
+        ),
+    ).grid(row=2, column=0, sticky="w", pady=(8, 0))
+    tag_breakdown_frame.grid_remove()
 
     breakdown_right = ttk.Frame(breakdown_frame, padding=(0, 10, 10, 10))
     breakdown_right.grid(row=0, column=1, sticky="nsew")
@@ -397,8 +530,8 @@ def build_analytics_tab(
     breakdown_right.grid_rowconfigure(0, weight=1)
     category_canvas = tk.Canvas(
         breakdown_right,
-        width=200,
-        height=200,
+        width=420,
+        height=260,
         bg=palette.surface_elevated,
         highlightthickness=0,
     )
@@ -440,8 +573,29 @@ def build_analytics_tab(
     attach_treeview_scrollbars(monthly_container, monthly_tree, row=0, column=0, horizontal=True)
 
     last_timeline_data: list = []
-    last_spending_data: list = []
+    last_breakdown_data: list = []
     redraw_job: str | None = None
+
+    def _apply_breakdown_mode() -> None:
+        is_tags_mode = bool(breakdown_by_tags_var.get())
+        if is_tags_mode:
+            breakdown_frame.grid_columnconfigure(0, weight=4)
+            breakdown_frame.grid_columnconfigure(1, weight=4)
+            category_canvas.configure(width=420, height=260)
+            category_breakdown_frame.grid_remove()
+            tag_breakdown_frame.grid()
+            breakdown_title_label.configure(
+                text=tr("analytics.breakdown_tags", "Покрытие расходов тегами")
+            )
+        else:
+            breakdown_frame.grid_columnconfigure(0, weight=3)
+            breakdown_frame.grid_columnconfigure(1, weight=2)
+            category_canvas.configure(width=200, height=200)
+            tag_breakdown_frame.grid_remove()
+            category_breakdown_frame.grid()
+            breakdown_title_label.configure(
+                text=tr("analytics.breakdown", "Разбивка по категориям")
+            )
 
     def _schedule_redraw() -> None:
         nonlocal redraw_job
@@ -455,13 +609,14 @@ def build_analytics_tab(
     def _redraw_canvases() -> None:
         nonlocal redraw_job
         redraw_job = None
-        if last_timeline_data:
-            _draw_net_worth_line(timeline_canvas, last_timeline_data)
-        if last_spending_data:
-            _draw_category_pie(category_canvas, last_spending_data)
+        _draw_net_worth_line(timeline_canvas, last_timeline_data)
+        if breakdown_by_tags_var.get():
+            _draw_tag_bar_chart(category_canvas, last_breakdown_data)
+        else:
+            _draw_breakdown_pie(category_canvas, last_breakdown_data)
 
     def _refresh_analytics() -> None:
-        nonlocal last_timeline_data, last_spending_data
+        nonlocal last_timeline_data, last_breakdown_data
         start = period_from_entry.get().strip() or default_start
         end = period_to_entry.get().strip() or default_end
 
@@ -583,12 +738,12 @@ def build_analytics_tab(
 
             timeline_data = context.controller.get_net_worth_timeline()
             last_timeline_data = list(timeline_data) if timeline_data else []
-            timeline_canvas.after(
-                50, lambda: _draw_net_worth_line(timeline_canvas, last_timeline_data)
-            )
+            _draw_net_worth_line(timeline_canvas, last_timeline_data)
+
+            is_tags_mode = bool(breakdown_by_tags_var.get())
+            _apply_breakdown_mode()
 
             spending_data = context.controller.get_spending_by_category(start, end)
-            last_spending_data = list(spending_data) if spending_data else []
             spending_tree.delete(*spending_tree.get_children())
             for item in spending_data:
                 spending_tree.insert(
@@ -614,9 +769,30 @@ def build_analytics_tab(
                     ),
                 )
 
-            category_canvas.after(
-                50, lambda: _draw_category_pie(category_canvas, last_spending_data)
-            )
+            tag_data = context.controller.get_spending_by_tag(start, end)
+            tag_tree.delete(*tag_tree.get_children())
+            for item in tag_data:
+                row_tag = ""
+                row_color = str(getattr(item, "color", "") or "")
+                if row_color:
+                    row_tag = f"tag_{row_color.replace('#', '').lower()}"
+                    tag_tree.tag_configure(row_tag, foreground=row_color)
+                tag_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        display_tag_name(getattr(item, "tag", "")),
+                        f"{float(getattr(item, 'total_kzt', 0.0)):,.0f}",
+                        int(getattr(item, "record_count", 0)),
+                    ),
+                    tags=((row_tag,) if row_tag else ()),
+                )
+
+            last_breakdown_data = list(tag_data) if is_tags_mode else list(spending_data)
+            if is_tags_mode:
+                _draw_tag_bar_chart(category_canvas, last_breakdown_data)
+            else:
+                _draw_breakdown_pie(category_canvas, last_breakdown_data)
 
             monthly_data = context.controller.get_monthly_summary(start_date=start, end_date=end)
             monthly_tree.delete(*monthly_tree.get_children())
@@ -649,6 +825,7 @@ def build_analytics_tab(
                 )
 
     refresh_button.configure(command=_refresh_analytics)
+    breakdown_by_tags_check.configure(command=_refresh_analytics)
 
     def _bind_enter_refresh(entry: ttk.Entry) -> None:
         entry.bind("<Return>", lambda _event: _refresh_analytics())

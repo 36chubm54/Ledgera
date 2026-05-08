@@ -24,6 +24,8 @@ class AuditService:
         self._mandatory_expense_rows: list[dict[str, Any]] = []
         self._debt_rows: list[dict[str, Any]] = []
         self._debt_payment_rows: list[dict[str, Any]] = []
+        self._tag_rows: list[dict[str, Any]] = []
+        self._record_tag_rows: list[dict[str, Any]] = []
         self._asset_rows: list[dict[str, Any]] = []
         self._asset_snapshot_rows: list[dict[str, Any]] = []
         self._goal_rows: list[dict[str, Any]] = []
@@ -43,6 +45,8 @@ class AuditService:
         self._mandatory_expense_rows = self._read_mandatory_expense_rows()
         self._debt_rows = self._read_debt_rows()
         self._debt_payment_rows = self._read_debt_payment_rows()
+        self._tag_rows = self._read_tag_rows()
+        self._record_tag_rows = self._read_record_tag_rows()
         self._asset_rows = self._read_asset_rows()
         self._asset_snapshot_rows = self._read_asset_snapshot_rows()
         self._goal_rows = self._read_goal_rows()
@@ -58,6 +62,7 @@ class AuditService:
         findings += self._check_rate_positivity()
         findings += self._check_date_validity()
         findings += self._check_currency_codes()
+        findings += self._check_tag_integrity()
         findings += self._check_mandatory_template_date_and_autopay()
         findings += self._check_debt_balance_integrity()
         findings += self._check_asset_integrity()
@@ -565,6 +570,115 @@ class AuditService:
             )
         ]
 
+    def _check_tag_integrity(self) -> list[AuditFinding]:
+        findings: list[AuditFinding] = []
+        tags_by_id = {int(row["id"]): row for row in self._tag_rows}
+        existing_record_ids = {
+            int(row["id"])
+            for row in self._repo.query_all(
+                """
+                SELECT id
+                FROM records
+                """
+            )
+        }
+
+        normalized_names: dict[str, int] = {}
+        actual_usage_by_tag_id: Counter[int] = Counter()
+        seen_pairs: set[tuple[int, int]] = set()
+
+        for tag in self._tag_rows:
+            tag_id = int(tag["id"])
+            raw_name = str(tag.get("name", "") or "")
+            normalized_name = raw_name.strip().casefold()
+            if not normalized_name:
+                findings.append(
+                    AuditFinding(
+                        check="tag_integrity",
+                        severity=AuditSeverity.ERROR,
+                        message=f"Tag id={tag_id} has empty name.",
+                    )
+                )
+            elif normalized_name in normalized_names:
+                findings.append(
+                    AuditFinding(
+                        check="tag_integrity",
+                        severity=AuditSeverity.ERROR,
+                        message="Duplicate tag names detected.",
+                        detail=(
+                            f"tag_ids={sorted((normalized_names[normalized_name], tag_id))}, "
+                            f"name={raw_name!r}"
+                        ),
+                    )
+                )
+            else:
+                normalized_names[normalized_name] = tag_id
+
+        for row in self._record_tag_rows:
+            record_id = int(row.get("record_id", 0) or 0)
+            tag_id = int(row.get("tag_id", 0) or 0)
+            pair = (record_id, tag_id)
+
+            if pair in seen_pairs:
+                findings.append(
+                    AuditFinding(
+                        check="tag_integrity",
+                        severity=AuditSeverity.ERROR,
+                        message="Duplicate record-tag assignment detected.",
+                        detail=f"record_id={record_id}, tag_id={tag_id}",
+                    )
+                )
+            else:
+                seen_pairs.add(pair)
+
+            if record_id not in existing_record_ids:
+                findings.append(
+                    AuditFinding(
+                        check="tag_integrity",
+                        severity=AuditSeverity.ERROR,
+                        message="Record-tag assignment references missing record.",
+                        detail=f"record_id={record_id}, tag_id={tag_id}",
+                    )
+                )
+                continue
+
+            if tag_id not in tags_by_id:
+                findings.append(
+                    AuditFinding(
+                        check="tag_integrity",
+                        severity=AuditSeverity.ERROR,
+                        message="Record-tag assignment references missing tag.",
+                        detail=f"record_id={record_id}, tag_id={tag_id}",
+                    )
+                )
+                continue
+
+            actual_usage_by_tag_id[tag_id] += 1
+
+        for tag in self._tag_rows:
+            tag_id = int(tag["id"])
+            stored_usage = int(tag.get("usage_count", 0) or 0)
+            actual_usage = int(actual_usage_by_tag_id.get(tag_id, 0))
+            if stored_usage != actual_usage:
+                findings.append(
+                    AuditFinding(
+                        check="tag_integrity",
+                        severity=AuditSeverity.WARNING,
+                        message=f"Tag id={tag_id} has inconsistent usage_count.",
+                        detail=f"usage_count={stored_usage}, actual_assignments={actual_usage}",
+                    )
+                )
+
+        if findings:
+            return findings
+        return [
+            AuditFinding(
+                check="tag_integrity",
+                severity=AuditSeverity.OK,
+                message="All tag rows and record-tag assignments are consistent.",
+            )
+        ]
+
     def _check_debt_balance_integrity(self) -> list[AuditFinding]:
         debts = {int(row["id"]): row for row in self._debt_rows}
         record_debt_links = {
@@ -1001,6 +1115,26 @@ class AuditService:
                 payment_date
             FROM debt_payments
             ORDER BY id
+            """
+        )
+        return [dict(row) for row in rows]
+
+    def _read_tag_rows(self) -> list[dict[str, Any]]:
+        rows = self._repo.query_all(
+            """
+            SELECT id, name, color, usage_count, last_used_at
+            FROM tags
+            ORDER BY id
+            """
+        )
+        return [dict(row) for row in rows]
+
+    def _read_record_tag_rows(self) -> list[dict[str, Any]]:
+        rows = self._repo.query_all(
+            """
+            SELECT record_id, tag_id
+            FROM record_tags
+            ORDER BY record_id, tag_id
             """
         )
         return [dict(row) for row in rows]

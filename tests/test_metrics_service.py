@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.metrics_service import CategorySpend, MetricsService, MonthlySummary
+from services.metrics_service import CategorySpend, MetricsService, MonthlySummary, TagSpend
 
 
 def _schema_path() -> str:
@@ -79,6 +79,22 @@ def _insert_record(
             float(amount_kzt),
             str(category),
         ),
+    )
+    conn.commit()
+
+
+def _insert_tag(conn: sqlite3.Connection, tag_id: int, *, name: str, color: str = "") -> None:
+    conn.execute(
+        "INSERT INTO tags (id, name, color, usage_count, last_used_at) VALUES (?, ?, ?, 0, '')",
+        (int(tag_id), str(name), str(color)),
+    )
+    conn.commit()
+
+
+def _insert_record_tag(conn: sqlite3.Connection, *, record_id: int, tag_id: int) -> None:
+    conn.execute(
+        "INSERT INTO record_tags (record_id, tag_id) VALUES (?, ?)",
+        (int(record_id), int(tag_id)),
     )
     conn.commit()
 
@@ -372,6 +388,49 @@ def test_get_top_expense_categories_is_wrapper(tmp_path: Path) -> None:
             "2026-01-31",
             limit=3,
         )
+    finally:
+        repo.close()
+
+
+def test_get_spending_by_tag_counts_full_amount_for_each_tag(tmp_path: Path) -> None:
+    db_path = tmp_path / "metrics.db"
+    _init_db(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        _insert_wallet(conn, 1)
+        _insert_record(
+            conn,
+            record_type="expense",
+            date="2026-01-01",
+            wallet_id=1,
+            amount_kzt=900.0,
+            category="Food",
+        )
+        first_record_id = int(conn.execute("SELECT MAX(id) FROM records").fetchone()[0])
+        _insert_record(
+            conn,
+            record_type="expense",
+            date="2026-01-02",
+            wallet_id=1,
+            amount_kzt=600.0,
+            category="Leisure",
+        )
+        second_record_id = int(conn.execute("SELECT MAX(id) FROM records").fetchone()[0])
+        _insert_tag(conn, 1, name="food", color="#F2994A")
+        _insert_tag(conn, 2, name="fun", color="#5B8DEF")
+        _insert_record_tag(conn, record_id=first_record_id, tag_id=1)
+        _insert_record_tag(conn, record_id=first_record_id, tag_id=2)
+        _insert_record_tag(conn, record_id=second_record_id, tag_id=2)
+    finally:
+        conn.close()
+
+    repo = SQLiteRecordRepository(str(db_path), schema_path=_schema_path())
+    try:
+        svc = MetricsService(repo)
+        assert svc.get_spending_by_tag("2026-01-01", "2026-01-31") == [
+            TagSpend(tag="fun", total_kzt=1500.0, record_count=2, color="#5B8DEF"),
+            TagSpend(tag="food", total_kzt=900.0, record_count=1, color="#F2994A"),
+        ]
     finally:
         repo.close()
 

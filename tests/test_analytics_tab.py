@@ -89,6 +89,22 @@ def _insert_record(
     conn.commit()
 
 
+def _insert_tag(conn: sqlite3.Connection, tag_id: int, *, name: str, color: str = "") -> None:
+    conn.execute(
+        "INSERT INTO tags (id, name, color, usage_count, last_used_at) VALUES (?, ?, ?, 0, '')",
+        (int(tag_id), str(name), str(color)),
+    )
+    conn.commit()
+
+
+def _insert_record_tag(conn: sqlite3.Connection, *, record_id: int, tag_id: int) -> None:
+    conn.execute(
+        "INSERT INTO record_tags (record_id, tag_id) VALUES (?, ?)",
+        (int(record_id), int(tag_id)),
+    )
+    conn.commit()
+
+
 def _make_controller(db_path: Path) -> tuple[SQLiteRecordRepository, FinancialController]:
     repo = SQLiteRecordRepository(str(db_path), schema_path=_schema_path())
     controller = FinancialController(repo, CurrencyService())
@@ -395,6 +411,9 @@ def test_analytics_tab_net_worth_uses_period_end_date() -> None:
         def get_income_by_category(self, start_date: str, end_date: str, *, limit=None) -> list:
             return []
 
+        def get_spending_by_tag(self, start_date: str, end_date: str, *, limit=None) -> list:
+            return []
+
         def get_monthly_summary(
             self,
             start_date: str | None = None,
@@ -432,3 +451,71 @@ def test_analytics_tab_net_worth_uses_period_end_date() -> None:
         assert bindings.net_worth_label.cget("text") == "Чистый капитал:  1,234 KZT"
     finally:
         context.destroy()
+
+
+def test_analytics_tag_breakdown_toggle_renders_single_tag_tree(tmp_path: Path) -> None:
+    db_path = tmp_path / "analytics.db"
+    _init_db(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        _insert_wallet(conn, 1)
+        _insert_record(
+            conn,
+            record_type="expense",
+            date="2026-01-05",
+            wallet_id=1,
+            amount_kzt=900.0,
+            category="Food",
+        )
+        record_id = int(conn.execute("SELECT MAX(id) FROM records").fetchone()[0])
+        _insert_tag(conn, 1, name="food", color="#F2994A")
+        _insert_tag(conn, 2, name="family", color="#34A853")
+        _insert_record_tag(conn, record_id=record_id, tag_id=1)
+        _insert_record_tag(conn, record_id=record_id, tag_id=2)
+    finally:
+        conn.close()
+
+    repo, controller = _make_controller(db_path)
+
+    class _Context(tk.Tk):
+        def __init__(self) -> None:
+            super().__init__()
+            self.withdraw()
+            self.controller = controller
+
+    context = _Context()
+    try:
+        parent = ttk.Frame(context)
+        parent.grid()
+        build_analytics_tab(parent, context)
+        context.update()
+
+        checkbuttons = [
+            child
+            for child in parent.winfo_children()[0].winfo_children()
+            if isinstance(child, ttk.Checkbutton)
+        ]
+        assert checkbuttons, "Expected analytics breakdown toggle checkbutton"
+        checkbuttons[0].invoke()
+        context.update()
+
+        tag_trees: list[ttk.Treeview] = []
+
+        def _walk(widget: tk.Misc) -> None:
+            for child in widget.winfo_children():
+                if isinstance(child, ttk.Treeview) and tuple(child.cget("columns")) == (
+                    "tag",
+                    "total",
+                    "count",
+                ):
+                    tag_trees.append(child)
+                _walk(child)
+
+        _walk(parent)
+        assert tag_trees, "Expected a tag breakdown treeview"
+        values = [tag_trees[0].item(iid, "values") for iid in tag_trees[0].get_children()]
+        assert ("#food", "900", "1") in values
+        assert ("#family", "900", "1") in values
+    finally:
+        context.destroy()
+        repo.close()

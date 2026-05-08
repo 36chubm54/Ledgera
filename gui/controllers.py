@@ -77,6 +77,7 @@ from domain.import_policy import ImportPolicy
 from domain.import_result import ImportResult
 from domain.records import MandatoryExpenseRecord, Record
 from domain.reports import Report
+from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.validation import parse_ymd
 from domain.wallets import Wallet
@@ -155,6 +156,7 @@ class FinancialController:
         new_description: str = "",
         new_date: str | None = None,
         new_wallet_id: int | None = None,
+        new_tags: str | tuple[str, ...] | None = None,
     ) -> None:
         self._record_service.update_record_inline(
             record_id,
@@ -163,6 +165,7 @@ class FinancialController:
             new_description=new_description,
             new_date=new_date,
             new_wallet_id=new_wallet_id,
+            new_tags=new_tags,
         )
 
     def get_record_amount_kzt(self, record_id: int) -> float:
@@ -251,6 +254,7 @@ class FinancialController:
         amount_kzt: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
+        tags: tuple[str, ...] = (),
     ) -> None:
         CreateIncome(self._repository, self._currency).execute(
             date=date,
@@ -262,6 +266,7 @@ class FinancialController:
             amount_kzt=amount_kzt,
             rate_at_operation=rate_at_operation,
             related_debt_id=related_debt_id,
+            tags=tags,
         )
 
     def create_expense(
@@ -276,6 +281,7 @@ class FinancialController:
         amount_kzt: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
+        tags: tuple[str, ...] = (),
     ) -> None:
         CreateExpense(self._repository, self._currency).execute(
             date=date,
@@ -287,6 +293,7 @@ class FinancialController:
             amount_kzt=amount_kzt,
             rate_at_operation=rate_at_operation,
             related_debt_id=related_debt_id,
+            tags=tags,
         )
 
     def generate_report(self) -> Report:
@@ -368,6 +375,17 @@ class FinancialController:
 
     def get_mandatory_expense_categories(self) -> list[str]:
         return self._metrics_service().get_distinct_mandatory_expense_categories()
+
+    def list_tags(self) -> list[Tag]:
+        return self._repository.list_tags()
+
+    def search_tags(self, prefix: str) -> list[Tag]:
+        return self._repository.search_tags(prefix)
+
+    def set_tag_color(self, name: str, color: str) -> None:
+        setter = getattr(self._repository, "set_tag_color", None)
+        if callable(setter):
+            setter(name, color)
 
     def create_wallet(
         self,
@@ -680,6 +698,7 @@ class FinancialController:
             supports_budgets_replace=True,
             supports_distribution_structure_replace=True,
             supports_load_debts=True,
+            supports_tags_replace=True,
         )
 
     def run_import_transaction(self, operation):
@@ -730,6 +749,8 @@ class FinancialController:
         end_date: str,
         limit_kzt: float,
         include_mandatory: bool = False,
+        scope_type: str = "category",
+        scope_value: str = "",
     ):
         return CreateBudget(self._budget_service()).execute(
             category,
@@ -737,6 +758,8 @@ class FinancialController:
             end_date,
             limit_kzt,
             include_mandatory=include_mandatory,
+            scope_type=scope_type,
+            scope_value=scope_value,
         )
 
     def get_budgets(self) -> list:
@@ -1069,6 +1092,12 @@ class FinancialController:
     ) -> list:
         """Income per category, sorted descending. Returns list[CategorySpend]."""
         return self._metrics_service().get_income_by_category(start_date, end_date, limit=limit)
+
+    def get_spending_by_tag(
+        self, start_date: str, end_date: str, *, limit: int | None = None
+    ) -> list:
+        """Expenses per tag, sorted descending. Returns list[TagSpend]."""
+        return self._metrics_service().get_spending_by_tag(start_date, end_date, limit=limit)
 
     def get_top_expense_categories(self, start_date: str, end_date: str, *, top_n: int = 5) -> list:
         """Top N expense categories by total. Returns list[CategorySpend]."""

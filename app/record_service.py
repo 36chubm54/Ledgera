@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 from infrastructure.repositories import RecordRepository
+from utils.tag_utils import find_numeric_only_tags, parse_tag_string
 
 
 class RecordService:
@@ -16,6 +17,7 @@ class RecordService:
         new_description: str = "",
         new_date: str | None = None,
         new_wallet_id: int | None = None,
+        new_tags: str | tuple[str, ...] | None = None,
     ) -> None:
         record = self._repository.get_by_id(int(record_id))
         if (
@@ -55,12 +57,24 @@ class RecordService:
             next_date = normalized_date
 
         updated = record.with_updated_amount_kzt(float(new_amount_kzt))
+        if new_tags is not None:
+            invalid_tags = find_numeric_only_tags(new_tags)
+            if invalid_tags:
+                invalid_label = ", ".join(f'"{tag}"' for tag in invalid_tags)
+                raise ValueError(
+                    f"Invalid tag: tags must not contain numbers only ({invalid_label})"
+                )
         updated = replace(
             updated,
             category=category,
             description=str(new_description or "").strip(),
             wallet_id=next_wallet_id,
             date=next_date,
+            tags=(
+                parse_tag_string(new_tags)
+                if isinstance(new_tags, str)
+                else tuple(new_tags or record.tags)
+            ),
         )
         self._repository.replace(updated)
 

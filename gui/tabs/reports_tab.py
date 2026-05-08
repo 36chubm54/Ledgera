@@ -58,11 +58,13 @@ class ReportsFrame(ttk.Frame):
         controls.grid(row=0, column=0, sticky="ew")
         controls.grid_columnconfigure(1, weight=1)
         controls.grid_columnconfigure(3, weight=1)
-        controls.grid_columnconfigure(6, weight=1)
+        controls.grid_columnconfigure(5, weight=1)
+        controls.grid_columnconfigure(7, weight=1)
 
         self.period_start_var = tk.StringVar()
         self.period_end_var = tk.StringVar()
         self.category_var = tk.StringVar()
+        self.tag_var = tk.StringVar()
         self.wallet_var = tk.StringVar(value=tr("reports.wallets.all", "Все кошельки"))
         self.group_var = tk.BooleanVar(value=True)
         self.totals_mode_var = tk.StringVar(value="fixed")
@@ -85,14 +87,18 @@ class ReportsFrame(ttk.Frame):
         )
         self.category_combo.grid(row=0, column=5, sticky="ew", padx=(6, 12))
 
-        ttk.Label(controls, text=tr("common.wallet", "Кошелек:")).grid(row=0, column=6, sticky="w")
+        ttk.Label(controls, text=tr("common.tags", "Теги:")).grid(row=0, column=6, sticky="w")
+        self.tag_combo = ttk.Combobox(controls, textvariable=self.tag_var, values=[], width=18)
+        self.tag_combo.grid(row=0, column=7, sticky="ew", padx=(6, 12))
+
+        ttk.Label(controls, text=tr("common.wallet", "Кошелек:")).grid(row=0, column=9, sticky="w")
         self.wallet_menu = ttk.Combobox(
             controls,
             textvariable=self.wallet_var,
             values=[],
             state="readonly",
         )
-        self.wallet_menu.grid(row=0, column=7, sticky="ew", padx=(6, 0))
+        self.wallet_menu.grid(row=0, column=10, sticky="ew", padx=(6, 0))
 
         ttk.Checkbutton(
             controls,
@@ -104,7 +110,7 @@ class ReportsFrame(ttk.Frame):
         self._group_status_var = tk.StringVar(value="")
         self.group_status_label = ttk.Label(controls, textvariable=self._group_status_var)
         self.group_status_label.grid(
-            row=1, column=2, columnspan=2, sticky="w", padx=(12, 0), pady=(8, 0)
+            row=1, column=2, columnspan=3, sticky="w", padx=(12, 0), pady=(8, 0)
         )
 
         # Hint for grouped view
@@ -122,10 +128,10 @@ class ReportsFrame(ttk.Frame):
             text=tr("common.back", "Назад"),
             command=self._on_group_back,
         )
-        self.group_back_button.grid(row=1, column=4, sticky="w", padx=(12, 0), pady=(6, 0))
+        self.group_back_button.grid(row=1, column=5, sticky="w", padx=(12, 0), pady=(6, 0))
 
         totals = ttk.Frame(controls)
-        totals.grid(row=1, column=5, columnspan=3, sticky="e", pady=(6, 0))
+        totals.grid(row=1, column=6, columnspan=4, sticky="e", pady=(6, 0))
         ttk.Label(totals, text=tr("reports.totals_mode", "Режим итогов:")).grid(
             row=0, column=0, sticky="w", padx=(0, 8)
         )
@@ -145,7 +151,7 @@ class ReportsFrame(ttk.Frame):
         ).grid(row=0, column=2, sticky="w")
 
         buttons = ttk.Frame(controls)
-        buttons.grid(row=2, column=0, columnspan=8, sticky="w", pady=(10, 0))
+        buttons.grid(row=2, column=0, columnspan=11, sticky="w", pady=(10, 0))
         ttk.Button(
             buttons,
             text=tr("reports.generate", "Сформировать"),
@@ -214,7 +220,7 @@ class ReportsFrame(ttk.Frame):
 
         self.operations_tree = ttk.Treeview(
             self.operations_container,
-            columns=("date", "type", "category", "amount"),
+            columns=("date", "type", "category", "tags", "amount"),
             show="headings",
             selectmode="browse",
         )
@@ -222,10 +228,12 @@ class ReportsFrame(ttk.Frame):
         self.operations_tree.heading("date", text=tr("common.date", "Дата"))
         self.operations_tree.heading("type", text=tr("common.type_short", "Тип"))
         self.operations_tree.heading("category", text=tr("common.category", "Категория"))
+        self.operations_tree.heading("tags", text=tr("common.tags", "Теги"))
         self.operations_tree.heading("amount", text=tr("reports.amount_kzt", "Сумма (KZT)"))
         self.operations_tree.column("date", width=100, minwidth=100, stretch=False, anchor="w")
         self.operations_tree.column("type", width=200, minwidth=200, stretch=False, anchor="w")
-        self.operations_tree.column("category", width=400, minwidth=400, stretch=False, anchor="w")
+        self.operations_tree.column("category", width=260, minwidth=220, stretch=False, anchor="w")
+        self.operations_tree.column("tags", width=220, minwidth=160, stretch=True, anchor="w")
         self.operations_tree.column("amount", width=100, minwidth=100, anchor="e")
         self.operations_tree.grid(row=0, column=0, sticky="nsew")
         attach_treeview_scrollbars(
@@ -303,6 +311,7 @@ class ReportsFrame(ttk.Frame):
             period_start=self.period_start_var.get().strip(),
             period_end=self.period_end_var.get().strip(),
             category=self.category_var.get().strip(),
+            tag=self.tag_var.get().strip(),
             totals_mode=self.totals_mode_var.get().strip() or "fixed",
         )
 
@@ -366,6 +375,12 @@ class ReportsFrame(ttk.Frame):
             final_value = summary.final_balance_fixed
         self._summary_values["final_balance"].config(text=f"{_fmt_kzt(final_value)} KZT")
         self._summary_values["fx_difference"].config(text=f"{_fmt_kzt(summary.fx_difference)} KZT")
+        if summary.active_tag:
+            self._group_status_var.set(
+                tr("reports.filter.tag", "Фильтр по тегу: {tag}", tag=summary.active_tag)
+            )
+        elif not self._group_drill_category:
+            self._group_status_var.set("")
 
     def _display_type_label(self, raw_label: str) -> str:
         normalized = str(raw_label or "").strip().lower()
@@ -402,6 +417,7 @@ class ReportsFrame(ttk.Frame):
                         row.date,
                         self._display_type_label(row.type_label),
                         self._display_category_label(row.category),
+                        row.tags_text,
                         f"{row.amount_kzt:.2f}",
                     ),
                     tags=tags,
@@ -422,6 +438,7 @@ class ReportsFrame(ttk.Frame):
                         row.date,
                         self._display_type_label(row.type_label),
                         self._display_category_label(row.category),
+                        row.tags_text,
                         f"{row.amount_kzt:.2f}",
                     ),
                     tags=tags,
@@ -442,6 +459,7 @@ class ReportsFrame(ttk.Frame):
                     "",
                     tr("reports.group.ops", "Опер.: {count}", count=row.operations_count),
                     category,
+                    "",
                     f"{row.total_kzt:.2f}",
                 ),
             )
@@ -463,6 +481,8 @@ class ReportsFrame(ttk.Frame):
             return
         values = [""] + result.categories
         self.category_combo["values"] = values
+        tag_values = [tag.name for tag in self._context.controller.list_tags()]
+        self.tag_combo["values"] = [""] + tag_values
 
     def _apply_group_ui_state(self) -> None:
         enabled = bool(self.group_var.get())

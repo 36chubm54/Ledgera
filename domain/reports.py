@@ -1,6 +1,8 @@
 from collections.abc import Iterable
 from datetime import date as dt_date
 
+from utils.tag_utils import normalize_tag_name, normalize_tag_names
+
 from .records import IncomeRecord, Record
 from .validation import parse_report_period_end, parse_report_period_start, parse_ymd
 
@@ -129,6 +131,66 @@ class Report:
             balance_label=self._balance_label,
             # Category slice is a "pure records" view: it intentionally drops opening balance.
             # Keeping `opening_start_date` would make exports render an "Opening balance 0.00" row.
+            opening_start_date=None,
+            period_start_date=self._period_start_date,
+            period_end_date=self._period_end_date,
+        )
+
+    def filter_by_tag(self, tag: str) -> "Report":
+        target = normalize_tag_name(tag)
+        if not target:
+            return self
+        filtered = [
+            record
+            for record in self._records
+            if any(
+                normalize_tag_name(name) == target
+                for name in tuple(getattr(record, "tags", ()) or ())
+            )
+        ]
+        return Report(
+            filtered,
+            0.0,
+            wallet_id=self._wallet_id,
+            balance_label=self._balance_label,
+            opening_start_date=None,
+            period_start_date=self._period_start_date,
+            period_end_date=self._period_end_date,
+        )
+
+    def filter_by_any_tags(self, tags: Iterable[str]) -> "Report":
+        targets = set(normalize_tag_names(tuple(tags)))
+        if not targets:
+            return self
+        filtered = [
+            record
+            for record in self._records
+            if targets.intersection(normalize_tag_names(tuple(getattr(record, "tags", ()) or ())))
+        ]
+        return Report(
+            filtered,
+            0.0,
+            wallet_id=self._wallet_id,
+            balance_label=self._balance_label,
+            opening_start_date=None,
+            period_start_date=self._period_start_date,
+            period_end_date=self._period_end_date,
+        )
+
+    def filter_by_all_tags(self, tags: Iterable[str]) -> "Report":
+        targets = set(normalize_tag_names(tuple(tags)))
+        if not targets:
+            return self
+        filtered: list[Record] = []
+        for record in self._records:
+            record_tags = set(normalize_tag_names(tuple(getattr(record, "tags", ()) or ())))
+            if targets.issubset(record_tags):
+                filtered.append(record)
+        return Report(
+            filtered,
+            0.0,
+            wallet_id=self._wallet_id,
+            balance_label=self._balance_label,
             opening_start_date=None,
             period_start_date=self._period_start_date,
             period_end_date=self._period_end_date,

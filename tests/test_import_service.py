@@ -180,6 +180,47 @@ def test_import_service_csv_preserves_related_debt_id_in_created_records() -> No
     assert kwargs["related_debt_id"] == 1
 
 
+def test_import_service_csv_preserves_tags_in_created_records() -> None:
+    finance_service = _finance_mock()
+    payload = ParsedImportData(
+        path="data.csv",
+        file_type="csv",
+        rows=[
+            {
+                "date": "2026-01-01",
+                "type": "income",
+                "wallet_id": "1",
+                "category": "Salary",
+                "amount_original": "100",
+                "currency": "KZT",
+                "rate_at_operation": "1",
+                "amount_kzt": "100",
+                "tags": "#work, #bonus",
+            },
+            {
+                "date": "2026-01-02",
+                "type": "expense",
+                "wallet_id": "1",
+                "category": "Food",
+                "amount_original": "25",
+                "currency": "KZT",
+                "rate_at_operation": "1",
+                "amount_kzt": "25",
+                "tags": "#food",
+            },
+        ],
+    )
+
+    with patch("services.import_service.parse_import_file", return_value=payload):
+        summary = ImportService(finance_service, policy=ImportPolicy.FULL_BACKUP).import_file(
+            "data.csv"
+        )
+
+    assert summary == ImportResult(imported=2, skipped=0, errors=tuple())
+    assert finance_service.create_income.call_args.kwargs["tags"] == ("work", "bonus")
+    assert finance_service.create_expense.call_args.kwargs["tags"] == ("food",)
+
+
 def test_import_service_json_without_sections_preserves_debts_and_assets() -> None:
     finance_service = _finance_mock()
     finance_service.supports_bulk_import_replace = True

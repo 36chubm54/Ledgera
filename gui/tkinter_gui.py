@@ -35,6 +35,7 @@ from utils.charting import (
     extract_months,
     extract_years,
 )
+from utils.tag_utils import color_for_tag
 from version import __version__
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,7 @@ class FinancialApp(tk.Tk):
         self._reports_tab: Any | None = None
 
         self.records_tree: ttk.Treeview | None = None
+        self.record_tags_tree: ttk.Treeview | None = None
         self.refresh_operation_wallet_menu: Callable[[], None] | None = None
         self.refresh_transfer_wallet_menus: Callable[[], None] | None = None
         self.refresh_wallets: Callable[[], None] | None = None
@@ -316,6 +318,7 @@ class FinancialApp(tk.Tk):
 
     def _reset_tab_bindings(self) -> None:
         self.records_tree = None
+        self.record_tags_tree = None
         self.refresh_operation_wallet_menu = None
         self.refresh_transfer_wallet_menus = None
         self.refresh_wallets = None
@@ -756,6 +759,9 @@ class FinancialApp(tk.Tk):
             return
         for iid in self.records_tree.get_children():
             self.records_tree.delete(iid)
+        if self.record_tags_tree is not None:
+            for iid in self.record_tags_tree.get_children():
+                self.record_tags_tree.delete(iid)
         self._record_id_to_repo_index = {}
         self._record_id_to_domain_id = {}
         for kind, color in KIND_TO_FOREGROUND.items():
@@ -769,6 +775,10 @@ class FinancialApp(tk.Tk):
             if records is not None
             else self.controller.build_record_list_items()
         )
+        tag_color_map = {
+            str(getattr(tag, "name", "") or ""): str(getattr(tag, "color", "") or "")
+            for tag in self.controller.list_tags()
+        }
 
         def _display_type_label(raw_label: str, kind: str) -> str:
             normalized = str(raw_label or "").strip().lower()
@@ -811,6 +821,33 @@ class FinancialApp(tk.Tk):
                 self.records_tree.insert("", "end", iid=item.record_id, values=values, tags=tags)
             except TclError:
                 self.records_tree.insert("", "end", values=values, tags=tags)
+            if self.record_tags_tree is not None:
+                item_tags = tuple(getattr(item, "tags", ()) or ())
+                tag_tree_tags: tuple[str, ...] = ()
+                if item_tags:
+                    first_tag = str(item_tags[0])
+                    tag_color = tag_color_map.get(first_tag) or color_for_tag(first_tag)
+                    tag_style = f"tag_color_{tag_color.replace('#', '').lower()}"
+                    try:
+                        self.record_tags_tree.tag_configure(tag_style, foreground=tag_color)
+                    except TclError:
+                        pass
+                    tag_tree_tags = (tag_style,)
+                try:
+                    self.record_tags_tree.insert(
+                        "",
+                        "end",
+                        iid=item.record_id,
+                        values=(str(getattr(item, "tags_text", "") or ""),),
+                        tags=tag_tree_tags,
+                    )
+                except TclError:
+                    self.record_tags_tree.insert(
+                        "",
+                        "end",
+                        values=(str(getattr(item, "tags_text", "") or ""),),
+                        tags=tag_tree_tags,
+                    )
 
     def _refresh_charts(self, records: list[Any] | None = None) -> None:
         if (
@@ -869,6 +906,7 @@ class FinancialApp(tk.Tk):
             operations = build_operations_tab(self.tab_operations, self, self._import_formats)
             self._operations_bindings = operations
             self.records_tree = operations.records_tree
+            self.record_tags_tree = operations.tags_tree
             self.refresh_operation_wallet_menu = operations.refresh_operation_wallet_menu
             self.refresh_transfer_wallet_menus = operations.refresh_transfer_wallet_menus
         elif tab_key == "reports":

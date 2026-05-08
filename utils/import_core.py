@@ -7,6 +7,7 @@ from domain.import_policy import ImportPolicy
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
 from domain.validation import ensure_valid_period, parse_ymd
 from utils.money import quantize_money, to_decimal, to_money_float, to_rate_float
+from utils.tag_utils import normalize_tag_names, parse_tag_string
 
 MANDATORY_PERIODS = {"daily", "weekly", "monthly", "yearly"}
 
@@ -228,7 +229,13 @@ def parse_import_row(
         "amount_kzt": amount_kzt_value,
         "category": category,
         "description": description,
+        "tags": (),
     }
+    raw_tags = row_lc.get("tags")
+    if isinstance(raw_tags, str):
+        common["tags"] = parse_tag_string(raw_tags)
+    elif isinstance(raw_tags, (list, tuple)):
+        common["tags"] = normalize_tag_names(tuple(raw_tags))
     if row_lc.get("id") not in (None, ""):
         record_id = parse_optional_strict_int(row_lc.get("id"))
         if record_id is None or record_id <= 0:

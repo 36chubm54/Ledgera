@@ -6,6 +6,7 @@ from datetime import date as dt_date
 
 from domain.records import IncomeRecord, MandatoryExpenseRecord, Record
 from domain.reports import Report
+from utils.tag_utils import format_tags_inline, normalize_tag_names
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,8 +14,10 @@ class ReportFilters:
     wallet_id: int | None
     period_start: str
     period_end: str
-    category: str
-    totals_mode: str  # "fixed" | "current"
+    category: str = ""
+    tag: str = ""
+    tag_mode: str = "or"
+    totals_mode: str = "fixed"  # "fixed" | "current"
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +31,7 @@ class ReportSummary:
     fx_difference: float
     records_count: int
     balance_label: str
+    active_tag: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,12 +40,20 @@ class ReportOperationRow:
     type_label: str
     kind: str
     category: str
+    tags_text: str
     amount_kzt: float
 
 
 @dataclass(frozen=True, slots=True)
 class CategoryGroupRow:
     category: str
+    operations_count: int
+    total_kzt: float
+
+
+@dataclass(frozen=True, slots=True)
+class TagGroupRow:
+    tag: str
     operations_count: int
     total_kzt: float
 
@@ -94,6 +106,7 @@ def build_operations_rows(report: Report) -> list[ReportOperationRow]:
                 type_label=report_record_type_label(record),
                 kind=report_record_kind(record),
                 category=str(record.category or ""),
+                tags_text=format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
                 amount_kzt=float(record.signed_amount_kzt()),
             )
         )
@@ -117,6 +130,37 @@ def build_category_group_rows(rows: Iterable[ReportOperationRow]) -> list[Catego
     ]
 
 
+def build_tag_group_reports(report: Report) -> dict[str, Report]:
+    groups: dict[str, list[Record]] = {}
+    for record in report.display_records():
+        for tag in normalize_tag_names(tuple(getattr(record, "tags", ()) or ())):
+            groups.setdefault(tag, []).append(record)
+    return {
+        tag: Report(
+            recs,
+            0.0,
+            wallet_id=None,
+            balance_label=report.balance_label,
+            opening_start_date=report.opening_start_date,
+            period_start_date=report.period_start_date,
+            period_end_date=report.period_end_date,
+        )
+        for tag, recs in groups.items()
+    }
+
+
+def build_tag_group_rows(report: Report) -> list[TagGroupRow]:
+    groups = build_tag_group_reports(report)
+    return [
+        TagGroupRow(
+            tag=tag,
+            operations_count=len(subreport.records()),
+            total_kzt=float(sum(record.signed_amount_kzt() for record in subreport.records())),
+        )
+        for tag, subreport in sorted(groups.items(), key=lambda item: item[0].casefold())
+    ]
+
+
 def build_monthly_rows(
     report: Report, *, year: int | None = None, up_to_month: int | None = None
 ) -> list[MonthlySummaryRow]:
@@ -135,6 +179,10 @@ def extract_categories(rows: Iterable[ReportOperationRow]) -> list[str]:
         out.append(key)
     out.sort(key=lambda s: s.casefold())
     return out
+
+
+def parse_filter_tags(raw_value: str) -> tuple[str, ...]:
+    return normalize_tag_names(tuple(str(raw_value or "").replace("|", ",").split(",")))
 
 
 #

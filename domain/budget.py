@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date as dt_date
 from enum import Enum
+from typing import Any
 
 
 class BudgetStatus(Enum):
@@ -44,6 +45,19 @@ class Budget:
     limit_kzt: float
     limit_kzt_minor: int
     include_mandatory: bool
+    scope_type: str = "category"
+    scope_value: str = ""
+
+    def __post_init__(self) -> None:
+        normalized_scope_type = str(self.scope_type or "category").strip().lower() or "category"
+        if normalized_scope_type not in {"category", "tag"}:
+            raise ValueError("scope_type must be 'category' or 'tag'")
+        normalized_scope_value = str(self.scope_value or self.category or "").strip()
+        if not normalized_scope_value:
+            raise ValueError("scope_value is required")
+        object.__setattr__(self, "scope_type", normalized_scope_type)
+        object.__setattr__(self, "scope_value", normalized_scope_value)
+        object.__setattr__(self, "category", str(self.category or normalized_scope_value).strip())
 
     def status(self, today: dt_date) -> BudgetStatus:
         start = dt_date.fromisoformat(self.start_date)
@@ -82,6 +96,11 @@ class BudgetResult:
     usage_pct: float
     time_pct: float
     remaining_kzt: float
+    forecast_remaining_kzt: float | None = None
+    forecast_delta_kzt: float | None = None
+    forecast_days_left: int | None = None
+    forecast_status_key: str | None = None
+    forecast_status_params: dict[str, Any] | None = None
 
     @property
     def is_over(self) -> bool:

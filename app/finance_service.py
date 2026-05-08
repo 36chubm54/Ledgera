@@ -10,6 +10,7 @@ from domain.debt import Debt, DebtPayment
 from domain.distribution import DistributionItem, DistributionSubitem, FrozenDistributionRow
 from domain.goal import Goal
 from domain.records import MandatoryExpenseRecord, Record
+from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
 
@@ -25,6 +26,7 @@ class ImportCapabilities:
     supports_budgets_replace: bool = False
     supports_distribution_structure_replace: bool = False
     supports_load_debts: bool = False
+    supports_tags_replace: bool = False
 
 
 class FinanceService(Protocol):
@@ -40,6 +42,7 @@ class FinanceService(Protocol):
         amount_kzt: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
+        tags: tuple[str, ...] = (),
     ) -> None: ...
 
     def create_expense(
@@ -54,6 +57,7 @@ class FinanceService(Protocol):
         amount_kzt: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
+        tags: tuple[str, ...] = (),
     ) -> None: ...
 
     def create_transfer(
@@ -100,6 +104,10 @@ class FinanceService(Protocol):
     ) -> None: ...
 
     def load_wallets(self) -> list[Wallet]: ...
+
+    def list_tags(self) -> list[Tag]: ...
+
+    def search_tags(self, prefix: str) -> list[Tag]: ...
 
     def set_wallet_allow_negative_for_import(
         self, wallet_id: int, allow_negative: bool

@@ -31,8 +31,8 @@ from utils.excel_utils import (
 
 def test_report_xlsx_roundtrip():
     records = [
-        IncomeRecord(date="2025-01-01", _amount_init=100.0, category="Salary"),
-        ExpenseRecord(date="2025-01-02", _amount_init=30.0, category="Food"),
+        IncomeRecord(date="2025-01-01", _amount_init=100.0, category="Salary", tags=("work",)),
+        ExpenseRecord(date="2025-01-02", _amount_init=30.0, category="Food", tags=("food", "home")),
     ]
     report = Report(records, initial_balance=50.0)
 
@@ -47,9 +47,11 @@ def test_report_xlsx_roundtrip():
             assert report_ws.cell(4, 2).value == "Initial balance"
             assert report_ws.cell(4, 4).value == 50.0
             assert report_ws.freeze_panes == "A3"
-            assert report_ws.auto_filter.ref == "A2:D8"
+            assert report_ws.auto_filter.ref == "A2:E8"
             assert "Yearly Report" in wb.sheetnames
             assert "By Category" in wb.sheetnames
+            assert "By Tag" in wb.sheetnames
+            assert wb.sheetnames[:4] == ["Report", "By Category", "By Tag", "Yearly Report"]
             summary_ws = wb["Yearly Report"]
             assert summary_ws.cell(1, 1).value == "Month (2025)"
             assert summary_ws.freeze_panes == "A2"
@@ -58,12 +60,63 @@ def test_report_xlsx_roundtrip():
             labels = [row[0] for row in bycat_ws.iter_rows(max_col=1, values_only=True) if row[0]]
             assert "Category: Food" in labels
             assert "Category: Salary" in labels
+            bytag_ws = wb["By Tag"]
+            tag_labels = [
+                row[0] for row in bytag_ws.iter_rows(max_col=1, values_only=True) if row[0]
+            ]
+            assert "Tag: #food" in tag_labels
+            assert "Tag: #home" in tag_labels
+            assert "Tag: #work" in tag_labels
         finally:
             wb.close()
         imported = report_from_xlsx(tmp_path)
         assert len(imported.records()) == 2
         assert abs(imported._initial_balance - 50.0) < 1e-6
         assert abs(imported.total() - report.total()) < 1e-6
+    finally:
+        os.unlink(tmp_path)
+
+
+def test_report_xlsx_by_tag_sheet_repeats_multi_tag_record_under_each_single_tag():
+    report = Report(
+        [
+            ExpenseRecord(
+                date="2025-01-02",
+                _amount_init=30.0,
+                category="Food",
+                tags=("food", "home"),
+            ),
+            ExpenseRecord(
+                date="2025-01-03",
+                _amount_init=15.0,
+                category="Home",
+                tags=("home",),
+            ),
+        ],
+        initial_balance=0.0,
+    )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        tmp_path = tmp.name
+    try:
+        report_to_xlsx(report, tmp_path)
+        wb = load_workbook(tmp_path, data_only=True)
+        try:
+            ws = wb["By Tag"]
+            rows = [row for row in ws.iter_rows(values_only=True)]
+            assert ("Tag: #food", None, None, None, None) in rows
+            assert ("Tag: #home", None, None, None, None) in rows
+
+            food_idx = rows.index(("Tag: #food", None, None, None, None))
+            home_idx = rows.index(("Tag: #home", None, None, None, None))
+            food_block = rows[food_idx:home_idx]
+            home_block = rows[home_idx:]
+
+            assert ("2025-01-02", "Expense", "Food", 30.0, "#food #home") in food_block
+            assert ("2025-01-02", "Expense", "Food", 30.0, "#food #home") in home_block
+            assert ("2025-01-03", "Expense", "Home", 15.0, "#home") in home_block
+        finally:
+            wb.close()
     finally:
         os.unlink(tmp_path)
 
@@ -321,7 +374,7 @@ def test_records_xlsx_export_applies_readability_styles():
         try:
             ws = wb["Data"]
             assert ws.freeze_panes == "A2"
-            assert ws.auto_filter.ref == "A1:M3"
+            assert ws.auto_filter.ref == "A1:N3"
             assert ws.cell(1, 1).value == "date"
             assert ws.cell(2, 5).value == 100.0
             assert ws.cell(2, 8).value == 100.0

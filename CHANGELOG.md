@@ -7,6 +7,42 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [v1.15.0] - 2026-05-09
+
+### Added
+
+- Added first-class operation tags with dedicated domain/storage support (`tags`, `record_tags`), repository APIs, color metadata, usage counters, and JSON backup/migration coverage
+- Added tag-aware UI in `Operations`: free-form tag entry, suggestions, validation, color picking, and tag sidecar display
+- Added single-tag and multi-tag report filtering plus tag export surfaces in `XLSX` / `PDF`
+- Added tag budgets and tag-based forecast/pace tracking in the budget subsystem
+- Added tag analytics coverage mode with dedicated table + bar chart and explicit non-additive semantics
+- Added `tag_integrity` checks to the audit engine
+
+### Changed
+
+- Extended import/export/backup pipelines so tags participate in `JSON`, `CSV`, `XLSX`, SQLite bulk replace, and JSON→SQLite migration flows
+- Generalized budgets from category-only scope to `scope_type` / `scope_value` (`category` or `tag`)
+- Localized budget forecast statuses through UI-facing localization keys instead of hardcoded service text
+- Report exports now include a `By Tag` sheet in `XLSX` and `Group report on tag` in `PDF`
+
+### Fixed
+
+- Fixed import create-paths so imported records no longer lose tags after operation reset/recreate flows
+- Fixed analytics tag coverage so each tag reflects the full amount of matching records instead of splitting one record across multiple tags
+- Fixed several UI and typing edge cases around tag dropdowns, color pickers, analytics layout, and repository/storage type hints
+
+### Tests
+
+- Added/updated regression coverage for tag persistence, tag import/export, tag analytics, tag budgets, tag audit checks, and new export layouts
+
+### Docs
+
+- Updated `README.md`, `README_EN.md`, and `docs/architecture.md` for the tag system, tag budgets, tag analytics, tag export, and backup/migration changes
+
+No breaking changes.
+
+---
+
 ## [1.14.0] - 2026-05-04
 
 ### Added

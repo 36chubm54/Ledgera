@@ -11,6 +11,7 @@ from services.report_service import (
     build_monthly_rows,
     build_operations_rows,
     extract_categories,
+    parse_filter_tags,
 )
 
 
@@ -48,6 +49,7 @@ class ReportsController:
             fx_difference=float(report.fx_difference(self._currency)),
             records_count=len(report.display_records()),
             balance_label=str(report.balance_label),
+            active_tag=", ".join(parse_filter_tags(filters.tag)) if filters.tag else "",
         )
 
         return ReportsResult(
@@ -69,5 +71,13 @@ class ReportsController:
 
         if filters.category:
             report = report.filter_by_category(filters.category)
+        if filters.tag:
+            tag_names = parse_filter_tags(filters.tag)
+            if len(tag_names) <= 1:
+                report = report.filter_by_tag(filters.tag)
+            elif str(filters.tag_mode or "or").lower() == "and":
+                report = report.filter_by_all_tags(tag_names)
+            else:
+                report = report.filter_by_any_tags(tag_names)
 
         return report

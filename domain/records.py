@@ -5,6 +5,7 @@ from itertools import count
 from typing import Literal
 
 from utils.money import quantize_money, to_money_float, to_rate_float
+from utils.tag_utils import normalize_tag_names
 
 from .validation import parse_ymd
 
@@ -28,6 +29,7 @@ class Record(ABC):
     amount_kzt: float | None = None
     category: str = "General"
     description: str = ""
+    tags: tuple[str, ...] = field(default_factory=tuple)
     _amount_init: InitVar[float | None] = None
 
     def __post_init__(self, amount: float | None) -> None:
@@ -97,6 +99,8 @@ class Record(ABC):
             if related_debt_id <= 0:
                 raise ValueError("related_debt_id must be a positive integer")
             object.__setattr__(self, "related_debt_id", related_debt_id)
+
+        object.__setattr__(self, "tags", normalize_tag_names(tuple(self.tags or ())))
 
     def with_updated_amount_kzt(self, new_amount_kzt: float) -> "Record":
         amount_original = quantize_money(self.amount_original or 0.0)

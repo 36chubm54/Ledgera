@@ -155,6 +155,7 @@ def test_xlsx_import_transfer_one_row_restores_two_records():
                 25,
                 "move",
                 "",
+                "",
                 78,
                 1,
                 2,

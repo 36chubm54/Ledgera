@@ -26,19 +26,19 @@ class _LockedCursor:
         self._released = True
         self._lock.release()
 
-    def fetchone(self) -> tuple | None:
+    def fetchone(self) -> sqlite3.Row | None:
         try:
             return self._cursor.fetchone()
         finally:
             self._release()
 
-    def fetchall(self) -> list:
+    def fetchall(self) -> list[sqlite3.Row]:
         try:
             return self._cursor.fetchall()
         finally:
             self._release()
 
-    def fetchmany(self, size: int | None = None) -> list:
+    def fetchmany(self, size: int | None = None) -> list[sqlite3.Row]:
         rows = self._cursor.fetchmany() if size is None else self._cursor.fetchmany(size)
         if not rows:
             self._release()
@@ -50,13 +50,13 @@ class _LockedCursor:
         finally:
             self._release()
 
-    def __iter__(self) -> typing.Iterator:
+    def __iter__(self) -> typing.Iterator[sqlite3.Row]:
         try:
             yield from self._cursor
         finally:
             self._release()
 
-    def __next__(self) -> typing.Any:
+    def __next__(self) -> sqlite3.Row:
         try:
             return next(self._cursor)
         except StopIteration:
@@ -171,11 +171,15 @@ class SQLiteStorage(Storage):
         return row is not None
 
     def _ensure_pre_schema_compatibility(self) -> None:
-        # Existing pre-1.9 databases may already have a `records` table without
-        # `related_debt_id`. Add it before executing the full schema so
-        # CREATE INDEX ... ON records(related_debt_id) does not fail.
         if self._table_exists("records"):
             self._add_column_if_missing("records", "related_debt_id", "INTEGER DEFAULT NULL")
+        if self._table_exists("budgets"):
+            self._add_column_if_missing("budgets", "scope_type", "TEXT NOT NULL DEFAULT 'category'")
+            self._add_column_if_missing("budgets", "scope_value", "TEXT NOT NULL DEFAULT ''")
+        if self._table_exists("tags"):
+            self._add_column_if_missing("tags", "color", "TEXT NOT NULL DEFAULT ''")
+            self._add_column_if_missing("tags", "usage_count", "INTEGER NOT NULL DEFAULT 0")
+            self._add_column_if_missing("tags", "last_used_at", "TEXT NOT NULL DEFAULT ''")
 
     def _column_names(self, table: str) -> set[str]:
         return {
@@ -203,6 +207,19 @@ class SQLiteStorage(Storage):
             )
 
     def _ensure_money_precision_columns(self) -> None:
+        self._add_column_if_missing("budgets", "scope_type", "TEXT NOT NULL DEFAULT 'category'")
+        self._add_column_if_missing("budgets", "scope_value", "TEXT NOT NULL DEFAULT ''")
+        if self._table_exists("tags"):
+            self._add_column_if_missing("tags", "color", "TEXT NOT NULL DEFAULT ''")
+            self._add_column_if_missing("tags", "usage_count", "INTEGER NOT NULL DEFAULT 0")
+            self._add_column_if_missing("tags", "last_used_at", "TEXT NOT NULL DEFAULT ''")
+        self._conn.execute(
+            """
+            UPDATE budgets
+            SET scope_value = category
+            WHERE length(trim(COALESCE(scope_value, ''))) = 0
+            """
+        )
         self._add_column_if_missing("wallets", "initial_balance_minor", "INTEGER DEFAULT NULL")
         self._add_column_if_missing("transfers", "amount_original_minor", "INTEGER DEFAULT NULL")
         self._add_column_if_missing("transfers", "rate_at_operation_text", "TEXT DEFAULT NULL")
@@ -267,7 +284,7 @@ class SQLiteStorage(Storage):
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor | _LockedCursor:
         return self._conn.execute(sql, params)
 
-    def query_one(self, sql: str, params: tuple = ()) -> tuple | None:
+    def query_one(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
         return self._conn.execute(sql, params).fetchone()
 
     def query_all(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:

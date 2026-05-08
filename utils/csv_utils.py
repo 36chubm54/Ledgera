@@ -45,6 +45,7 @@ DATA_HEADERS = [
     "rate_at_operation",
     "amount_kzt",
     "description",
+    "tags",
     "period",
     "transfer_id",
     "from_wallet_id",

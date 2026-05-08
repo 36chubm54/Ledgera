@@ -832,6 +832,92 @@ def test_sqlite_debt_delete_reindexes_ids_and_links(tmp_path: Path) -> None:
         repo.close()
 
 
+def test_sqlite_tag_ids_are_compacted_and_record_links_preserved(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path / "tag_reindex.db")
+
+    try:
+        repo.save_wallet(Wallet(id=1, name="Cash", currency="KZT", initial_balance=0.0))
+        repo.save(
+            ExpenseRecord(
+                id=1,
+                date="2026-03-03",
+                wallet_id=1,
+                amount_original=100.0,
+                currency="KZT",
+                rate_at_operation=1.0,
+                amount_kzt=100.0,
+                category="Food",
+            )
+        )
+        repo.execute(
+            "INSERT INTO tags (id, name, color, usage_count, last_used_at)"
+            "VALUES (83, 'food', '#F2994A', 1, '2026-03-03')"
+        )
+        repo.execute(
+            "INSERT INTO tags (id, name, color, usage_count, last_used_at)"
+            "VALUES (88, 'work', '#5B8DEF', 1, '2026-03-03')"
+        )
+        repo.execute("INSERT INTO record_tags (record_id, tag_id) VALUES (1, 83)")
+
+        repo.replace_record_tags(1, ("food", "work"))
+
+        tag_rows = repo.query_all("SELECT id, name FROM tags ORDER BY id")
+        record_tag_rows = repo.query_all(
+            "SELECT record_id, tag_id FROM record_tags ORDER BY record_id, tag_id"
+        )
+
+        assert [(int(row["id"]), str(row["name"])) for row in tag_rows] == [
+            (1, "food"),
+            (2, "work"),
+        ]
+        assert [(int(row["record_id"]), int(row["tag_id"])) for row in record_tag_rows] == [
+            (1, 1),
+            (1, 2),
+        ]
+    finally:
+        repo.close()
+
+
+def test_sqlite_repository_reopen_compacts_existing_tag_ids(tmp_path: Path) -> None:
+    db_path = tmp_path / "tag_reopen_reindex.db"
+    repo = _make_repo(db_path)
+
+    try:
+        repo.save_wallet(Wallet(id=1, name="Cash", currency="KZT", initial_balance=0.0))
+        repo.save(
+            ExpenseRecord(
+                id=1,
+                date="2026-03-03",
+                wallet_id=1,
+                amount_original=100.0,
+                currency="KZT",
+                rate_at_operation=1.0,
+                amount_kzt=100.0,
+                category="Food",
+            )
+        )
+        repo.execute(
+            "INSERT INTO tags (id, name, color, usage_count, last_used_at)"
+            "VALUES (83, 'food', '#F2994A', 1, '2026-03-03')"
+        )
+        repo.execute("INSERT INTO record_tags (record_id, tag_id) VALUES (1, 83)")
+        repo.commit()
+    finally:
+        repo.close()
+
+    reopened = _make_repo(db_path)
+    try:
+        tag_rows = reopened.query_all("SELECT id, name FROM tags ORDER BY id")
+        record_tag_rows = reopened.query_all(
+            "SELECT record_id, tag_id FROM record_tags ORDER BY record_id, tag_id"
+        )
+
+        assert [(int(row["id"]), str(row["name"])) for row in tag_rows] == [(1, "food")]
+        assert [(int(row["record_id"]), int(row["tag_id"])) for row in record_tag_rows] == [(1, 1)]
+    finally:
+        reopened.close()
+
+
 def test_sqlite_repository_reopen_restores_missing_debt_payment_record_id_during_startup(
     tmp_path: Path,
 ) -> None:

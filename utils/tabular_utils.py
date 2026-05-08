@@ -6,6 +6,7 @@ from datetime import date as dt_date
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
 from domain.transfers import Transfer
 from utils.import_core import record_type_name
+from utils.tag_utils import format_tags_inline
 
 
 def resolve_get_rate(currency_service):
@@ -87,6 +88,7 @@ def record_export_rows(
                     "rate_at_operation": transfer.rate_at_operation,
                     "amount_kzt": transfer.amount_kzt,
                     "description": transfer.description,
+                    "tags": "",
                     "period": "",
                     "transfer_id": transfer.id,
                     "from_wallet_id": transfer.from_wallet_id,
@@ -109,6 +111,7 @@ def record_export_rows(
                 "rate_at_operation": record.rate_at_operation,
                 "amount_kzt": record.amount_kzt,
                 "description": str(getattr(record, "description", "") or ""),
+                "tags": format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
                 "period": getattr(record, "period", "")
                 if isinstance(record, MandatoryExpenseRecord)
                 else "",
@@ -134,6 +137,7 @@ def record_export_rows(
                 "rate_at_operation": transfer.rate_at_operation,
                 "amount_kzt": transfer.amount_kzt,
                 "description": transfer.description,
+                "tags": "",
                 "period": "",
                 "transfer_id": transfer.id,
                 "from_wallet_id": transfer.from_wallet_id,

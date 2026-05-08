@@ -56,6 +56,22 @@ CREATE TABLE IF NOT EXISTS records (
     FOREIGN KEY(related_debt_id) REFERENCES debts(id) ON UPDATE CASCADE ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE CHECK(length(trim(name)) > 0),
+    color TEXT NOT NULL DEFAULT '',
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    last_used_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS record_tags (
+    record_id INTEGER NOT NULL,
+    tag_id INTEGER NOT NULL,
+    PRIMARY KEY(record_id, tag_id),
+    FOREIGN KEY(record_id) REFERENCES records(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY(tag_id) REFERENCES tags(id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS debts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     contact_name TEXT NOT NULL CHECK(length(trim(contact_name)) > 0),
@@ -156,6 +172,8 @@ CREATE TABLE IF NOT EXISTS mandatory_expenses (
 CREATE TABLE IF NOT EXISTS budgets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     category TEXT NOT NULL CHECK(length(trim(category)) > 0),
+    scope_type TEXT NOT NULL DEFAULT 'category' CHECK(scope_type IN ('category', 'tag')),
+    scope_value TEXT NOT NULL DEFAULT '',
     start_date TEXT NOT NULL CHECK(length(start_date) = 10),
     end_date TEXT NOT NULL CHECK(length(end_date) = 10),
     limit_kzt REAL NOT NULL CHECK(limit_kzt > 0),
@@ -219,11 +237,16 @@ CREATE TABLE IF NOT EXISTS distribution_snapshot_values (
 -- ALTER TABLE mandatory_expenses ADD COLUMN date TEXT DEFAULT NULL;
 -- ALTER TABLE mandatory_expenses ADD COLUMN auto_pay INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE distribution_snapshots ADD COLUMN auto_fixed INTEGER NOT NULL DEFAULT 0;
+-- ALTER TABLE budgets ADD COLUMN scope_type TEXT NOT NULL DEFAULT 'category';
+-- ALTER TABLE budgets ADD COLUMN scope_value TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_records_date ON records(date);
 CREATE INDEX IF NOT EXISTS idx_records_wallet_id ON records(wallet_id);
 CREATE INDEX IF NOT EXISTS idx_records_wallet_date ON records(wallet_id, date);
 CREATE INDEX IF NOT EXISTS idx_records_related_debt_id ON records(related_debt_id);
+CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
+CREATE INDEX IF NOT EXISTS idx_record_tags_record_id ON record_tags(record_id);
+CREATE INDEX IF NOT EXISTS idx_record_tags_tag_id ON record_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_transfers_date ON transfers(date);
 CREATE INDEX IF NOT EXISTS idx_transfers_wallet_from ON transfers(from_wallet_id);
 CREATE INDEX IF NOT EXISTS idx_transfers_wallet_to ON transfers(to_wallet_id);
@@ -232,6 +255,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_is_active ON assets(is_active);
 CREATE INDEX IF NOT EXISTS idx_asset_snapshots_asset_date ON asset_snapshots(asset_id, snapshot_date DESC);
 CREATE INDEX IF NOT EXISTS idx_mandatory_expenses_wallet_id ON mandatory_expenses(wallet_id);
 CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category);
+CREATE INDEX IF NOT EXISTS idx_budgets_scope ON budgets(scope_type, scope_value);
 CREATE INDEX IF NOT EXISTS idx_budgets_dates ON budgets(start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_goals_completed ON goals(is_completed);
 CREATE INDEX IF NOT EXISTS idx_goals_target_date ON goals(target_date);

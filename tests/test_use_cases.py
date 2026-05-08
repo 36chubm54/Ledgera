@@ -91,6 +91,27 @@ class TestCreateIncome:
         )
         mock_repo.save.assert_called_once_with(expected_record)
 
+    def test_execute_rejects_numeric_only_tags(self):
+        mock_repo = Mock(spec=RecordRepository)
+        mock_currency = Mock()
+        mock_repo.load_wallets.return_value = [
+            Wallet(id=1, name="Main", currency="KZT", initial_balance=0.0, system=True)
+        ]
+
+        use_case = CreateIncome(repository=mock_repo, currency=mock_currency)
+
+        with pytest.raises(ValueError, match="numbers only"):
+            use_case.execute(
+                date="2025-01-01",
+                wallet_id=1,
+                amount=100.0,
+                currency="USD",
+                category="Salary",
+                tags=("2026",),
+            )
+
+        mock_repo.save.assert_not_called()
+
 
 class TestCreateExpense:
     def test_execute_creates_expense_record_and_saves_to_repository(self):
@@ -165,6 +186,35 @@ class TestCreateExpense:
             category="General",
         )
         mock_repo.save.assert_called_once_with(expected_record)
+
+    def test_execute_rejects_numeric_only_tags(self):
+        mock_repo = Mock(spec=RecordRepository)
+        mock_currency = Mock()
+        mock_currency.convert.return_value = 23500.0
+        mock_repo.load_wallets.return_value = [
+            Wallet(
+                id=1,
+                name="Main",
+                currency="KZT",
+                initial_balance=50000.0,
+                system=True,
+            )
+        ]
+        mock_repo.load_all.return_value = []
+
+        use_case = CreateExpense(repository=mock_repo, currency=mock_currency)
+
+        with pytest.raises(ValueError, match="numbers only"):
+            use_case.execute(
+                date="2025-01-02",
+                wallet_id=1,
+                amount=50.0,
+                currency="USD",
+                category="Food",
+                tags=("2026",),
+            )
+
+        mock_repo.save.assert_not_called()
 
 
 class TestGenerateReport:

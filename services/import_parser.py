@@ -15,6 +15,7 @@ from domain.transfers import Transfer
 from utils.backup_utils import unwrap_backup_payload
 from utils.import_core import as_float, norm_key, parse_optional_strict_int
 from utils.money import quantize_money, to_decimal, to_money_float, to_rate_float
+from utils.tag_utils import normalize_tag_name, normalize_tag_names
 
 MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_IMPORT_ROWS = 200_000
@@ -37,6 +38,8 @@ class ParsedImportData:
     distribution_subitems: list[dict[str, Any]] = field(default_factory=list)
     distribution_snapshots: list[dict[str, Any]] = field(default_factory=list)
     wallets: list[dict[str, Any]] = field(default_factory=list)
+    tags: list[dict[str, Any]] = field(default_factory=list)
+    record_tags: list[dict[str, Any]] = field(default_factory=list)
     initial_balance: float | None = None
     json_sections_present: frozenset[str] = field(default_factory=frozenset)
 
@@ -308,8 +311,45 @@ def _read_json_payload(path: str, *, force: bool = False) -> ParsedImportData:
     transfers = payload.get("transfers", [])
     if not isinstance(transfers, list):
         transfers = []
+    tags = payload.get("tags", [])
+    if not isinstance(tags, list):
+        tags = []
+    record_tags = payload.get("record_tags", [])
+    if not isinstance(record_tags, list):
+        record_tags = []
+
+    tags_by_id: dict[int, str] = {}
+    for item in tags:
+        if not isinstance(item, dict):
+            continue
+        tag_id = parse_optional_strict_int(item.get("id"))
+        tag_name = normalize_tag_name(item.get("name"))
+        if tag_id is None or tag_id <= 0 or not tag_name:
+            continue
+        tags_by_id[tag_id] = tag_name
+
+    record_tag_names: dict[int, list[str]] = {}
+    for item in record_tags:
+        if not isinstance(item, dict):
+            continue
+        record_id = parse_optional_strict_int(item.get("record_id"))
+        tag_id = parse_optional_strict_int(item.get("tag_id"))
+        inline_name = normalize_tag_name(item.get("name"))
+        if record_id is None or record_id <= 0:
+            continue
+        tag_name = inline_name or tags_by_id.get(int(tag_id or 0), "")
+        if not tag_name:
+            continue
+        record_tag_names.setdefault(record_id, []).append(tag_name)
 
     rows = [_normalize_row(item) for item in records if isinstance(item, dict)]
+    for row in rows:
+        record_id = parse_optional_strict_int(row.get("id"))
+        if record_id is None or record_id <= 0:
+            continue
+        merged = list(row.get("tags", []) or [])
+        merged.extend(record_tag_names.get(record_id, []))
+        row["tags"] = list(normalize_tag_names(tuple(merged)))
     existing_transfer_ids = {
         transfer_id
         for item in rows
@@ -353,6 +393,8 @@ def _read_json_payload(path: str, *, force: bool = False) -> ParsedImportData:
         distribution_subitems=[item for item in distribution_subitems if isinstance(item, dict)],
         distribution_snapshots=[item for item in distribution_snapshots if isinstance(item, dict)],
         wallets=[wallet for wallet in wallets if isinstance(wallet, dict)],
+        tags=[item for item in tags if isinstance(item, dict)],
+        record_tags=[item for item in record_tags if isinstance(item, dict)],
         initial_balance=initial_balance,
         json_sections_present=json_sections_present,
     )

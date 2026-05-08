@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import tkinter as tk
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
 from tkinter import filedialog, ttk
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from domain.errors import DomainError
 from domain.import_policy import ImportPolicy
@@ -22,20 +22,29 @@ from gui.tabs.operations_support import (
     safe_destroy,
     show_import_preview_dialog,
 )
+from gui.tooltip import Tooltip
 from gui.ui_helpers import (
     ask_confirm,
-    attach_treeview_scrollbars,
     show_error,
     show_info,
     show_warning,
 )
 from gui.ui_theme import (
+    FONT_FAMILY,
     PAD_LG,
     PAD_SM,
     PAD_XL,
     PAD_XS,
     create_card_section,
     enable_treeview_zebra,
+    get_palette,
+)
+from utils.tag_utils import (
+    MAX_TAGS_PER_RECORD,
+    TAG_COLOR_PALETTE,
+    find_numeric_only_tags,
+    normalize_tag_name,
+    parse_tag_string,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,6 +81,7 @@ class OperationsTabContext(Protocol):
 @dataclass(slots=True)
 class OperationsTabBindings:
     records_tree: ttk.Treeview
+    tags_tree: ttk.Treeview
     refresh_operation_wallet_menu: Callable[[], None]
     refresh_transfer_wallet_menus: Callable[[], None]
     set_type_income: Callable[[], None]
@@ -106,53 +116,94 @@ def build_operations_tab(
     paned.add(form_card, weight=1)
     form_frame = form_card.winfo_children()[-1]
     form_frame.grid_columnconfigure(1, weight=1)
+    form_frame.grid_columnconfigure(2, weight=1)
+    form_frame.grid_columnconfigure(3, weight=0)
+
+    label_width = 12
+
+    def _form_label(row: int, text: str) -> ttk.Label:
+        label = ttk.Label(form_frame, text=text, width=label_width, anchor="w")
+        label.grid(row=row, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
+        return label
+
+    palette = get_palette()
 
     income_label = tr("operations.type.income", "Доход")
     expense_label = tr("operations.type.expense", "Расход")
-    ttk.Label(form_frame, text=tr("common.type", "Тип:")).grid(
-        row=0, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    _form_label(0, tr("common.type", "Тип:"))
     type_options = [income_label, expense_label]
     type_combo = ttk.Combobox(form_frame, values=type_options, state="readonly")
     type_combo.set(income_label)
-    type_combo.grid(row=0, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    type_combo.grid(row=0, column=1, columnspan=3, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(form_frame, text=tr("common.date", "Дата:")).grid(
-        row=1, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    _form_label(1, tr("common.date", "Дата:"))
     date_entry = ttk.Entry(form_frame)
-    date_entry.grid(row=1, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    date_entry.grid(row=1, column=1, columnspan=3, sticky="ew", padx=PAD_SM, pady=PAD_XS)
     date_entry.insert(0, date.today().isoformat())
 
-    ttk.Label(form_frame, text=tr("common.amount", "Сумма:")).grid(
-        row=2, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    _form_label(2, tr("common.amount", "Сумма:"))
     amount_entry = ttk.Entry(form_frame)
-    amount_entry.grid(row=2, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    amount_entry.grid(row=2, column=1, columnspan=3, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(form_frame, text=tr("common.currency", "Валюта:")).grid(
-        row=3, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    _form_label(3, tr("common.currency", "Валюта:"))
     currency_entry = ttk.Entry(form_frame)
     currency_entry.insert(0, "KZT")
-    currency_entry.grid(row=3, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    currency_entry.grid(row=3, column=1, columnspan=3, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(form_frame, text=tr("common.category", "Категория:")).grid(
-        row=4, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    _form_label(4, tr("common.category", "Категория:"))
     category_combo = ttk.Combobox(form_frame, state="normal")
     category_combo.insert(0, "General")
-    category_combo.grid(row=4, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    category_combo.grid(row=4, column=1, columnspan=3, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(form_frame, text=tr("common.description", "Описание:")).grid(
-        row=5, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    _form_label(5, tr("common.description", "Описание:"))
     description_entry = ttk.Entry(form_frame)
-    description_entry.grid(row=5, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    description_entry.grid(row=5, column=1, columnspan=3, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(form_frame, text=tr("common.wallet", "Кошелек:")).grid(
-        row=6, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
+    _form_label(6, tr("common.tags", "Теги:"))
+    tags_combo = ttk.Combobox(form_frame, state="normal")
+    tags_combo.grid(row=6, column=1, columnspan=2, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    Tooltip(
+        tags_combo,
+        tr(
+            "operations.tags.input_tooltip",
+            "Введите до 3 тегов через запятую."
+            "\nСписок подсказок предлагает существующие теги,"
+            "\nновый тег можно дописать вручную."
+            "\nТеги приводятся к нижнему регистру,"
+            "\nпробелы и спецсимволы удаляются.",
+        ),
     )
+    selected_tag_color = {"value": TAG_COLOR_PALETTE[0]}
+    tag_color_button = tk.Button(
+        form_frame,
+        width=3,
+        height=1,
+        relief="raised",
+        bd=1,
+        overrelief="sunken",
+        bg=selected_tag_color["value"],
+        activebackground=selected_tag_color["value"],
+        highlightthickness=1,
+        highlightbackground=palette.border_soft,
+        cursor="hand2",
+        takefocus=True,
+    )
+    tag_color_button.grid(
+        row=6, column=3, sticky="e", padx=(0, PAD_SM), pady=PAD_XS, ipadx=4, ipady=4
+    )
+    Tooltip(
+        tag_color_button,
+        tr(
+            "operations.tags.color_tooltip",
+            "Цвет тега. Щелкните по квадрату, чтобы открыть палитру.",
+        ),
+    )
+
+    tags_popup_state: dict[str, Any] = {"window": None, "listbox": None, "items": []}
+    color_popup_state: dict[str, Any] = {"menu": None}
+    tag_selection_state: dict[str, Any] = {"committed": (), "fragment": ""}
+
+    _form_label(7, tr("common.wallet", "Кошелек:"))
     operation_wallet_var = tk.StringVar(value="")
     operation_wallet_menu = ttk.Combobox(
         form_frame,
@@ -160,8 +211,222 @@ def build_operations_tab(
         values=[],
         state="readonly",
     )
-    operation_wallet_menu.grid(row=6, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    operation_wallet_menu.grid(row=7, column=1, columnspan=3, sticky="ew", padx=PAD_SM, pady=PAD_XS)
     operation_wallet_map: dict[str, int] = {}
+
+    def _set_tag_color(color: str) -> None:
+        normalized = str(color or "").strip() or TAG_COLOR_PALETTE[0]
+        selected_tag_color["value"] = normalized
+        tag_color_button.configure(
+            bg=normalized,
+            activebackground=normalized,
+            highlightbackground=palette.border_soft,
+        )
+
+    def _list_tags_safe() -> list[Any]:
+        list_tags = getattr(context.controller, "list_tags", None)
+        if not callable(list_tags):
+            return []
+        try:
+            return list(cast(Iterable[Any], list_tags()))
+        except (ValueError, RuntimeError, TypeError):
+            return []
+
+    def _sorted_tags_by_popularity() -> list[Any]:
+        tags = _list_tags_safe()
+        return sorted(
+            tags,
+            key=lambda tag: (
+                -int(getattr(tag, "usage_count", 0)),
+                str(getattr(tag, "name", "")).casefold(),
+            ),
+        )
+
+    def _split_tag_input(raw_value: str) -> tuple[tuple[str, ...], str]:
+        parts = str(raw_value or "").split(",")
+        committed = parse_tag_string(",".join(parts[:-1])) if len(parts) > 1 else ()
+        fragment = parts[-1].strip() if parts else ""
+        return committed, fragment
+
+    def _remember_tag_input_state(raw_value: str | None = None) -> tuple[tuple[str, ...], str]:
+        committed, fragment = _split_tag_input(tags_combo.get() if raw_value is None else raw_value)
+        tag_selection_state["committed"] = committed
+        tag_selection_state["fragment"] = fragment
+        return committed, fragment
+
+    def _build_tag_suggestions(raw_value: str) -> list[Any]:
+        committed, fragment = _split_tag_input(raw_value)
+        committed_set = set(committed)
+        normalized_fragment = normalize_tag_name(fragment)
+        suggestions: list[Any] = []
+        for tag in _sorted_tags_by_popularity():
+            tag_name = str(getattr(tag, "name", "") or "")
+            if not tag_name or tag_name in committed_set:
+                continue
+            if normalized_fragment and not tag_name.startswith(normalized_fragment):
+                continue
+            suggestions.append(tag)
+        return suggestions
+
+    def _next_free_color() -> str:
+        used_colors = {str(getattr(tag, "color", "") or "") for tag in _list_tags_safe()}
+        for color in TAG_COLOR_PALETTE:
+            if color not in used_colors:
+                return color
+        return TAG_COLOR_PALETTE[0]
+
+    def _sync_tag_color_from_input() -> None:
+        committed, fragment = _split_tag_input(tags_combo.get())
+        normalized_fragment = normalize_tag_name(fragment)
+        tags_by_name = {str(getattr(tag, "name", "") or ""): tag for tag in _list_tags_safe()}
+        if normalized_fragment and normalized_fragment in tags_by_name:
+            _set_tag_color(
+                str(getattr(tags_by_name[normalized_fragment], "color", "") or _next_free_color())
+            )
+            return
+        if committed:
+            last_tag = tags_by_name.get(committed[-1])
+            if last_tag is not None:
+                _set_tag_color(str(getattr(last_tag, "color", "") or _next_free_color()))
+                return
+        _set_tag_color(_next_free_color())
+
+    def _hide_tags_popup(_event: object | None = None) -> None:
+        window = tags_popup_state.get("window")
+        if window is not None:
+            try:
+                window.destroy()
+            except tk.TclError:
+                pass
+        tags_popup_state["window"] = None
+        tags_popup_state["listbox"] = None
+        tags_popup_state["items"] = []
+
+    def _hide_color_popup(_event: object | None = None) -> None:
+        menu = color_popup_state.get("menu")
+        if menu is not None:
+            try:
+                menu.unpost()
+            except tk.TclError:
+                pass
+            else:
+                form_frame.after_idle(lambda current=menu: current.destroy())
+        color_popup_state["menu"] = None
+        form_frame.after(0, tags_combo.focus_set)
+
+    def _select_tag_color(color: str) -> None:
+        _set_tag_color(color)
+        _hide_color_popup()
+
+    def _apply_tag_selection(
+        tag_name: str,
+        *,
+        committed_override: tuple[str, ...] | None = None,
+    ) -> None:
+        committed = (
+            tuple(committed_override)
+            if committed_override is not None
+            else tuple(tag_selection_state.get("committed", ()) or ())
+        )
+        next_tags = [*committed, tag_name][:MAX_TAGS_PER_RECORD]
+        text = ", ".join(next_tags)
+        if len(next_tags) < MAX_TAGS_PER_RECORD:
+            text = f"{text}, "
+        tags_combo.delete(0, tk.END)
+        tags_combo.insert(0, text)
+        _remember_tag_input_state(text)
+        _sync_tag_color_from_input()
+        _hide_tags_popup()
+        tags_combo.focus_set()
+        tags_combo.icursor(tk.END)
+
+    def _show_tags_popup() -> None:
+        _remember_tag_input_state()
+        suggestions = _build_tag_suggestions(tags_combo.get())
+        tags_combo["values"] = [tag.name for tag in suggestions]
+        if not suggestions:
+            _hide_tags_popup()
+            return
+        _hide_tags_popup()
+        popup = tk.Toplevel(form_frame)
+        popup.wm_overrideredirect(True)
+        popup.configure(bg=palette.border_soft)
+        popup.transient(form_frame.winfo_toplevel())
+        x = tags_combo.winfo_rootx()
+        y = tags_combo.winfo_rooty() + tags_combo.winfo_height() + 2
+        width = max(tags_combo.winfo_width(), 220)
+        popup.wm_geometry(f"{width}x160+{x}+{y}")
+        listbox = tk.Listbox(
+            popup,
+            activestyle="none",
+            borderwidth=0,
+            highlightthickness=0,
+            font=(FONT_FAMILY, 10),
+            selectmode=tk.SINGLE,
+            bg=palette.surface_elevated,
+            fg=palette.text_primary,
+            selectbackground=palette.accent_blue,
+            selectforeground=palette.surface_elevated,
+        )
+        listbox.pack(fill="both", expand=True, padx=1, pady=1)
+        for index, tag in enumerate(suggestions):
+            listbox.insert(tk.END, f"#{tag.name}")
+            listbox.itemconfig(
+                index,
+                fg=str(getattr(tag, "color", "") or palette.text_primary),
+                bg=palette.surface_elevated,
+            )
+        listbox.selection_set(0)
+        listbox.activate(0)
+        tags_popup_state["window"] = popup
+        tags_popup_state["listbox"] = listbox
+        tags_popup_state["items"] = suggestions
+
+        def _confirm_selection(_event: tk.Event | None = None) -> str:
+            selected = listbox.curselection()
+            if not selected:
+                return "break"
+            chosen = suggestions[int(selected[0])]
+            _apply_tag_selection(str(getattr(chosen, "name", "") or ""))
+            return "break"
+
+        listbox.bind("<Return>", _confirm_selection, add="+")
+        listbox.bind("<Double-Button-1>", _confirm_selection, add="+")
+        listbox.bind("<Escape>", lambda _event: (_hide_tags_popup(), "break")[1], add="+")
+        popup.bind("<FocusOut>", _hide_tags_popup, add="+")
+
+    def _show_color_popup() -> None:
+        if color_popup_state.get("menu") is not None:
+            _hide_color_popup()
+            return
+        _hide_color_popup()
+        popup = tk.Menu(
+            form_frame,
+            tearoff=False,
+            relief="solid",
+            borderwidth=1,
+            activeborderwidth=0,
+            bg=palette.surface_elevated,
+            fg=palette.text_primary,
+        )
+        for color in TAG_COLOR_PALETTE:
+            popup.add_command(
+                label=color,
+                background=color,
+                activebackground=color,
+                command=lambda selected=color: _select_tag_color(selected),
+            )
+        x = tag_color_button.winfo_rootx()
+        y = tag_color_button.winfo_rooty() + tag_color_button.winfo_height() + 2
+        color_popup_state["menu"] = popup
+        popup.post(x, y)
+
+    def _prepare_native_tag_dropdown() -> None:
+        _remember_tag_input_state()
+        suggestions = _build_tag_suggestions(tags_combo.get())
+        tags_combo["values"] = [tag.name for tag in suggestions]
+
+    tags_combo.configure(postcommand=_prepare_native_tag_dropdown)
 
     def _refresh_category_combo() -> None:
         try:
@@ -196,6 +461,44 @@ def build_operations_tab(
             operation_wallet_var.set(labels[0])
 
     refresh_operation_wallet_menu()
+    _sync_tag_color_from_input()
+
+    def _on_tags_key_release(event: tk.Event | None = None) -> None:
+        if event is not None and event.keysym in {"Up", "Down", "Return", "Escape", "Tab"}:
+            return
+        _remember_tag_input_state()
+        _sync_tag_color_from_input()
+        _show_tags_popup()
+
+    def _on_tags_down(_event: tk.Event | None = None) -> str:
+        _show_tags_popup()
+        listbox = tags_popup_state.get("listbox")
+        if listbox is not None:
+            listbox.focus_set()
+        return "break"
+
+    tags_combo.bind("<KeyRelease>", _on_tags_key_release, add="+")
+    tags_combo.bind("<Down>", _on_tags_down, add="+")
+
+    def _on_tags_combobox_selected(_event: tk.Event | None = None) -> str:
+        chosen = normalize_tag_name(tags_combo.get())
+        if not chosen:
+            return "break"
+        committed = tuple(tag_selection_state.get("committed", ()) or ())
+        if chosen in committed:
+            _apply_tag_selection(
+                chosen, committed_override=tuple(tag for tag in committed if tag != chosen)
+            )
+        else:
+            _apply_tag_selection(chosen, committed_override=committed)
+        return "break"
+
+    tags_combo.bind("<<ComboboxSelected>>", _on_tags_combobox_selected, add="+")
+    tags_combo.bind("<Button-1>", lambda _event: tags_combo.after(0, _show_tags_popup), add="+")
+    tags_combo.bind("<FocusOut>", lambda _event: tags_combo.after(100, _hide_tags_popup), add="+")
+    tag_color_button.configure(command=_show_color_popup)
+    tag_color_button.bind("<Return>", lambda _event: (_show_color_popup(), "break")[1], add="+")
+    tag_color_button.bind("<space>", lambda _event: (_show_color_popup(), "break")[1], add="+")
 
     list_card = create_card_section(parent, tr("operations.journal", "Журнал операций"))
     list_card.grid(row=0, column=1, sticky="nsew", padx=(PAD_SM, PAD_XL), pady=PAD_LG)
@@ -203,8 +506,14 @@ def build_operations_tab(
     list_frame.grid_rowconfigure(0, weight=1)
     list_frame.grid_columnconfigure(0, weight=1)
 
+    tables_frame = ttk.Frame(list_frame)
+    tables_frame.grid(row=0, column=0, sticky="nsew", padx=PAD_SM, pady=PAD_SM)
+    tables_frame.grid_rowconfigure(0, weight=1)
+    tables_frame.grid_columnconfigure(0, weight=4)
+    tables_frame.grid_columnconfigure(1, weight=1)
+
     records_tree = ttk.Treeview(
-        list_frame,
+        tables_frame,
         show="headings",
         selectmode="browse",
         columns=(
@@ -231,11 +540,106 @@ def build_operations_tab(
     ):
         records_tree.heading(col, text=text)
         records_tree.column(col, width=width, minwidth=minwidth, stretch=stretch, anchor=anchor)  # type: ignore[arg-type]
-    records_tree.grid(row=0, column=0, sticky="nsew", padx=PAD_SM, pady=PAD_SM)
+    records_tree.grid(row=0, column=0, sticky="nsew")
 
-    attach_treeview_scrollbars(
-        list_frame, records_tree, row=0, column=0, horizontal=True, pady=PAD_SM
+    tags_tree = ttk.Treeview(
+        tables_frame,
+        show="headings",
+        selectmode="browse",
+        columns=("tags",),
     )
+    enable_treeview_zebra(tags_tree)
+    tags_tree.heading("tags", text=tr("common.tags", "Теги"))
+    tags_tree.column("tags", width=180, minwidth=140, stretch=True, anchor="w")
+    tags_tree.grid(row=0, column=1, sticky="nsew", padx=(PAD_SM, 0))
+    tags_tooltip_window: tk.Toplevel | None = None
+    tags_tooltip_text = {"value": ""}
+
+    def _hide_tags_tooltip(_event: object | None = None) -> None:
+        nonlocal tags_tooltip_window
+        if tags_tooltip_window is not None:
+            tags_tooltip_window.destroy()
+            tags_tooltip_window = None
+        tags_tooltip_text["value"] = ""
+
+    def _show_tags_tooltip(event: tk.Event) -> None:
+        nonlocal tags_tooltip_window
+        row_id = tags_tree.identify_row(event.y)
+        if not row_id:
+            _hide_tags_tooltip()
+            return
+        values = tags_tree.item(row_id, "values")
+        text = str(values[0] if values else "").strip()
+        if not text:
+            _hide_tags_tooltip()
+            return
+        if text == tags_tooltip_text["value"] and tags_tooltip_window is not None:
+            return
+        _hide_tags_tooltip()
+        tags_tooltip_text["value"] = text
+        tags_tooltip_window = tw = tk.Toplevel(tags_tree)
+        tw.wm_overrideredirect(True)
+        label = tk.Label(
+            tw,
+            text=text,
+            justify=tk.LEFT,
+            background="#ffffe1",
+            relief=tk.SOLID,
+            borderwidth=1,
+            font=("Segoe UI", 9),
+        )
+        label.pack(ipadx=2, ipady=1)
+        tw.wm_geometry(f"+{event.x_root + 12}+{event.y_root + 12}")
+
+    y_scroll = ttk.Scrollbar(list_frame, orient="vertical")
+    y_scroll.grid(row=0, column=1, sticky="ns", pady=PAD_SM)
+
+    def _sync_yview(*args: object) -> None:
+        records_tree.yview(*args)
+        tags_tree.yview(*args)
+
+    def _on_main_yview(first: float, last: float) -> None:
+        y_scroll.set(first, last)
+        tags_tree.yview_moveto(first)
+
+    def _on_tags_yview(first: float, last: float) -> None:
+        y_scroll.set(first, last)
+        records_tree.yview_moveto(first)
+
+    y_scroll.configure(command=_sync_yview)
+    records_tree.configure(yscrollcommand=_on_main_yview)
+    tags_tree.configure(yscrollcommand=_on_tags_yview)
+
+    x_scroll = ttk.Scrollbar(list_frame, orient="horizontal", command=records_tree.xview)
+    x_scroll.grid(row=1, column=0, sticky="ew", padx=PAD_SM, pady=(6, PAD_SM))
+    records_tree.configure(xscrollcommand=x_scroll.set)
+
+    _syncing_selection = False
+
+    def _sync_selection(source: ttk.Treeview, target: ttk.Treeview) -> None:
+        nonlocal _syncing_selection
+        if _syncing_selection:
+            return
+        _syncing_selection = True
+        try:
+            selection = source.selection()
+            if not selection:
+                target.selection_remove(target.selection())
+                return
+            iid = selection[0]
+            if target.exists(iid):
+                # Проверим, не выделен ли уже этот элемент в целевом дереве
+                if target.selection() != (iid,):
+                    target.selection_set(iid)
+                    target.focus(iid)
+                    target.see(iid)
+        finally:
+            _syncing_selection = False
+
+    records_tree.bind("<<TreeviewSelect>>", lambda _event: _sync_selection(records_tree, tags_tree))
+    tags_tree.bind("<<TreeviewSelect>>", lambda _event: _sync_selection(tags_tree, records_tree))
+    tags_tree.bind("<Motion>", _show_tags_tooltip, add="+")
+    tags_tree.bind("<Leave>", _hide_tags_tooltip, add="+")
 
     def save_record() -> None:
         date_str = date_entry.get().strip()
@@ -270,6 +674,19 @@ def build_operations_tab(
         currency = (currency_entry.get() or "KZT").strip()
         category = (category_combo.get() or "General").strip()
         description = description_entry.get().strip()
+        raw_tags = tags_combo.get().strip()
+        invalid_tags = find_numeric_only_tags(raw_tags)
+        if invalid_tags:
+            show_error(
+                tr(
+                    "operations.error.invalid_tag_numeric",
+                    "Тег не должен состоять только из цифр: {tags}",
+                    tags=", ".join(f'"{tag}"' for tag in invalid_tags),
+                )
+            )
+            return
+        tags = parse_tag_string(raw_tags)
+        _committed_tags, active_fragment = _split_tag_input(raw_tags)
         wallet_id = operation_wallet_map.get(operation_wallet_var.get())
         if wallet_id is None:
             show_error(tr("operations.error.wallet_required", "Выберите кошелек."))
@@ -284,6 +701,7 @@ def build_operations_tab(
                     currency=currency,
                     category=category,
                     description=description,
+                    tags=tags,
                 )
                 show_info(tr("operations.save_success.income", "Доход успешно добавлен."))
             else:
@@ -294,13 +712,29 @@ def build_operations_tab(
                     currency=currency,
                     category=category,
                     description=description,
+                    tags=tags,
                 )
                 show_info(tr("operations.save_success.expense", "Расход успешно добавлен."))
+
+            existing_tags = {
+                str(getattr(tag, "name", "") or ""): str(getattr(tag, "color", "") or "")
+                for tag in _list_tags_safe()
+            }
+            active_tag_name = normalize_tag_name(active_fragment)
+            if not active_tag_name and tags:
+                active_tag_name = tags[-1]
+            if active_tag_name and active_tag_name in tags:
+                context.controller.set_tag_color(active_tag_name, selected_tag_color["value"])
+            for tag_name in tags:
+                if tag_name != active_tag_name and not existing_tags.get(tag_name):
+                    context.controller.set_tag_color(tag_name, selected_tag_color["value"])
 
             amount_entry.delete(0, tk.END)
             category_combo.delete(0, tk.END)
             description_entry.delete(0, tk.END)
+            tags_combo.delete(0, tk.END)
             _refresh_category_combo()
+            _sync_tag_color_from_input()
             refresh_operation_views(context)
         except (DomainError, ValueError, TypeError, RuntimeError) as error:
             log_ui_error(logger, "UI_OPS_CREATE_RECORD_FAILED", error, wallet_id=wallet_id)
@@ -343,6 +777,7 @@ def build_operations_tab(
         currency_entry,
         category_combo,
         description_entry,
+        tags_combo,
         operation_wallet_menu,
     ]
     save_button = ttk.Button(
@@ -351,7 +786,7 @@ def build_operations_tab(
         style="Primary.TButton",
         command=save_record,
     )
-    save_button.grid(row=7, column=0, columnspan=2, pady=8)
+    save_button.grid(row=8, column=0, columnspan=4, pady=8)
     _bind_focus_navigation([*creator_widgets, save_button], submit_action=save_record)
 
     def select_first_record() -> None:
@@ -504,7 +939,179 @@ def build_operations_tab(
         )
         description_edit_entry = ttk.Entry(edit_panel)
         description_edit_entry.grid(row=4, column=1, sticky="ew")
+        ttk.Label(edit_panel, text=tr("common.tags", "Теги:")).grid(row=5, column=0, sticky="w")
+        tags_edit_combo = ttk.Combobox(edit_panel, state="normal")
+        tags_edit_combo.grid(row=5, column=1, sticky="ew")
         edit_panel.grid_columnconfigure(1, weight=1)
+        edit_tags_popup_state: dict[str, Any] = {"window": None, "listbox": None, "items": []}
+        edit_tag_selection_state: dict[str, Any] = {"committed": (), "fragment": ""}
+
+        def _hide_edit_tags_popup(_event: object | None = None) -> None:
+            window = edit_tags_popup_state.get("window")
+            if window is not None:
+                try:
+                    window.destroy()
+                except tk.TclError:
+                    pass
+            edit_tags_popup_state["window"] = None
+            edit_tags_popup_state["listbox"] = None
+            edit_tags_popup_state["items"] = []
+
+        def _split_edit_tag_input(raw_value: str) -> tuple[tuple[str, ...], str]:
+            parts = str(raw_value or "").split(",")
+            committed = parse_tag_string(",".join(parts[:-1])) if len(parts) > 1 else ()
+            fragment = parts[-1].strip() if parts else ""
+            return committed, fragment
+
+        def _remember_edit_tag_input_state(
+            raw_value: str | None = None,
+        ) -> tuple[tuple[str, ...], str]:
+            committed, fragment = _split_edit_tag_input(
+                tags_edit_combo.get() if raw_value is None else raw_value
+            )
+            edit_tag_selection_state["committed"] = committed
+            edit_tag_selection_state["fragment"] = fragment
+            return committed, fragment
+
+        def _build_edit_tag_suggestions(raw_value: str) -> list[Any]:
+            committed, fragment = _split_edit_tag_input(raw_value)
+            committed_set = set(committed)
+            normalized_fragment = normalize_tag_name(fragment)
+            suggestions: list[Any] = []
+            for tag in _sorted_tags_by_popularity():
+                tag_name = str(getattr(tag, "name", "") or "")
+                if not tag_name or tag_name in committed_set:
+                    continue
+                if normalized_fragment and not tag_name.startswith(normalized_fragment):
+                    continue
+                suggestions.append(tag)
+            return suggestions
+
+        def _apply_edit_tag_selection(
+            tag_name: str,
+            *,
+            committed_override: tuple[str, ...] | None = None,
+        ) -> None:
+            committed = (
+                tuple(committed_override)
+                if committed_override is not None
+                else tuple(edit_tag_selection_state.get("committed", ()) or ())
+            )
+            next_tags = [*committed, tag_name][:MAX_TAGS_PER_RECORD]
+            text = ", ".join(next_tags)
+            if len(next_tags) < MAX_TAGS_PER_RECORD:
+                text = f"{text}, "
+            tags_edit_combo.delete(0, tk.END)
+            tags_edit_combo.insert(0, text)
+            _remember_edit_tag_input_state(text)
+            _hide_edit_tags_popup()
+            tags_edit_combo.focus_set()
+            tags_edit_combo.icursor(tk.END)
+
+        def _show_edit_tags_popup(*, focus_listbox: bool = False) -> None:
+            _remember_edit_tag_input_state()
+            suggestions = _build_edit_tag_suggestions(tags_edit_combo.get())
+            tags_edit_combo["values"] = [tag.name for tag in suggestions]
+            if not suggestions:
+                _hide_edit_tags_popup()
+                return
+            _hide_edit_tags_popup()
+            popup = tk.Toplevel(edit_panel)
+            popup.wm_overrideredirect(True)
+            popup.configure(bg=palette.border_soft)
+            popup.transient(edit_panel.winfo_toplevel())
+            x = tags_edit_combo.winfo_rootx()
+            y = tags_edit_combo.winfo_rooty() + tags_edit_combo.winfo_height() + 2
+            width = max(tags_edit_combo.winfo_width(), 220)
+            popup.wm_geometry(f"{width}x160+{x}+{y}")
+            listbox = tk.Listbox(
+                popup,
+                activestyle="none",
+                borderwidth=0,
+                highlightthickness=0,
+                font=(FONT_FAMILY, 10),
+                selectmode=tk.SINGLE,
+                bg=palette.surface_elevated,
+                fg=palette.text_primary,
+                selectbackground=palette.accent_blue,
+                selectforeground=palette.surface_elevated,
+            )
+            listbox.pack(fill="both", expand=True, padx=1, pady=1)
+            for index, tag in enumerate(suggestions):
+                listbox.insert(tk.END, f"#{tag.name}")
+                listbox.itemconfig(
+                    index,
+                    fg=str(getattr(tag, "color", "") or palette.text_primary),
+                    bg=palette.surface_elevated,
+                )
+            listbox.selection_set(0)
+            listbox.activate(0)
+            edit_tags_popup_state["window"] = popup
+            edit_tags_popup_state["listbox"] = listbox
+            edit_tags_popup_state["items"] = suggestions
+
+            def _confirm_selection(_event: tk.Event | None = None) -> str:
+                selected = listbox.curselection()
+                if not selected:
+                    return "break"
+                chosen = suggestions[int(selected[0])]
+                _apply_edit_tag_selection(str(getattr(chosen, "name", "") or ""))
+                return "break"
+
+            listbox.bind("<Return>", _confirm_selection, add="+")
+            listbox.bind("<Double-Button-1>", _confirm_selection, add="+")
+            listbox.bind("<ButtonRelease-1>", _confirm_selection, add="+")
+            listbox.bind("<Escape>", lambda _event: (_hide_edit_tags_popup(), "break")[1], add="+")
+            popup.bind("<FocusOut>", _hide_edit_tags_popup, add="+")
+            if focus_listbox:
+                popup.after(0, listbox.focus_set)
+
+        def _prepare_edit_native_tag_dropdown() -> None:
+            _remember_edit_tag_input_state()
+            suggestions = _build_edit_tag_suggestions(tags_edit_combo.get())
+            tags_edit_combo["values"] = [tag.name for tag in suggestions]
+
+        def _on_edit_tags_key_release(event: tk.Event | None = None) -> None:
+            if event is not None and event.keysym in {"Up", "Down", "Return", "Escape", "Tab"}:
+                return
+            _remember_edit_tag_input_state()
+            _show_edit_tags_popup()
+
+        def _on_edit_tags_down(_event: tk.Event | None = None) -> str:
+            _show_edit_tags_popup(focus_listbox=True)
+            listbox = edit_tags_popup_state.get("listbox")
+            if listbox is not None:
+                listbox.focus_set()
+            return "break"
+
+        def _on_edit_tags_combobox_selected(_event: tk.Event | None = None) -> str:
+            chosen = normalize_tag_name(tags_edit_combo.get())
+            if not chosen:
+                return "break"
+            committed = tuple(edit_tag_selection_state.get("committed", ()) or ())
+            if chosen in committed:
+                _apply_edit_tag_selection(
+                    chosen,
+                    committed_override=tuple(tag for tag in committed if tag != chosen),
+                )
+            else:
+                _apply_edit_tag_selection(chosen, committed_override=committed)
+            return "break"
+
+        tags_edit_combo.configure(postcommand=_prepare_edit_native_tag_dropdown)
+        tags_edit_combo.bind("<KeyRelease>", _on_edit_tags_key_release, add="+")
+        tags_edit_combo.bind("<Down>", _on_edit_tags_down, add="+")
+        tags_edit_combo.bind("<<ComboboxSelected>>", _on_edit_tags_combobox_selected, add="+")
+        tags_edit_combo.bind(
+            "<Button-1>",
+            lambda _event: tags_edit_combo.after(0, _show_edit_tags_popup),
+            add="+",
+        )
+        tags_edit_combo.bind(
+            "<FocusOut>",
+            lambda _event: tags_edit_combo.after(100, _hide_edit_tags_popup),
+            add="+",
+        )
 
         # Fill the fields with post data
         amount_entry.insert(0, f"{float(record.amount_kzt or 0.0):.2f}")
@@ -525,6 +1132,8 @@ def build_operations_tab(
             pass
         category_edit_combo.insert(0, str(record.category or ""))
         description_edit_entry.insert(0, str(record.description or ""))
+        tags_edit_combo.insert(0, ", ".join(tuple(getattr(record, "tags", ()) or ())))
+        _remember_edit_tag_input_state(tags_edit_combo.get())
 
         wallet_edit_map: dict[str, int] = {
             f"[{wallet.id}] {wallet.name} ({wallet.currency})": wallet.id
@@ -556,6 +1165,16 @@ def build_operations_tab(
             if new_wallet_id is None:
                 show_error(tr("operations.error.wallet_required", "Выберите кошелек."))
                 return
+            invalid_tags = find_numeric_only_tags(tags_edit_combo.get().strip())
+            if invalid_tags:
+                show_error(
+                    tr(
+                        "operations.error.invalid_tag_numeric",
+                        "Тег не должен состоять только из цифр: {tags}",
+                        tags=", ".join(f'"{tag}"' for tag in invalid_tags),
+                    )
+                )
+                return
             try:
                 context.controller.update_record_inline(
                     domain_record_id,
@@ -564,8 +1183,10 @@ def build_operations_tab(
                     new_description=description_edit_entry.get().strip(),
                     new_date=new_date,
                     new_wallet_id=new_wallet_id,
+                    new_tags=tags_edit_combo.get().strip(),
                 )
                 show_info(tr("operations.updated", "Запись обновлена."))
+                _sync_tag_color_from_input()
                 refresh_operation_views(context)
                 _refresh_category_combo()
                 cancel_edit()
@@ -591,7 +1212,7 @@ def build_operations_tab(
                 edit_panel_state["panel"] = None
 
         edit_buttons = ttk.Frame(edit_panel, style="InlinePanel.TFrame")
-        edit_buttons.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        edit_buttons.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         edit_buttons.grid_columnconfigure(0, weight=1)
         edit_buttons.grid_columnconfigure(1, weight=1)
         save_button = ttk.Button(
@@ -612,6 +1233,7 @@ def build_operations_tab(
             wallet_edit_menu,
             category_edit_combo,
             description_edit_entry,
+            tags_edit_combo,
             save_button,
             cancel_button,
         ]
@@ -1102,6 +1724,7 @@ def build_operations_tab(
 
     return OperationsTabBindings(
         records_tree=records_tree,
+        tags_tree=tags_tree,
         refresh_operation_wallet_menu=refresh_operation_wallet_menu,
         refresh_transfer_wallet_menus=refresh_transfer_wallet_menus,
         set_type_income=_set_type_income,

@@ -281,7 +281,7 @@ def test_get_budget_result_marks_overspent_when_limit_reached(tmp_path: Path) ->
         repo.close()
 
 
-def test_get_budget_result_marks_overpace_when_usage_exceeds_time_by_threshold(
+def test_get_budget_result_marks_overpace_when_usage_exceeds_elapsed_time_by_threshold(
     tmp_path: Path,
 ) -> None:
     repo = _build_repo(tmp_path)
@@ -293,6 +293,23 @@ def test_get_budget_result_marks_overpace_when_usage_exceeds_time_by_threshold(
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 5))
         assert result.status == BudgetStatus.ACTIVE
         assert result.pace_status == PaceStatus.OVERPACE
+    finally:
+        repo.close()
+
+
+def test_get_budget_result_stays_on_track_when_only_slightly_above_time_line(
+    tmp_path: Path,
+) -> None:
+    repo = _build_repo(tmp_path)
+    try:
+        with sqlite3.connect(repo.db_path) as conn:
+            _insert_expense(conn, date="2026-05-02", category="Travel", amount_kzt=750.0)
+        service = BudgetService(repo)
+        budget = service.create_budget("Travel", "2026-05-01", "2026-05-10", 800.0)
+        result = service.get_budget_result(budget, today=dt_date(2026, 5, 9))
+        assert result.time_pct == 90.0
+        assert result.usage_pct == 93.8
+        assert result.pace_status == PaceStatus.ON_TRACK
     finally:
         repo.close()
 
@@ -312,6 +329,49 @@ def test_get_budget_result_ignores_transfer_linked_records(tmp_path: Path) -> No
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 1000.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 10))
         assert result.spent_kzt == 0.0
+    finally:
+        repo.close()
+
+
+def test_budget_forecast_returns_localizable_status_key_and_params(tmp_path: Path) -> None:
+    repo = _build_repo(tmp_path)
+    try:
+        with sqlite3.connect(repo.db_path) as conn:
+            _insert_expense(conn, date="2026-03-02", category="Food", amount_kzt=100.0)
+            _insert_expense(conn, date="2026-03-03", category="Food", amount_kzt=100.0)
+            _insert_expense(conn, date="2026-03-04", category="Food", amount_kzt=100.0)
+        service = BudgetService(repo)
+        budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 1000.0)
+        result = service.get_budget_result(budget, today=dt_date(2026, 3, 10))
+        assert result.forecast_status_key == "budget.forecast.remaining"
+        assert result.forecast_status_params is not None
+        assert "amount_kzt" in result.forecast_status_params
+    finally:
+        repo.close()
+
+
+def test_tag_budget_filters_by_tag_not_category_name(tmp_path: Path) -> None:
+    repo = _build_repo(tmp_path)
+    try:
+        with sqlite3.connect(repo.db_path) as conn:
+            _insert_expense(conn, date="2026-03-05", category="Travel", amount_kzt=600.0)
+            _insert_expense(conn, date="2026-03-06", category="Travel", amount_kzt=200.0)
+        repo.replace_record_tags(1, ("travel",))
+
+        service = BudgetService(repo)
+        budget = service.create_budget(
+            "Travel",
+            "2026-03-01",
+            "2026-03-31",
+            1000.0,
+            scope_type="tag",
+            scope_value="#Travel",
+        )
+
+        result = service.get_budget_result(budget, today=dt_date(2026, 3, 10))
+        assert budget.scope_type == "tag"
+        assert budget.scope_value == "travel"
+        assert result.spent_kzt == 600.0
     finally:
         repo.close()
 

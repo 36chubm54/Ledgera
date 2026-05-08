@@ -8,6 +8,7 @@ from domain.records import IncomeRecord, MandatoryExpenseRecord, Record
 from domain.transfers import Transfer
 from domain.wallets import Wallet
 from utils.money import to_money_float
+from utils.tag_utils import format_tags_inline, normalize_tag_names
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,8 @@ class RecordListItem:
     currency: str
     amount_kzt: float
     wallet_label: str
+    tags: tuple[str, ...]
+    tags_text: str
     extra: str
     label: str
 
@@ -113,6 +116,8 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
                 currency=currency,
                 amount_kzt=amount_kzt,
                 wallet_label=wallet_label,
+                tags=normalize_tag_names(tuple(getattr(record, "tags", ()) or ())),
+                tags_text=format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
                 extra="",
                 label=label,
             )
@@ -156,6 +161,8 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
                 currency=currency,
                 amount_kzt=amount_kzt,
                 wallet_label=wallet_label,
+                tags=(),
+                tags_text="",
                 extra=extra,
                 label=label,
             )

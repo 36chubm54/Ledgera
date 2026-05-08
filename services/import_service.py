@@ -984,6 +984,8 @@ class ImportService:
                     raise ValueError(f"Duplicate budget id: {budget_id}")
                 continue
             category = str(item.get("category", "") or "").strip()
+            scope_type = str(item.get("scope_type", "category") or "category").strip().lower()
+            scope_value = str(item.get("scope_value", category) or category).strip()
             start_date = str(item.get("start_date", "") or "").strip()
             end_date = str(item.get("end_date", "") or "").strip()
             limit_kzt = as_float(item.get("limit_kzt"), None)
@@ -991,6 +993,14 @@ class ImportService:
             if not category:
                 if strict:
                     raise ValueError(f"Budget #{budget_id} has empty category")
+                continue
+            if scope_type not in {"category", "tag"}:
+                if strict:
+                    raise ValueError(f"Budget #{budget_id} has invalid scope_type")
+                continue
+            if not scope_value:
+                if strict:
+                    raise ValueError(f"Budget #{budget_id} has empty scope_value")
                 continue
             if not start_date or not end_date:
                 if strict:
@@ -1016,6 +1026,8 @@ class ImportService:
                     limit_kzt=to_money_float(limit_kzt),
                     limit_kzt_minor=int(limit_kzt_minor),
                     include_mandatory=bool(item.get("include_mandatory", False)),
+                    scope_type=scope_type,
+                    scope_value=scope_value,
                 )
             )
         return budgets
@@ -1541,6 +1553,9 @@ class ImportService:
                     "amount_kzt": self._fixed_amount_kzt(record.amount_kzt),
                     "rate_at_operation": self._fixed_rate(record.rate_at_operation),
                 }
+                record_tags = tuple(getattr(record, "tags", ()) or ())
+                if record_tags:
+                    create_income_payload["tags"] = record_tags
                 if record.related_debt_id is not None:
                     create_income_payload["related_debt_id"] = int(record.related_debt_id)
                 self._finance_service.create_income(
@@ -1576,6 +1591,9 @@ class ImportService:
                 "amount_kzt": self._fixed_amount_kzt(record.amount_kzt),
                 "rate_at_operation": self._fixed_rate(record.rate_at_operation),
             }
+            record_tags = tuple(getattr(record, "tags", ()) or ())
+            if record_tags:
+                create_expense_payload["tags"] = record_tags
             if record.related_debt_id is not None:
                 create_expense_payload["related_debt_id"] = int(record.related_debt_id)
             self._finance_service.create_expense(**create_expense_payload)
@@ -1744,6 +1762,8 @@ class ImportService:
             distribution_subitems=list(parsed.distribution_subitems),
             distribution_snapshots=list(parsed.distribution_snapshots),
             wallets=wallets,
+            tags=list(parsed.tags),
+            record_tags=list(parsed.record_tags),
             initial_balance=parsed.initial_balance,
             json_sections_present=parsed.json_sections_present,
         )
