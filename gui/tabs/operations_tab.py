@@ -128,6 +128,20 @@ def build_operations_tab(
 
     palette = get_palette()
 
+    def _is_kzt_currency(value: object) -> bool:
+        return str(value or "KZT").strip().upper() == "KZT"
+
+    def _amount_edit_label_text(currency: object) -> str:
+        if _is_kzt_currency(currency):
+            return tr("common.amount", "Сумма:")
+        return tr("operations.edit.amount_equivalent", "Эквивалент в KZT:")
+
+    amount_edit_tooltip_text = tr(
+        "operations.edit.amount_tooltip",
+        "Для операций в KZT это основная сумма операции."
+        "\nДля других валют это эквивалент в KZT и он влияет на курс операции.",
+    )
+
     income_label = tr("operations.type.income", "Доход")
     expense_label = tr("operations.type.expense", "Расход")
     _form_label(0, tr("common.type", "Тип:"))
@@ -879,8 +893,17 @@ def build_operations_tab(
         ttk.Label(edit_panel, text=tr("common.date", "Дата:")).grid(row=0, column=0, sticky="w")
         date_edit_entry = ttk.Entry(edit_panel)
         date_edit_entry.grid(row=0, column=1, sticky="ew")
+        amount_edit_label = ttk.Label(
+            edit_panel,
+            text=_amount_edit_label_text(getattr(transfer, "currency", "KZT")),
+        )
+        amount_edit_label.grid(row=1, column=0, sticky="w")
+        amount_kzt_edit_entry = ttk.Entry(edit_panel)
+        amount_kzt_edit_entry.grid(row=1, column=1, sticky="ew")
+        Tooltip(amount_edit_label, amount_edit_tooltip_text)
+        Tooltip(amount_kzt_edit_entry, amount_edit_tooltip_text)
         ttk.Label(edit_panel, text=tr("operations.transfer.from", "Из кошелька:")).grid(
-            row=1, column=0, sticky="w"
+            row=2, column=0, sticky="w"
         )
         from_wallet_var = tk.StringVar(value="")
         from_wallet_menu = ttk.Combobox(
@@ -889,9 +912,9 @@ def build_operations_tab(
             values=[],
             state="readonly",
         )
-        from_wallet_menu.grid(row=1, column=1, sticky="ew")
+        from_wallet_menu.grid(row=2, column=1, sticky="ew")
         ttk.Label(edit_panel, text=tr("operations.transfer.to", "В кошелек:")).grid(
-            row=2, column=0, sticky="w"
+            row=3, column=0, sticky="w"
         )
         to_wallet_var = tk.StringVar(value="")
         to_wallet_menu = ttk.Combobox(
@@ -900,18 +923,23 @@ def build_operations_tab(
             values=[],
             state="readonly",
         )
-        to_wallet_menu.grid(row=2, column=1, sticky="ew")
+        to_wallet_menu.grid(row=3, column=1, sticky="ew")
         ttk.Label(edit_panel, text=tr("operations.transfer.description", "Описание:")).grid(
-            row=3, column=0, sticky="w"
+            row=4, column=0, sticky="w"
         )
         description_edit_entry = ttk.Entry(edit_panel)
-        description_edit_entry.grid(row=3, column=1, sticky="ew")
+        description_edit_entry.grid(row=4, column=1, sticky="ew")
         edit_panel.grid_columnconfigure(1, weight=1)
 
         date_value = (
             transfer.date.isoformat() if hasattr(transfer.date, "isoformat") else str(transfer.date)
         )
         date_edit_entry.insert(0, date_value)
+        if _is_kzt_currency(getattr(transfer, "currency", "KZT")):
+            amount_value = float(transfer.amount_original or transfer.amount_kzt or 0.0)
+        else:
+            amount_value = float(transfer.amount_kzt or 0.0)
+        amount_kzt_edit_entry.insert(0, f"{amount_value:.2f}")
         description_edit_entry.insert(0, transfer.description)
 
         wallet_edit_map: dict[str, int] = {
@@ -952,6 +980,11 @@ def build_operations_tab(
             if not new_date:
                 show_error(tr("operations.transfer.error.date_required", "Укажите дату перевода."))
                 return
+            try:
+                new_amount_kzt = float(amount_kzt_edit_entry.get().strip())
+            except ValueError:
+                show_error(tr("operations.error.amount_number", "Сумма должна быть числом."))
+                return
             new_from_wallet_id = wallet_edit_map.get(from_wallet_var.get())
             new_to_wallet_id = wallet_edit_map.get(to_wallet_var.get())
             if new_from_wallet_id is None or new_to_wallet_id is None:
@@ -969,6 +1002,7 @@ def build_operations_tab(
                     new_from_wallet_id=new_from_wallet_id,
                     new_to_wallet_id=new_to_wallet_id,
                     new_description=description_edit_entry.get().strip(),
+                    new_amount_kzt=new_amount_kzt,
                 )
                 show_info(tr("operations.transfer.updated", "Перевод обновлен."))
                 refresh_operation_views(context)
@@ -982,6 +1016,7 @@ def build_operations_tab(
                     transfer_id=transfer_id,
                     new_from_wallet_id=new_from_wallet_id,
                     new_to_wallet_id=new_to_wallet_id,
+                    new_amount_kzt=new_amount_kzt,
                 )
                 show_error(
                     tr(
@@ -992,7 +1027,7 @@ def build_operations_tab(
                 )
 
         edit_buttons = ttk.Frame(edit_panel, style="InlinePanel.TFrame")
-        edit_buttons.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        edit_buttons.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         edit_buttons.grid_columnconfigure(0, weight=1)
         edit_buttons.grid_columnconfigure(1, weight=1)
         save_button = ttk.Button(
@@ -1010,6 +1045,7 @@ def build_operations_tab(
         cancel_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
         for widget in (
             date_edit_entry,
+            amount_kzt_edit_entry,
             from_wallet_menu,
             to_wallet_menu,
             description_edit_entry,
@@ -1018,6 +1054,7 @@ def build_operations_tab(
         ):
             widget.bind("<Escape>", lambda _event: (cancel_edit(), "break")[1], add="+")
         date_edit_entry.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
+        amount_kzt_edit_entry.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
         to_wallet_menu.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
         description_edit_entry.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
         date_edit_entry.focus_set()
@@ -1069,11 +1106,15 @@ def build_operations_tab(
         edit_panel.grid(row=3, column=0, columnspan=2, padx=6, sticky="ew")
         edit_panel_state["panel"] = edit_panel
 
-        ttk.Label(edit_panel, text=tr("operations.edit.amount", "Сумма (KZT):")).grid(
-            row=0, column=0, sticky="w"
+        amount_edit_label = ttk.Label(
+            edit_panel,
+            text=_amount_edit_label_text(getattr(record, "currency", "KZT")),
         )
+        amount_edit_label.grid(row=0, column=0, sticky="w")
         amount_entry = ttk.Entry(edit_panel)
         amount_entry.grid(row=0, column=1, sticky="ew")
+        Tooltip(amount_edit_label, amount_edit_tooltip_text)
+        Tooltip(amount_entry, amount_edit_tooltip_text)
         ttk.Label(edit_panel, text=tr("common.date", "Дата:")).grid(row=1, column=0, sticky="w")
         date_edit_entry = ttk.Entry(edit_panel)
         date_edit_entry.grid(row=1, column=1, sticky="ew")
@@ -1273,7 +1314,11 @@ def build_operations_tab(
         )
 
         # Fill the fields with post data
-        amount_entry.insert(0, f"{float(record.amount_kzt or 0.0):.2f}")
+        if _is_kzt_currency(getattr(record, "currency", "KZT")):
+            amount_value = float(record.amount_original or record.amount_kzt or 0.0)
+        else:
+            amount_value = float(record.amount_kzt or 0.0)
+        amount_entry.insert(0, f"{amount_value:.2f}")
         date_value = (
             record.date.isoformat() if hasattr(record.date, "isoformat") else str(record.date)
         )

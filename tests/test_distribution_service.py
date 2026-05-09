@@ -232,6 +232,32 @@ def test_validate_subitems_reports_invalid_sum(tmp_path: Path) -> None:
         repo.close()
 
 
+def test_replace_structure_does_not_duplicate_sqlite_sequence_rows(tmp_path: Path) -> None:
+    repo = _build_repo(tmp_path)
+    try:
+        service = DistributionService(repo)
+        item = service.create_item("Investments", pct=100.0)
+        subitem = service.create_subitem(item.id, "BTC", pct=100.0)
+        items, subitems_by_item = service.export_structure()
+
+        service.replace_structure(items, subitems_by_item)
+        service.replace_structure(items, subitems_by_item)
+
+        item_seq = repo.query_all(
+            "SELECT name, seq FROM sqlite_sequence WHERE name = 'distribution_items'"
+        )
+        subitem_seq = repo.query_all(
+            "SELECT name, seq FROM sqlite_sequence WHERE name = 'distribution_subitems'"
+        )
+
+        assert len(item_seq) == 1
+        assert len(subitem_seq) == 1
+        assert int(item_seq[0]["seq"]) == int(item.id)
+        assert int(subitem_seq[0]["seq"]) == int(subitem.id)
+    finally:
+        repo.close()
+
+
 def test_get_net_income_for_month_counts_income_only(tmp_path: Path) -> None:
     repo = _build_repo(tmp_path)
     try:

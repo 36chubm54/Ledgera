@@ -106,9 +106,9 @@ class GoalService:
                     ),
                 )
             if goals:
-                self._repo.execute(
-                    "INSERT OR REPLACE INTO sqlite_sequence(name, seq) VALUES(?, ?)",
-                    ("goals", max(int(goal.id) for goal in goals)),
+                self._repo.set_sqlite_sequence(
+                    "goals",
+                    max(int(goal.id) for goal in goals),
                 )
 
     def _build_progress(self, goal: Goal) -> GoalProgress:

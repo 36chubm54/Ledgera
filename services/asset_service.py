@@ -216,14 +216,14 @@ class AssetService:
                     ),
                 )
             if assets:
-                self._repo.execute(
-                    "INSERT OR REPLACE INTO sqlite_sequence(name, seq) VALUES(?, ?)",
-                    ("assets", max(int(asset.id) for asset in assets)),
+                self._repo.set_sqlite_sequence(
+                    "assets",
+                    max(int(asset.id) for asset in assets),
                 )
             if snapshots:
-                self._repo.execute(
-                    "INSERT OR REPLACE INTO sqlite_sequence(name, seq) VALUES(?, ?)",
-                    ("asset_snapshots", max(int(snapshot.id) for snapshot in snapshots)),
+                self._repo.set_sqlite_sequence(
+                    "asset_snapshots",
+                    max(int(snapshot.id) for snapshot in snapshots),
                 )
 
     def _normalize_date(self, value: str) -> str:

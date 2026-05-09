@@ -154,6 +154,18 @@ class SQLiteStorage(Storage):
     def close(self) -> None:
         self._conn.close()
 
+    def set_sqlite_sequence(self, table: str, seq: int | None = None) -> None:
+        table_name = str(table)
+        next_seq = int(seq) if seq is not None else 0
+        if seq is None:
+            row = self.query_one(f"SELECT COALESCE(MAX(id), 0) FROM {table_name}")
+            next_seq = int(row[0]) if row else 0
+        self._conn.execute("DELETE FROM sqlite_sequence WHERE name = ?", (table_name,))
+        self._conn.execute(
+            "INSERT INTO sqlite_sequence(name, seq) VALUES(?, ?)",
+            (table_name, int(next_seq)),
+        )
+
     def initialize_schema(self, schema_path: str | None = None) -> None:
         if schema_path is None:
             schema_path = str(Path(__file__).resolve().parents[1] / "db" / "schema.sql")

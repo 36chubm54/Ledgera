@@ -235,25 +235,17 @@ class DistributionService:
                         ),
                     )
             if items:
-                self._repo.execute(
-                    """
-                    INSERT OR REPLACE INTO sqlite_sequence(name, seq)
-                    VALUES('distribution_items', ?)
-                    """,
-                    (max(int(item.id) for item in items),),
+                self._repo.set_sqlite_sequence(
+                    "distribution_items",
+                    max(int(item.id) for item in items),
                 )
             if any(subitems_by_item.values()):
-                self._repo.execute(
-                    """
-                    INSERT OR REPLACE INTO sqlite_sequence(name, seq)
-                    VALUES('distribution_subitems', ?)
-                    """,
-                    (
-                        max(
-                            int(subitem.id)
-                            for subitems in subitems_by_item.values()
-                            for subitem in subitems
-                        ),
+                self._repo.set_sqlite_sequence(
+                    "distribution_subitems",
+                    max(
+                        int(subitem.id)
+                        for subitems in subitems_by_item.values()
+                        for subitem in subitems
                     ),
                 )
 

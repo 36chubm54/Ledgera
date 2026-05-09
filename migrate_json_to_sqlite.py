@@ -310,14 +310,7 @@ def _expected_record_tag_count(records: list[Record]) -> int:
 
 
 def _set_sqlite_sequence(sqlite_storage: SQLiteStorage, table: str) -> None:
-    row = sqlite_storage.query_one(f"SELECT COALESCE(MAX(id), 0) FROM {table}")
-    max_id = int(row[0]) if row else 0
-    sqlite_storage.execute(
-        """
-        INSERT OR REPLACE INTO sqlite_sequence(name, seq) VALUES(?, ?)
-        """,
-        (table, max_id),
-    )
+    sqlite_storage.set_sqlite_sequence(table)
 
 
 def _wallet_balance_payload(balance: object) -> tuple[float, int]:

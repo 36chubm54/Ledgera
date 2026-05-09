@@ -480,6 +480,7 @@ class UpdateTransfer:
         new_from_wallet_id: int,
         new_to_wallet_id: int,
         new_description: str | None = None,
+        new_amount_kzt: float | None = None,
     ) -> None:
         from domain.validation import ensure_not_future, parse_ymd
 
@@ -502,6 +503,27 @@ class UpdateTransfer:
             raise ValueError(f"Wallet not found: {new_to_wallet_id}")
         if not from_wallet.is_active or not to_wallet.is_active:
             raise ValueError("Transfers are allowed only between active wallets")
+
+        updated_amount_kzt = (
+            to_money_float(new_amount_kzt)
+            if new_amount_kzt is not None
+            else to_money_float(transfer.amount_kzt)
+        )
+        if updated_amount_kzt <= 0:
+            raise ValueError("Transfer amount_kzt must be positive")
+        is_kzt_transfer = str(transfer.currency or "KZT").upper() == "KZT"
+        updated_amount_original = (
+            updated_amount_kzt if is_kzt_transfer else to_money_float(transfer.amount_original)
+        )
+        updated_rate = (
+            1.0
+            if is_kzt_transfer
+            else build_rate(
+                float(transfer.amount_original),
+                updated_amount_kzt,
+                str(transfer.currency or "KZT"),
+            )
+        )
 
         records = list(self._repository.load_all())
         linked = [record for record in records if record.transfer_id == int(transfer_id)]
@@ -534,7 +556,7 @@ class UpdateTransfer:
         from_balance = wallet_balance_kzt(from_wallet, preserved_records, self._currency)
         projected_balance = to_money_float(
             quantize_money(from_balance)
-            - quantize_money(transfer.amount_kzt)
+            - quantize_money(updated_amount_kzt)
             - quantize_money(commission_total_kzt)
         )
         if not from_wallet.allow_negative and projected_balance < 0:
@@ -549,6 +571,9 @@ class UpdateTransfer:
             to_wallet_id=int(new_to_wallet_id),
             date=parsed_date,
             description=normalized_description,
+            amount_original=updated_amount_original,
+            amount_kzt=updated_amount_kzt,
+            rate_at_operation=updated_rate,
         )
         updated_records: list[Record] = []
         for record in records:
@@ -559,6 +584,9 @@ class UpdateTransfer:
                         wallet_id=int(new_from_wallet_id),
                         date=parsed_date,
                         description=normalized_description,
+                        amount_original=updated_amount_original,
+                        amount_kzt=updated_amount_kzt,
+                        rate_at_operation=updated_rate,
                     )
                 )
             elif int(getattr(record, "id", 0) or 0) == int(target_record.id):
@@ -568,6 +596,9 @@ class UpdateTransfer:
                         wallet_id=int(new_to_wallet_id),
                         date=parsed_date,
                         description=normalized_description,
+                        amount_original=updated_amount_original,
+                        amount_kzt=updated_amount_kzt,
+                        rate_at_operation=updated_rate,
                     )
                 )
             elif is_commission_for_transfer(record, int(transfer_id)):

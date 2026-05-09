@@ -191,6 +191,7 @@ class FinancialController:
         new_from_wallet_id: int,
         new_to_wallet_id: int,
         new_description: str = "",
+        new_amount_kzt: float | None = None,
     ) -> None:
         UpdateTransfer(self._repository, self._currency).execute(
             transfer_id,
@@ -198,6 +199,7 @@ class FinancialController:
             new_from_wallet_id=new_from_wallet_id,
             new_to_wallet_id=new_to_wallet_id,
             new_description=new_description,
+            new_amount_kzt=new_amount_kzt,
         )
 
     def set_system_initial_balance(self, balance: float) -> None:
@@ -639,6 +641,7 @@ class FinancialController:
         records: list[Record],
         transfers: list[Transfer],
         mandatory_templates: list[MandatoryExpenseRecord],
+        tags: list[Tag] | None = None,
         debts: list[Debt] | None = None,
         debt_payments: list[DebtPayment] | None = None,
         assets: list[Asset] | None = None,
@@ -669,6 +672,7 @@ class FinancialController:
             wallets=target_wallets,
             records=records,
             mandatory_expenses=mandatory_payload,
+            tags=tags,
             transfers=transfers,
             debts=debt_payload,
             debt_payments=debt_payment_payload,

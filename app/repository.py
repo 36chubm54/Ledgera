@@ -210,6 +210,7 @@ class RecordRepository(ABC):
         wallets: list[Wallet] | None = None,
         records: list[Record],
         mandatory_expenses: list[MandatoryExpenseRecord],
+        tags: list[Tag] | None = None,
         transfers: list[Transfer] | None = None,
         debts: list[Debt] | None = None,
         debt_payments: list[DebtPayment] | None = None,

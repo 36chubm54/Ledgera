@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 from app.repository import RecordRepository
+from utils.money import to_money_float
 from utils.tag_utils import find_numeric_only_tags, parse_tag_string
 
 
@@ -56,7 +57,16 @@ class RecordService:
             ensure_not_future(parsed)
             next_date = normalized_date
 
-        updated = record.with_updated_amount_kzt(float(new_amount_kzt))
+        updated_amount_kzt = to_money_float(float(new_amount_kzt))
+        if str(record.currency or "KZT").upper() == "KZT":
+            updated = replace(
+                record,
+                amount_original=updated_amount_kzt,
+                amount_kzt=updated_amount_kzt,
+                rate_at_operation=1.0,
+            )
+        else:
+            updated = record.with_updated_amount_kzt(updated_amount_kzt)
         if new_tags is not None:
             invalid_tags = find_numeric_only_tags(new_tags)
             if invalid_tags:

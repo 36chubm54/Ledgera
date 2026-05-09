@@ -13,6 +13,7 @@ from domain.goal import Goal
 from domain.import_policy import ImportPolicy
 from domain.import_result import ImportResult
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
+from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
 from services.import_execution_support import (
@@ -466,6 +467,7 @@ class ImportService:
             records=records,
             transfers=transfers,
             mandatory_templates=mandatory_templates,
+            tags=self._tags_from_payload(parsed.tags),
             debts=debts if flags.can_replace_debts else None,
             debt_payments=debt_payments if flags.can_replace_debts else None,
             assets=assets
@@ -503,6 +505,34 @@ class ImportService:
             counters.transfers,
         )
         return ImportResult(imported=imported, skipped=skipped, errors=errors)
+
+    @staticmethod
+    def _tags_from_payload(payload: list[dict[str, Any]]) -> list[Tag]:
+        tags: list[Tag] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "") or "").strip()
+            if not name:
+                continue
+            try:
+                tag_id = int(item.get("id", 0) or 0)
+            except (TypeError, ValueError):
+                tag_id = 0
+            try:
+                usage_count = int(item.get("usage_count", 0) or 0)
+            except (TypeError, ValueError):
+                usage_count = 0
+            tags.append(
+                Tag(
+                    id=tag_id,
+                    name=name,
+                    color=str(item.get("color", "") or ""),
+                    usage_count=usage_count,
+                    last_used_at=str(item.get("last_used_at", "") or ""),
+                )
+            )
+        return tags
 
     def _commit_incremental_prepared_records_payload(
         self,

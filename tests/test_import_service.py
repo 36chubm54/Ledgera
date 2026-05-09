@@ -12,6 +12,7 @@ from domain.debt import Debt, DebtKind, DebtOperationType, DebtPayment, DebtStat
 from domain.import_policy import ImportPolicy
 from domain.import_result import ImportResult
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord
+from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
 from gui.controller_import_support import normalize_operation_ids_for_import, run_import_transaction
@@ -1099,6 +1100,55 @@ def test_import_service_current_rate_json_skips_orphan_debt_payments() -> None:
     kwargs = finance_service.replace_all_for_import.call_args.kwargs
     assert kwargs["debts"] == []
     assert kwargs["debt_payments"] == []
+
+
+def test_import_service_bulk_restore_passes_exported_tags_metadata() -> None:
+    finance_service = _finance_mock()
+    finance_service.supports_bulk_import_replace = True
+    finance_service.replace_all_for_import = Mock()
+    payload = ParsedImportData(
+        path="data_backup.json",
+        file_type="json",
+        rows=[],
+        tags=[
+            {
+                "id": 7,
+                "name": "food",
+                "color": "#123ABC",
+                "usage_count": 9,
+                "last_used_at": "2026-05-01",
+            }
+        ],
+        wallets=[
+            {
+                "id": 1,
+                "name": "Main",
+                "currency": "KZT",
+                "initial_balance": 10.0,
+                "system": True,
+                "allow_negative": False,
+                "is_active": True,
+            }
+        ],
+        initial_balance=10.0,
+    )
+
+    with patch("services.import_service.parse_import_file", return_value=payload):
+        summary = ImportService(finance_service, policy=ImportPolicy.FULL_BACKUP).import_file(
+            "data_backup.json"
+        )
+
+    assert summary == ImportResult(imported=0, skipped=0, errors=tuple())
+    kwargs = finance_service.replace_all_for_import.call_args.kwargs
+    assert kwargs["tags"] == [
+        Tag(
+            id=7,
+            name="food",
+            color="#123ABC",
+            usage_count=9,
+            last_used_at="2026-05-01",
+        )
+    ]
 
 
 def test_import_service_current_rate_json_clears_orphan_record_debt_link() -> None:

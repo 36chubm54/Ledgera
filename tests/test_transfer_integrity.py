@@ -151,6 +151,7 @@ def test_update_transfer_rewrites_date_wallets_and_commission_atomically():
         new_from_wallet_id=third.id,
         new_to_wallet_id=source_id,
         new_description="Moved to reserve",
+        new_amount_kzt=45.0,
     )
 
     transfer = next(item for item in repo.load_transfers() if item.id == transfer_id)
@@ -158,6 +159,9 @@ def test_update_transfer_rewrites_date_wallets_and_commission_atomically():
     assert transfer.from_wallet_id == third.id
     assert transfer.to_wallet_id == source_id
     assert transfer.description == "Moved to reserve"
+    assert transfer.amount_original == 45.0
+    assert transfer.amount_kzt == 45.0
+    assert transfer.rate_at_operation == 1.0
 
     records = repo.load_all()
     linked = [record for record in records if record.transfer_id == transfer_id]
@@ -167,15 +171,18 @@ def test_update_transfer_rewrites_date_wallets_and_commission_atomically():
     assert next(record for record in linked if record.type == "income").wallet_id == source_id
     assert all(str(record.date) == "2025-02-03" for record in linked)
     assert {str(record.description or "") for record in linked} == {"Moved to reserve"}
+    assert {record.amount_original for record in linked} == {45.0}
+    assert {record.amount_kzt for record in linked} == {45.0}
+    assert {record.rate_at_operation for record in linked} == {1.0}
 
     commission = next(record for record in records if record.category == "Commission")
     assert commission.wallet_id == third.id
     assert str(commission.date) == "2025-02-03"
 
     balance = CalculateWalletBalance(typed_repo)
-    assert balance.execute(source_id) == 150.0
+    assert balance.execute(source_id) == 165.0
     assert balance.execute(target_id) == 10.0
-    assert balance.execute(third.id) == 18.0
+    assert balance.execute(third.id) == 3.0
 
 
 def test_update_transfer_rechecks_source_balance_against_new_wallet():
@@ -201,7 +208,58 @@ def test_update_transfer_rechecks_source_balance_against_new_wallet():
             new_date="2025-02-02",
             new_from_wallet_id=weak.id,
             new_to_wallet_id=target_id,
+            new_amount_kzt=30.0,
         )
+
+
+def test_update_transfer_rechecks_source_balance_against_new_amount_kzt():
+    repo, source_id, target_id = _repo_with_wallets()
+    typed_repo = _typed_repo(repo)
+    transfer_id = CreateTransfer(typed_repo, CurrencyService()).execute(
+        from_wallet_id=source_id,
+        to_wallet_id=target_id,
+        transfer_date="2025-02-01",
+        amount_original=30.0,
+        currency="KZT",
+    )
+
+    with pytest.raises(ValueError, match="Insufficient funds"):
+        UpdateTransfer(typed_repo, CurrencyService()).execute(
+            transfer_id,
+            new_date="2025-02-02",
+            new_from_wallet_id=source_id,
+            new_to_wallet_id=target_id,
+            new_amount_kzt=200.0,
+        )
+
+
+def test_update_transfer_recalculates_rate_for_non_kzt_currency():
+    repo, source_id, target_id = _repo_with_wallets()
+    typed_repo = _typed_repo(repo)
+    transfer_id = CreateTransfer(typed_repo, CurrencyService()).execute(
+        from_wallet_id=source_id,
+        to_wallet_id=target_id,
+        transfer_date="2025-02-01",
+        amount_original=10.0,
+        currency="USD",
+        amount_kzt=50.0,
+        rate_at_operation=5.0,
+    )
+
+    UpdateTransfer(typed_repo, CurrencyService()).execute(
+        transfer_id,
+        new_date="2025-02-02",
+        new_from_wallet_id=source_id,
+        new_to_wallet_id=target_id,
+        new_amount_kzt=55.0,
+    )
+
+    transfer = next(item for item in repo.load_transfers() if item.id == transfer_id)
+    assert transfer.amount_kzt == 55.0
+    assert transfer.rate_at_operation == 5.5
+    linked = [record for record in repo.load_all() if record.transfer_id == transfer_id]
+    assert {record.amount_kzt for record in linked} == {55.0}
+    assert {record.rate_at_operation for record in linked} == {5.5}
 
 
 def test_load_detects_corrupted_transfer_without_two_records():

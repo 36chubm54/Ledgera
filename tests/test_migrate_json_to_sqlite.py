@@ -251,6 +251,22 @@ def test_migration_is_safe_to_rerun_on_equivalent_dataset(tmp_path) -> None:
     assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM transfers")[0] == 1
     assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM records")[0] == 2
     assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM mandatory_expenses")[0] == 1
+    assert _query_one(
+        sqlite_storage,
+        "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'wallets'",
+    )[0] == 1
+    assert _query_one(
+        sqlite_storage,
+        "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'transfers'",
+    )[0] == 1
+    assert _query_one(
+        sqlite_storage,
+        "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'records'",
+    )[0] == 1
+    assert _query_one(
+        sqlite_storage,
+        "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'mandatory_expenses'",
+    )[0] == 1
     sqlite_storage.close()
 
 

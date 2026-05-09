@@ -135,6 +135,7 @@ class FinanceService(Protocol):
         records: list[Record],
         transfers: list[Transfer],
         mandatory_templates: list[MandatoryExpenseRecord],
+        tags: list[Tag] | None = None,
         debts: list[Debt] | None = None,
         debt_payments: list[DebtPayment] | None = None,
         assets: list[Asset] | None = None,

@@ -40,6 +40,9 @@ class SQLiteRecordRepository(RecordRepository):
     def db_path(self) -> str:
         return str(self._storage._db_path)
 
+    def set_sqlite_sequence(self, table: str, seq: int | None = None) -> None:
+        self._storage.set_sqlite_sequence(table, seq)
+
     def ensure_schema_meta(self) -> None:
         self._conn.execute(
             """
@@ -2248,6 +2251,7 @@ class SQLiteRecordRepository(RecordRepository):
         wallets: list[Wallet] | None = None,
         records: list[Record],
         mandatory_expenses: list[MandatoryExpenseRecord],
+        tags: list[Tag] | None = None,
         transfers: list[Transfer] | None = None,
         debts: list[Debt] | None = None,
         debt_payments: list[DebtPayment] | None = None,
@@ -2274,11 +2278,10 @@ class SQLiteRecordRepository(RecordRepository):
             transfer_id_map = self._replace_all_transfers(normalized_transfers, wallet_id_map)
             debt_id_map = self._replace_all_debts(normalized_debts)
             record_id_map = self._replace_all_records(
-                records, wallet_id_map, transfer_id_map, debt_id_map
+                records, wallet_id_map, transfer_id_map, debt_id_map, list(tags or [])
             )
             self._replace_all_mandatory_expenses(mandatory_expenses, wallet_id_map)
             self._replace_all_debt_payments(normalized_debt_payments, debt_id_map, record_id_map)
-            self._prune_orphan_tags()
 
     def _normalize_replace_all_data_inputs(
         self,
@@ -2327,7 +2330,15 @@ class SQLiteRecordRepository(RecordRepository):
         self._conn.execute("DELETE FROM transfers")
         self._conn.execute("DELETE FROM wallets")
         self._reset_autoincrement_many(
-            ("debt_payments", "debts", "records", "mandatory_expenses", "transfers", "wallets")
+            (
+                "tags",
+                "debt_payments",
+                "debts",
+                "records",
+                "mandatory_expenses",
+                "transfers",
+                "wallets",
+            )
         )
 
     def _replace_all_wallets(self, wallets: list[Wallet]) -> dict[int, int]:
@@ -2368,6 +2379,7 @@ class SQLiteRecordRepository(RecordRepository):
         wallet_id_map: dict[int, int],
         transfer_id_map: dict[int, int],
         debt_id_map: dict[int, int],
+        tags: list[Tag],
     ) -> dict[int, int]:
         record_id_map: dict[int, int] = {}
         for record in sorted(records, key=lambda item: item.id):
@@ -2399,7 +2411,51 @@ class SQLiteRecordRepository(RecordRepository):
             {int(record_id_map[int(record.id)]): tuple(record.tags) for record in records},
             clear_missing=True,
         )
+        self._restore_tag_metadata(tags)
         return record_id_map
+
+    def _restore_tag_metadata(self, tags: list[Tag]) -> None:
+        inserted_missing = False
+        for tag in tags:
+            normalized_name = normalize_tag_name(tag.name)
+            if not normalized_name:
+                continue
+            row = self._conn.execute(
+                "SELECT id FROM tags WHERE lower(name) = lower(?) LIMIT 1",
+                (normalized_name,),
+            ).fetchone()
+            if row is None:
+                cursor = self._conn.execute(
+                    """
+                    INSERT INTO tags (name, color, usage_count, last_used_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        normalized_name,
+                        str(tag.color or "") or color_for_tag(normalized_name),
+                        int(tag.usage_count or 0),
+                        str(tag.last_used_at or ""),
+                    ),
+                )
+                row_id = self._require_lastrowid(cursor.lastrowid, "tags")
+                row = {"id": row_id}
+                inserted_missing = True
+            self._conn.execute(
+                """
+                UPDATE tags
+                SET name = ?, color = ?, usage_count = ?, last_used_at = ?
+                WHERE id = ?
+                """,
+                (
+                    normalized_name,
+                    str(tag.color or "") or color_for_tag(normalized_name),
+                    int(tag.usage_count or 0),
+                    str(tag.last_used_at or ""),
+                    int(row["id"]),
+                ),
+            )
+        if inserted_missing:
+            self._normalize_tag_ids()
 
     def _replace_all_mandatory_expenses(
         self,

@@ -12,6 +12,7 @@ from domain.goal import Goal
 from domain.import_policy import ImportPolicy
 from domain.import_result import ImportResult
 from domain.records import ExpenseRecord, IncomeRecord
+from domain.tags import Tag
 from domain.wallets import Wallet
 from gui.controllers import FinancialController
 from infrastructure.sqlite_repository import SQLiteRecordRepository
@@ -697,6 +698,87 @@ def test_sqlite_replace_all_data_restores_missing_debt_payment_record_id(tmp_pat
         repo.close()
 
 
+def test_sqlite_replace_all_data_preserves_exported_tag_metadata(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path / "replace_all_tags_metadata.db")
+
+    try:
+        wallets = repo.load_wallets()
+        record = ExpenseRecord(
+            id=1,
+            date="2026-05-01",
+            wallet_id=1,
+            amount_original=250.0,
+            currency="KZT",
+            rate_at_operation=1.0,
+            amount_kzt=250.0,
+            category="Food",
+            description="Lunch",
+            tags=("food",),
+        )
+
+        repo.replace_all_data(
+            wallets=wallets,
+            records=[record],
+            mandatory_expenses=[],
+            tags=[
+                Tag(
+                    id=7,
+                    name="food",
+                    color="#123ABC",
+                    usage_count=9,
+                    last_used_at="2026-05-01",
+                )
+            ],
+            transfers=[],
+        )
+
+        assert repo.list_tags() == [
+            Tag(
+                id=1,
+                name="food",
+                color="#123ABC",
+                usage_count=9,
+                last_used_at="2026-05-01",
+            )
+        ]
+    finally:
+        repo.close()
+
+
+def test_sqlite_replace_all_data_restores_exported_tags_without_records(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path / "replace_all_orphan_tags.db")
+
+    try:
+        wallets = repo.load_wallets()
+        repo.replace_all_data(
+            wallets=wallets,
+            records=[],
+            mandatory_expenses=[],
+            tags=[
+                Tag(
+                    id=7,
+                    name="food",
+                    color="#123ABC",
+                    usage_count=9,
+                    last_used_at="2026-05-01",
+                )
+            ],
+            transfers=[],
+        )
+
+        assert repo.list_tags() == [
+            Tag(
+                id=1,
+                name="food",
+                color="#123ABC",
+                usage_count=9,
+                last_used_at="2026-05-01",
+            )
+        ]
+    finally:
+        repo.close()
+
+
 def test_sqlite_replace_records_and_transfers_remaps_debt_payment_record_id(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path / "replace_records_transfers_debt_record_id.db")
 
@@ -916,6 +998,46 @@ def test_sqlite_repository_reopen_compacts_existing_tag_ids(tmp_path: Path) -> N
         assert [(int(row["record_id"]), int(row["tag_id"])) for row in record_tag_rows] == [(1, 1)]
     finally:
         reopened.close()
+
+
+def test_sqlite_replace_all_data_resets_tags_sequence(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path / "tag_sequence_reset.db")
+
+    try:
+        repo.save_wallet(Wallet(id=1, name="Cash", currency="KZT", initial_balance=0.0))
+        repo.execute(
+            "INSERT INTO tags (id, name, color, usage_count, last_used_at) "
+            "VALUES (83, 'legacy', '#F2994A', 0, '')"
+        )
+
+        repo.replace_all_data(
+            wallets=[Wallet(id=1, name="Cash", currency="KZT", initial_balance=0.0)],
+            records=[],
+            mandatory_expenses=[],
+            tags=[],
+            transfers=[],
+            debts=[],
+            debt_payments=[],
+        )
+
+        repo.save(
+            ExpenseRecord(
+                id=1,
+                date="2026-03-03",
+                wallet_id=1,
+                amount_original=100.0,
+                currency="KZT",
+                rate_at_operation=1.0,
+                amount_kzt=100.0,
+                category="Food",
+                tags=("fresh",),
+            )
+        )
+
+        tag_rows = repo.query_all("SELECT id, name FROM tags ORDER BY id")
+        assert [(int(row["id"]), str(row["name"])) for row in tag_rows] == [(1, "fresh")]
+    finally:
+        repo.close()
 
 
 def test_sqlite_repository_reopen_restores_missing_debt_payment_record_id_during_startup(
