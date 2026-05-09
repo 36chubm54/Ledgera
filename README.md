@@ -2,7 +2,7 @@
 
 Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, тегами, бюджетами, долгами, активами и целями.
 
-Текущий патч `v1.15.1` stabilizes и доводит до production состояние `v1.15.0`: усиливает import/backup/runtime safety, разгружает несколько orchestration hotspots, улучшает shell-level GUI reliability и доводит typed/architectural cleanup без изменения основной продуктовой модели релиза с тегами и tag-аналитикой.
+Текущий патч `v1.15.2` завершает post-`v1.15.1` stabilization pass: уточняет UX-контракт редактирования сумм в `KZT`, восстанавливает top-level metadata тегов в bulk restore сценариях и унифицирует обслуживание `sqlite_sequence` в import/migration/replace путях.
 
 ## 🚀 Быстрый старт
 
@@ -68,6 +68,8 @@ python main.py
 - Section-aware `JSON` import: records-only restore не затирает несвязанные `debts/assets/goals/budgets`
 - Более безопасная persistence-слой логика: quarantine для битых JSON-файлов, `.error` copies при save-failure, atomic backup/export paths
 - Patch-level stabilization поверх `v1.15.0`: safer import/runtime flows, GUI coordinator split, tighter rollback/durability guarantees
+- Inline editing теперь различает основную сумму `KZT`-операции и `KZT`-эквивалент для non-`KZT` записей, чтобы не вводить пользователя в заблуждение
+- Bulk `JSON` restore сохраняет top-level `tags` даже без текущих привязок к операциям
 
 ## 🖥️ Вкладки приложения
 

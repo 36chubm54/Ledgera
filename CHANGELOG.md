@@ -7,6 +7,30 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [v1.15.2] - 2026-05-10
+
+### Changed
+
+- Clarified inline amount-edit semantics so `KZT` operations and transfers now edit the primary amount directly, while non-`KZT` flows keep editing the `KZT` equivalent
+
+### Fixed
+
+- Fixed SQLite bulk replace so top-level `tags` from backup/import survive restore even when they currently have no `record_tags`
+- Fixed `KZT` transfer and inline-record editing so the stored primary amount stays consistent with what the editor shows
+- Fixed `sqlite_sequence` maintenance for `distribution`, `assets`, `goals`, and JSON->SQLite migration flows by routing updates through a shared helper
+
+### Tests
+
+- Added regression coverage for `KZT` amount editing, orphan-tag restore, tag-sequence reset, migration reruns, and duplicate-free `sqlite_sequence` updates
+
+### Docs
+
+- Updated `README.md`, `README_EN.md`, and `CHANGELOG.md` for `v1.15.2`
+
+No breaking changes.
+
+---
+
 ## [v1.15.1] - 2026-05-09
 
 ### Added

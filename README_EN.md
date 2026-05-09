@@ -2,7 +2,7 @@
 
 Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals.
 
-The current `v1.15.1` patch stabilizes and hardens `v1.15.0`: it improves import/backup/runtime safety, breaks up several orchestration hotspots, improves shell-level GUI reliability, and completes typed/architectural cleanup without changing the core product model introduced by the tags and tag-analytics release.
+The current `v1.15.2` patch completes the post-`v1.15.1` stabilization pass: it clarifies the `KZT` amount-editing contract, restores top-level tag metadata during bulk restore flows, and unifies `sqlite_sequence` maintenance across import, migration, and replace paths.
 
 ## 🚀 Quick Start
 
