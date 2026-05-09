@@ -29,6 +29,7 @@ from domain.import_policy import ImportPolicy
 from domain.records import ExpenseRecord, IncomeRecord, Record
 from domain.wallets import Wallet
 from infrastructure.repositories import JsonFileRecordRepository, RecordRepository
+from tests.type_helpers import typed_repo
 
 
 class TestCreateIncome:
@@ -466,7 +467,7 @@ class TestDebtUseCases:
             repository.save_initial_balance(77.0)
             repository.save(IncomeRecord(date="2025-01-01", _amount_init=10.0, category="Salary"))
 
-            use_case = ImportFromCSV(repository=repository)
+            use_case = ImportFromCSV(repository=typed_repo(repository))
             with pytest.raises(ValueError):
                 use_case.execute(csv_file.name)
 

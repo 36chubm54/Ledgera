@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from infrastructure.repositories import RecordRepository
+from app.repository import RecordRepository
 from utils.tag_utils import find_numeric_only_tags, parse_tag_string
 
 

@@ -7,6 +7,7 @@ from app.use_cases import CreateIncome, GenerateReport
 from domain.records import ExpenseRecord, IncomeRecord
 from domain.reports import Report
 from infrastructure.repositories import JsonFileRecordRepository
+from tests.type_helpers import typed_repo
 
 
 def test_wallet_migration_preserves_balance():
@@ -27,7 +28,7 @@ def test_wallet_migration_preserves_balance():
         path = fp.name
 
     repo = JsonFileRecordRepository(path)
-    migrated_report = GenerateReport(repo).execute()
+    migrated_report = GenerateReport(typed_repo(repo)).execute()
     assert migrated_report.total_fixed() == expected_balance
 
     with open(path, encoding="utf-8") as fp:
@@ -53,7 +54,7 @@ def test_create_record_assigns_system_wallet_id():
         path = fp.name
 
     repo = JsonFileRecordRepository(path)
-    CreateIncome(repo, CurrencyService()).execute(
+    CreateIncome(typed_repo(repo), CurrencyService()).execute(
         date="2025-01-01",
         wallet_id=1,
         amount=10.0,

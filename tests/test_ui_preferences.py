@@ -6,6 +6,7 @@ from app.services import CurrencyService
 from gui.controllers import FinancialController
 from infrastructure.repositories import JsonFileRecordRepository
 from infrastructure.sqlite_repository import SQLiteRecordRepository
+from tests.type_helpers import typed_repo
 
 
 def _schema_path() -> str:
@@ -29,7 +30,7 @@ def test_sqlite_controller_persists_language_and_theme_preferences(tmp_path: Pat
 
 def test_non_sqlite_controller_preferences_are_safe_noops(tmp_path: Path) -> None:
     repo = JsonFileRecordRepository(str(tmp_path / "data.json"))
-    controller = FinancialController(repo, CurrencyService())
+    controller = FinancialController(typed_repo(repo), CurrencyService())
 
     controller.save_language_preference("en")
     controller.save_theme_preference("dark")

@@ -21,6 +21,7 @@ from infrastructure.repositories import JsonFileRecordRepository
 from infrastructure.sqlite_repository import SQLiteRecordRepository
 from services.import_parser import ParsedImportData
 from services.import_service import ImportService
+from tests.type_helpers import typed_repo
 
 
 def _schema_path() -> str:
@@ -2383,7 +2384,7 @@ def test_run_import_transaction_restores_debts_for_json_repository(tmp_path: Pat
 
     with pytest.raises(RuntimeError, match="boom"):
         run_import_transaction(
-            repo,
+            typed_repo(repo),
             lambda: (
                 repo.replace_all_data(
                     wallets=repo.load_wallets(),
@@ -2455,7 +2456,7 @@ def test_run_import_transaction_rolls_back_on_key_error_for_json_repository(tmp_
 
     with pytest.raises(KeyError, match="boom"):
         run_import_transaction(
-            repo,
+            typed_repo(repo),
             lambda: (
                 repo.replace_all_data(
                     wallets=[
@@ -2513,7 +2514,7 @@ def test_run_import_transaction_raises_when_json_rollback_fails() -> None:
 
     with pytest.raises(RuntimeError, match="repository rollback also failed"):
         run_import_transaction(
-            repo,  # type: ignore[arg-type]
+            typed_repo(repo),
             lambda: (_ for _ in ()).throw(RuntimeError("boom")),
             logging.getLogger(__name__),
         )

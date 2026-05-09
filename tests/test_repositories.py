@@ -535,3 +535,23 @@ class TestJsonFileRecordRepository:
 
         assert len(records) == 1
         assert records[0].category == "Salary"
+
+    def test_load_all_raises_when_repository_migration_cannot_be_persisted(self):
+        json_data = {
+            "initial_balance": 0.0,
+            "records": [
+                {
+                    "type": "income",
+                    "date": "2025-01-01",
+                    "amount": 10.0,
+                    "category": "Salary",
+                }
+            ],
+            "mandatory_expenses": [],
+        }
+        with open(self.temp_file.name, "w", encoding="utf-8") as f:
+            json.dump(json_data, f)
+
+        with patch.object(self.repo, "_save_data", side_effect=RepositorySaveError("boom")):
+            with pytest.raises(RepositorySaveError, match="boom"):
+                self.repo.load_all()

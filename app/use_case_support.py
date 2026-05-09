@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from app.repository import RecordRepository
 from domain.records import Record
 from domain.wallets import Wallet
-from infrastructure.repositories import RecordRepository
 from utils.money import build_rate as build_precise_rate
 from utils.money import quantize_money
 

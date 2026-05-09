@@ -8,6 +8,7 @@ from app.use_cases import CalculateNetWorth, CreateTransfer
 from domain.reports import Report
 from domain.wallets import Wallet
 from infrastructure.repositories import JsonFileRecordRepository
+from tests.type_helpers import typed_repo
 
 # Removed DummyCurrency class because we are now using CurrencyService
 
@@ -44,7 +45,7 @@ def _make_repo_with_two_wallets() -> tuple[JsonFileRecordRepository, int, int]:
 
 def test_transfer_creates_two_records():
     repo, source_id, target_id = _make_repo_with_two_wallets()
-    transfer_id = CreateTransfer(repo, CurrencyService()).execute(
+    transfer_id = CreateTransfer(typed_repo(repo), CurrencyService()).execute(
         from_wallet_id=source_id,
         to_wallet_id=target_id,
         transfer_date="2025-02-01",
@@ -57,7 +58,7 @@ def test_transfer_creates_two_records():
 
 def test_transfer_with_commission_creates_three_records():
     repo, source_id, target_id = _make_repo_with_two_wallets()
-    transfer_id = CreateTransfer(repo, CurrencyService()).execute(
+    transfer_id = CreateTransfer(typed_repo(repo), CurrencyService()).execute(
         from_wallet_id=source_id,
         to_wallet_id=target_id,
         transfer_date="2025-02-01",
@@ -76,7 +77,7 @@ def test_transfer_with_commission_creates_three_records():
 def test_sum_balances_unchanged_for_transfer_without_commission():
     repo, source_id, target_id = _make_repo_with_two_wallets()
     before = _wallet_balance(repo, source_id) + _wallet_balance(repo, target_id)
-    CreateTransfer(repo, CurrencyService()).execute(
+    CreateTransfer(typed_repo(repo), CurrencyService()).execute(
         from_wallet_id=source_id,
         to_wallet_id=target_id,
         transfer_date="2025-02-01",
@@ -89,9 +90,9 @@ def test_sum_balances_unchanged_for_transfer_without_commission():
 
 def test_net_worth_decreases_by_commission():
     repo, source_id, target_id = _make_repo_with_two_wallets()
-    net = CalculateNetWorth(repo, CurrencyService())
+    net = CalculateNetWorth(typed_repo(repo), CurrencyService())
     before = net.execute_fixed()
-    CreateTransfer(repo, CurrencyService()).execute(
+    CreateTransfer(typed_repo(repo), CurrencyService()).execute(
         from_wallet_id=source_id,
         to_wallet_id=target_id,
         transfer_date="2025-02-01",
@@ -107,7 +108,7 @@ def test_net_worth_decreases_by_commission():
 def test_transfer_forbidden_if_allow_negative_false_and_insufficient_funds():
     repo, source_id, target_id = _make_repo_with_two_wallets()
     with pytest.raises(ValueError):
-        CreateTransfer(repo, CurrencyService()).execute(
+        CreateTransfer(typed_repo(repo), CurrencyService()).execute(
             from_wallet_id=source_id,
             to_wallet_id=target_id,
             transfer_date="2025-02-01",
@@ -130,7 +131,7 @@ def test_transfer_allowed_if_allow_negative_true():
             allow_negative=True,
         )
     )
-    transfer_id = CreateTransfer(repo, CurrencyService()).execute(
+    transfer_id = CreateTransfer(typed_repo(repo), CurrencyService()).execute(
         from_wallet_id=source_id,
         to_wallet_id=target_id,
         transfer_date="2025-02-01",
@@ -142,7 +143,7 @@ def test_transfer_allowed_if_allow_negative_true():
 
 def test_commission_record_is_expense():
     repo, source_id, target_id = _make_repo_with_two_wallets()
-    CreateTransfer(repo, CurrencyService()).execute(
+    CreateTransfer(typed_repo(repo), CurrencyService()).execute(
         from_wallet_id=source_id,
         to_wallet_id=target_id,
         transfer_date="2025-02-01",
@@ -159,7 +160,7 @@ def test_commission_record_is_expense():
 
 def test_opening_balance_includes_transfer_before_period():
     repo, source_id, target_id = _make_repo_with_two_wallets()
-    CreateTransfer(repo, CurrencyService()).execute(
+    CreateTransfer(typed_repo(repo), CurrencyService()).execute(
         from_wallet_id=source_id,
         to_wallet_id=target_id,
         transfer_date="2025-01-01",
@@ -176,7 +177,7 @@ def test_opening_balance_includes_transfer_before_period():
 
 def test_opening_balance_includes_commission_before_period():
     repo, source_id, target_id = _make_repo_with_two_wallets()
-    CreateTransfer(repo, CurrencyService()).execute(
+    CreateTransfer(typed_repo(repo), CurrencyService()).execute(
         from_wallet_id=source_id,
         to_wallet_id=target_id,
         transfer_date="2025-01-01",
@@ -195,7 +196,7 @@ def test_opening_balance_includes_commission_before_period():
 
 def test_transfer_date_is_datetime_date_and_opening_uses_date_objects():
     repo, source_id, target_id = _make_repo_with_two_wallets()
-    transfer_id = CreateTransfer(repo, CurrencyService()).execute(
+    transfer_id = CreateTransfer(typed_repo(repo), CurrencyService()).execute(
         from_wallet_id=source_id,
         to_wallet_id=target_id,
         transfer_date="2025-01-01",

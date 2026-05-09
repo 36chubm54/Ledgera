@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import replace as dc_replace
 from datetime import date as dt_date
 from datetime import datetime
-from typing import TypeVar, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from domain.debt import Debt, DebtKind, DebtOperationType, DebtPayment, DebtStatus
 from domain.errors import DomainError
@@ -20,6 +20,9 @@ from domain.wallets import Wallet
 from utils.tag_utils import color_for_tag, normalize_tag_name, normalize_tag_names
 
 T = TypeVar("T", bound=Record)
+
+if TYPE_CHECKING:
+    from app.services import CurrencyService
 
 logger = logging.getLogger(__name__)
 SYSTEM_WALLET_ID = 1
@@ -63,6 +66,12 @@ class RecordRepository(ABC):
 
     def set_tag_color(self, name: str, color: str) -> None:
         """Optional: update color for a known tag."""
+        return None
+
+    def get_total_assets_kzt(
+        self, currency: "CurrencyService", *, active_only: bool = True
+    ) -> float | None:
+        """Optional: return total asset value in KZT for net-worth calculations."""
         return None
 
     @abstractmethod
@@ -548,8 +557,13 @@ class JsonFileRecordRepository(RecordRepository):
         if migrated:
             try:
                 self._save_data(data)
-            except Exception:
+            except Exception as exc:
                 logger.exception("Failed to persist repository migration for %s", self._file_path)
+                if isinstance(exc, RepositorySaveError):
+                    raise
+                raise RepositorySaveError(
+                    f"Failed to persist repository migration for {self._file_path}"
+                ) from exc
         return data
 
     def _save_data(self, data: dict) -> None:

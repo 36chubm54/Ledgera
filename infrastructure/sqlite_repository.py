@@ -4,7 +4,9 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date as dt_date
+from typing import TYPE_CHECKING
 
+from app.repository import RecordRepository
 from domain.asset import Asset, AssetCategory, AssetSnapshot
 from domain.debt import Debt, DebtKind, DebtOperationType, DebtPayment, DebtStatus
 from domain.goal import Goal
@@ -12,10 +14,12 @@ from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, 
 from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
-from infrastructure.repositories import RecordRepository
 from storage.sqlite_storage import SQLiteStorage
 from utils.money import rate_to_text, to_minor_units, to_money_float, to_rate_float
 from utils.tag_utils import color_for_tag, normalize_tag_name, normalize_tag_names
+
+if TYPE_CHECKING:
+    from app.services import CurrencyService
 
 SYSTEM_WALLET_ID = 1
 
@@ -1450,6 +1454,13 @@ class SQLiteRecordRepository(RecordRepository):
         sql += "\nORDER BY id"
         rows = self._conn.execute(sql, params).fetchall()
         return [self._asset_from_row(row) for row in rows]
+
+    def get_total_assets_kzt(
+        self, currency: CurrencyService, *, active_only: bool = True
+    ) -> float | None:
+        from services.asset_service import AssetService
+
+        return AssetService(self, currency).get_total_assets_kzt(active_only=active_only)
 
     def get_asset_by_id(self, asset_id: int) -> Asset:
         row = self._conn.execute(

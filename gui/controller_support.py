@@ -27,6 +27,7 @@ class RecordListItem:
     wallet_label: str
     tags: tuple[str, ...]
     tags_text: str
+    description_text: str
     extra: str
     label: str
 
@@ -92,6 +93,7 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
         currency = str(record.currency or "KZT").upper()
         category = str(getattr(record, "category", "") or "")
         wallet_label = f"W{int(getattr(record, 'wallet_id', 0) or 0)}"
+        description_text = str(getattr(record, "description", "") or "").strip()
         signature = (
             f"{record.date}|{record_type}|{record.category}|"
             f"{amount_original}|{record.currency}|{amount_kzt}|{repository_index}"
@@ -118,6 +120,7 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
                 wallet_label=wallet_label,
                 tags=normalize_tag_names(tuple(getattr(record, "tags", ()) or ())),
                 tags_text=format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
+                description_text=description_text,
                 extra="",
                 label=label,
             )
@@ -139,12 +142,18 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
         date_value = source.date if isinstance(source.date, str) else source.date.isoformat()
         currency = str(source.currency or "KZT").upper()
         wallet_label = f"W{int(source.wallet_id)} -> W{int(target.wallet_id)}"
+        description = str(getattr(source, "description", "") or "").strip()
         extra = f"Commission: {commission:.2f} KZT" if commission > 0 else ""
+        category = f"Transfer #{transfer_id}"
+        if description:
+            category = f"{category} | {description}"
         label = (
             f"[{repository_index}] {date_value} - Transfer #{transfer_id} - "
             f"{amount_original:.2f} {currency} (={amount_kzt:.2f} KZT) "
             f"W{source.wallet_id} -> W{target.wallet_id}"
         )
+        if description:
+            label += f" | {description}"
         if commission > 0:
             label += f" | Commission: {commission:.2f} KZT"
         items.append(
@@ -156,13 +165,14 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
                 domain_record_id=int(getattr(source, "id", 0) or 0),
                 date=str(date_value),
                 type_label="Transfer",
-                category=f"Transfer #{transfer_id}",
+                category=category,
                 amount_original=amount_original,
                 currency=currency,
                 amount_kzt=amount_kzt,
                 wallet_label=wallet_label,
                 tags=(),
                 tags_text="",
+                description_text=description,
                 extra=extra,
                 label=label,
             )

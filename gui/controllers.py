@@ -3,8 +3,15 @@ from __future__ import annotations
 import logging
 from dataclasses import replace
 
+from app.audit_runner import run_repository_audit
 from app.finance_service import ImportCapabilities
+from app.import_support import (
+    normalize_operation_ids_for_import as normalize_import_ids,
+)
+from app.import_support import run_import_transaction as run_import_op
+from app.preferences_service import OnlineStatusSnapshot, UIPreferencesService
 from app.record_service import RecordService
+from app.repository import RecordRepository
 from app.services import CurrencyService
 from app.use_cases import (
     AddAssetSnapshot,
@@ -59,13 +66,13 @@ from app.use_cases import (
     RecalculateDebt,
     RegisterDebtPayment,
     RegisterDebtWriteOff,
-    RunAudit,
     SetGoalCompleted,
     SoftDeleteWallet,
     UpdateAsset,
     UpdateBudgetLimit,
     UpdateDistributionItemPct,
     UpdateDistributionSubitemPct,
+    UpdateTransfer,
 )
 from domain.asset import Asset, AssetSnapshot
 from domain.audit import AuditReport
@@ -81,22 +88,13 @@ from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.validation import parse_ymd
 from domain.wallets import Wallet
-from gui.controller_import_support import (
-    normalize_operation_ids_for_import as normalize_import_ids,
-)
-from gui.controller_import_support import (
-    run_import_transaction as run_import_op,
-)
 from gui.controller_support import (
     RecordListItem,
     build_list_items,
     wallets_with_system_initial_balance,
 )
-from gui.i18n import tr
-from infrastructure.repositories import RecordRepository
 from infrastructure.sqlite_repository import SQLiteRecordRepository
 from services.asset_service import AssetService
-from services.audit_service import AuditService
 from services.balance_service import BalanceService, CashflowResult, WalletBalance
 from services.budget_service import BudgetService
 from services.dashboard_service import DashboardService
@@ -115,6 +113,7 @@ class FinancialController:
         self._repository = repository
         self._currency = currency_service
         self._record_service = RecordService(repository)
+        self._ui_preferences = UIPreferencesService(repository, currency_service)
         self._asset_service_instance: AssetService | None = None
         self._debt_service_instance: DebtService | None = None
         self._distribution_service_instance: DistributionService | None = None
@@ -130,6 +129,15 @@ class FinancialController:
 
     def delete_transfer(self, transfer_id: int) -> None:
         DeleteTransfer(self._repository).execute(transfer_id)
+
+    def get_transfer_for_edit(self, transfer_id: int) -> Transfer:
+        transfer = next(
+            (item for item in self._repository.load_transfers() if item.id == int(transfer_id)),
+            None,
+        )
+        if transfer is None:
+            raise ValueError(f"Transfer not found: {transfer_id}")
+        return transfer
 
     def transfer_id_by_repository_index(self, repository_index: int) -> int | None:
         from collections.abc import Callable
@@ -175,6 +183,23 @@ class FinancialController:
     def get_record_for_edit(self, record_id: int) -> Record:
         return self._repository.get_by_id(int(record_id))
 
+    def update_transfer_inline(
+        self,
+        transfer_id: int,
+        *,
+        new_date: str,
+        new_from_wallet_id: int,
+        new_to_wallet_id: int,
+        new_description: str = "",
+    ) -> None:
+        UpdateTransfer(self._repository, self._currency).execute(
+            transfer_id,
+            new_date=new_date,
+            new_from_wallet_id=new_from_wallet_id,
+            new_to_wallet_id=new_to_wallet_id,
+            new_description=new_description,
+        )
+
     def set_system_initial_balance(self, balance: float) -> None:
         self._repository.save_initial_balance(to_money_float(balance))
 
@@ -185,62 +210,29 @@ class FinancialController:
         return float(self._currency.get_rate(currency))
 
     def set_online_mode(self, enabled: bool) -> None:
-        """
-        Switch online mode for all API-dependent services.
-        Persists the setting to schema_meta.
-        """
-        self._currency.set_online(enabled)
-        if isinstance(self._repository, SQLiteRecordRepository):
-            self._repository.set_schema_meta("online_mode", "1" if enabled else "0")
+        self._ui_preferences.set_online_mode(enabled)
 
     def save_language_preference(self, code: str) -> None:
-        if isinstance(self._repository, SQLiteRecordRepository):
-            self._repository.set_schema_meta("app_language", str(code or "").strip().lower())
+        self._ui_preferences.save_language_preference(code)
 
     def load_language_preference(self) -> str | None:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            return None
-        value = self._repository.get_schema_meta("app_language")
-        return str(value).strip().lower() if value else None
+        return self._ui_preferences.load_language_preference()
 
     def save_theme_preference(self, name: str) -> None:
-        if isinstance(self._repository, SQLiteRecordRepository):
-            self._repository.set_schema_meta("app_theme", str(name or "").strip().lower())
+        self._ui_preferences.save_theme_preference(name)
 
     def load_theme_preference(self) -> str | None:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            return None
-        value = self._repository.get_schema_meta("app_theme")
-        return str(value).strip().lower() if value else None
+        return self._ui_preferences.load_theme_preference()
 
     def get_online_mode(self) -> bool:
         """Return current online mode state."""
         return self._currency.is_online
 
-    def get_online_status(self) -> dict[str, str]:
-        """Return human-readable status strings for the status bar."""
-        mode = (
-            tr("app.status.online", "Онлайн")
-            if self._currency.is_online
-            else tr("app.status.offline", "Офлайн")
-        )
-        last = self._currency.last_fetched_at
-        if last is not None:
-            currency_status = tr(
-                "app.status.updated", "Обновлено {time}", time=last.strftime("%H:%M")
-            )
-        elif self._currency.is_online:
-            currency_status = tr("app.status.currency_fetching", "Обновляем курсы...")
-        else:
-            currency_status = tr("app.status.currency_offline", "Курсы: офлайн")
-        return {"mode": mode, "currency": currency_status}
+    def get_online_status(self) -> OnlineStatusSnapshot:
+        return self._ui_preferences.get_online_status_snapshot()
 
     def load_online_mode_preference(self) -> bool:
-        """Load saved online mode preference from schema_meta."""
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            return False
-        value = self._repository.get_schema_meta("online_mode")
-        return value == "1"
+        return self._ui_preferences.load_online_mode_preference()
 
     def create_income(
         self,
@@ -731,10 +723,7 @@ class FinancialController:
         return ImportService(self, policy=ImportPolicy.FULL_BACKUP).import_mandatory_file(filepath)
 
     def run_audit(self) -> AuditReport:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Audit is supported only for SQLite repository")
-        use_case = RunAudit(AuditService(self._repository))
-        return use_case.execute()
+        return run_repository_audit(self._repository)
 
     def _budget_service(self) -> BudgetService:
         if not isinstance(self._repository, SQLiteRecordRepository):
