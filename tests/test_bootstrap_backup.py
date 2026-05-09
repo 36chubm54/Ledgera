@@ -147,6 +147,54 @@ def test_export_to_json_from_sqlite(tmp_path) -> None:
     assert snapshot["values_by_column"][item_keys[0]] == "100"
 
 
+def test_export_to_json_preserves_custom_tag_colors(tmp_path) -> None:
+    sqlite_path = tmp_path / "finance.db"
+    json_path = tmp_path / "data.json"
+    schema = _schema_path()
+
+    repo = SQLiteRecordRepository(str(sqlite_path), schema_path=schema)
+    repo.save_wallet(
+        Wallet(
+            id=1,
+            name="Main wallet",
+            currency="KZT",
+            initial_balance=0.0,
+            system=True,
+            allow_negative=False,
+            is_active=True,
+        )
+    )
+    repo.save(
+        IncomeRecord(
+            id=1,
+            date="2020-02-28",
+            wallet_id=1,
+            amount_original=100.0,
+            currency="KZT",
+            rate_at_operation=1.0,
+            amount_kzt=100.0,
+            category="Salary",
+            tags=("coursework",),
+        )
+    )
+    repo.set_tag_color("coursework", "#9B51E0")
+    repo.commit()
+    repo.close()
+
+    export_to_json(str(sqlite_path), str(json_path), schema_path=schema)
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["tags"] == [
+        {
+            "id": 1,
+            "name": "coursework",
+            "color": "#9B51E0",
+            "usage_count": 1,
+            "last_used_at": "2020-02-28",
+        }
+    ]
+
+
 def test_export_to_json_can_skip_autofreeze_for_background_export(tmp_path) -> None:
     sqlite_path = tmp_path / "finance.db"
     json_path = tmp_path / "data.json"

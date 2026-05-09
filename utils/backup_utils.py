@@ -418,6 +418,7 @@ def export_full_backup_to_json(
     *,
     wallets: Sequence[Wallet] | None = None,
     records: Sequence[Record],
+    tags: Sequence[Tag] = (),
     mandatory_expenses: Sequence[MandatoryExpenseRecord],
     budgets: Sequence[Budget] = (),
     debts: Sequence[Debt] = (),
@@ -449,6 +450,19 @@ def export_full_backup_to_json(
     tags_by_name: dict[str, Tag] = {}
     record_tag_rows: list[dict[str, Any]] = []
     next_tag_id = 1
+    for tag in tags:
+        normalized_name = normalize_tag_name(tag.name)
+        if not normalized_name:
+            continue
+        persisted = Tag(
+            id=int(tag.id),
+            name=normalized_name,
+            color=str(tag.color or ""),
+            usage_count=int(getattr(tag, "usage_count", 0) or 0),
+            last_used_at=str(getattr(tag, "last_used_at", "") or ""),
+        )
+        tags_by_name[normalized_name.casefold()] = persisted
+        next_tag_id = max(next_tag_id, persisted.id + 1)
     for record in records:
         record_id = int(record.id)
         for tag_name in normalize_tag_names(tuple(getattr(record, "tags", ()) or ())):

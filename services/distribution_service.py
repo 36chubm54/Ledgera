@@ -5,8 +5,10 @@ from __future__ import annotations
 import re
 import sqlite3
 from calendar import monthrange
+from collections.abc import Sequence
 from datetime import date as dt_date
 from decimal import ROUND_HALF_UP, Decimal
+from typing import cast
 
 from domain.distribution import (
     DistributionItem,
@@ -787,25 +789,42 @@ class DistributionService:
         return f"{value:,.0f}"
 
     @staticmethod
-    def _row_to_item(row: tuple) -> DistributionItem:
+    def _to_int(value: object) -> int:
+        return int(cast(int | str, value))
+
+    @staticmethod
+    def _to_float(value: object) -> float:
+        return float(cast(float | int | str, value))
+
+    @staticmethod
+    def _row_to_item(row: sqlite3.Row | Sequence[object]) -> DistributionItem:
+        row_id = DistributionService._to_int(row[0])
+        sort_order = DistributionService._to_int(row[3])
+        pct = DistributionService._to_float(row[4])
+        pct_minor = DistributionService._to_int(row[5])
         return DistributionItem(
-            id=int(row[0]),
+            id=row_id,
             name=str(row[1]),
             group_name=str(row[2] or ""),
-            sort_order=int(row[3]),
-            pct=float(row[4]),
-            pct_minor=int(row[5]),
+            sort_order=sort_order,
+            pct=pct,
+            pct_minor=pct_minor,
             is_active=bool(row[6]),
         )
 
     @staticmethod
-    def _row_to_subitem(row: tuple) -> DistributionSubitem:
+    def _row_to_subitem(row: sqlite3.Row | Sequence[object]) -> DistributionSubitem:
+        row_id = DistributionService._to_int(row[0])
+        item_id = DistributionService._to_int(row[1])
+        sort_order = DistributionService._to_int(row[3])
+        pct = DistributionService._to_float(row[4])
+        pct_minor = DistributionService._to_int(row[5])
         return DistributionSubitem(
-            id=int(row[0]),
-            item_id=int(row[1]),
+            id=row_id,
+            item_id=item_id,
             name=str(row[2]),
-            sort_order=int(row[3]),
-            pct=float(row[4]),
-            pct_minor=int(row[5]),
+            sort_order=sort_order,
+            pct=pct,
+            pct_minor=pct_minor,
             is_active=bool(row[6]),
         )

@@ -10,6 +10,7 @@ from domain.distribution import DistributionItem, DistributionSubitem, FrozenDis
 from domain.goal import Goal
 from domain.import_policy import ImportPolicy
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord
+from domain.tags import Tag
 from domain.wallets import Wallet
 from utils import backup_utils as backup_utils_module
 from utils.backup_utils import (
@@ -178,6 +179,47 @@ def test_full_backup_roundtrip():
         assert imported_mandatory[0].auto_pay is True
         assert transfers == []
         assert summary[1] == 0
+    finally:
+        os.unlink(path)
+
+
+def test_full_backup_export_preserves_persisted_tag_colors() -> None:
+    records = [
+        ExpenseRecord(
+            id=1,
+            wallet_id=1,
+            date="2025-01-02",
+            amount_original=30.0,
+            currency="KZT",
+            rate_at_operation=1.0,
+            amount_kzt=30.0,
+            category="Food",
+            tags=("food",),
+        )
+    ]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+        path = tmp.name
+    try:
+        export_full_backup_to_json(
+            path,
+            wallets=[
+                Wallet(id=1, name="Main wallet", currency="KZT", initial_balance=0.0, system=True)
+            ],
+            records=records,
+            tags=[Tag(id=7, name="food", color="#123ABC")],
+            mandatory_expenses=[],
+        )
+        with open(path, encoding="utf-8") as fp:
+            payload = json.load(fp)
+        assert payload["data"]["tags"] == [
+            {
+                "id": 7,
+                "name": "food",
+                "color": "#123ABC",
+                "usage_count": 0,
+                "last_used_at": "",
+            }
+        ]
     finally:
         os.unlink(path)
 

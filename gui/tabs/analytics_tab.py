@@ -47,6 +47,7 @@ class AnalyticsTabBindings:
     monthly_tree: ttk.Treeview
     timeline_canvas: tk.Canvas
     refresh: Callable[[], None]
+    toggle_tag_mode: Callable[[], None]
 
 
 def _draw_net_worth_line(canvas: tk.Canvas, data: list) -> None:
@@ -154,6 +155,21 @@ def _draw_breakdown_pie(canvas: tk.Canvas, data: list) -> None:
     if total <= 0:
         return
 
+    rows = list(data)
+    show_other_legend = False
+    if len(rows) > 10:
+        other_total = sum(float(getattr(item, "total_kzt", 0.0)) for item in rows[9:])
+        rows = rows[:9]
+        if other_total > 0:
+            show_other_legend = True
+            rows.append(
+                {
+                    "label": tr("common.other", "Прочие"),
+                    "total_kzt": other_total,
+                    "color": palette.chart_empty,
+                }
+            )
+
     w = max(canvas.winfo_width(), 200)
     h = max(canvas.winfo_height(), 200)
     margin = 10
@@ -161,12 +177,27 @@ def _draw_breakdown_pie(canvas: tk.Canvas, data: list) -> None:
     r = min(cx, cy) - margin
 
     angle = 90.0
-    for i, item in enumerate(data[:10]):
-        value = float(getattr(item, "total_kzt", 0.0))
+    for i, item in enumerate(rows):
+        if isinstance(item, dict):
+            value = float(item.get("total_kzt", 0.0))
+            color = str(item.get("color", "") or palette.chart_empty)
+        else:
+            value = float(getattr(item, "total_kzt", 0.0))
+            color = str(
+                getattr(item, "color", "") or palette.chart_series[i % len(palette.chart_series)]
+            )
         sweep = value / total * 360.0
-        color = str(
-            getattr(item, "color", "") or palette.chart_series[i % len(palette.chart_series)]
-        )
+        if sweep >= 359.9:
+            canvas.create_oval(
+                cx - r,
+                cy - r,
+                cx + r,
+                cy + r,
+                fill=color,
+                outline=palette.chart_outline,
+                width=1,
+            )
+            break
         canvas.create_arc(
             cx - r,
             cy - r,
@@ -180,77 +211,24 @@ def _draw_breakdown_pie(canvas: tk.Canvas, data: list) -> None:
         )
         angle -= sweep
 
-
-def _draw_tag_bar_chart(canvas: tk.Canvas, data: list) -> None:
-    """Draw a horizontal bar chart for tag coverage."""
-    canvas.delete("all")
-    palette = get_palette()
-    canvas.configure(bg=palette.surface_elevated, highlightbackground=palette.border_soft)
-    if not data:
-        canvas.create_text(
-            10,
-            10,
-            anchor="nw",
-            text=tr("common.empty_short", "Нет данных"),
+    if show_other_legend:
+        legend_y = h - 14
+        canvas.create_rectangle(
+            12,
+            legend_y - 8,
+            24,
+            legend_y + 4,
             fill=palette.chart_empty,
-            font=("Segoe UI", 11),
+            outline=palette.chart_outline,
+            width=1,
         )
-        return
-
-    rows = list(data[:8])
-    max_value = max(float(getattr(item, "total_kzt", 0.0)) for item in rows)
-    if max_value <= 0:
-        return
-
-    width = max(canvas.winfo_width(), 420)
-    height = max(canvas.winfo_height(), 260)
-    max_label_len = max(len(display_tag_name(str(getattr(item, "tag", "") or ""))) for item in rows)
-    left_pad = max(96, min(150, 44 + max_label_len * 8))
-    right_pad = 64
-    top_pad = 18
-    row_gap = 12
-    bar_height = max(22, min(30, (height - top_pad * 2) // max(1, len(rows)) - row_gap))
-
-    for index, item in enumerate(rows):
-        y = top_pad + index * (bar_height + row_gap)
-        value = float(getattr(item, "total_kzt", 0.0))
-        ratio = value / max_value if max_value > 0 else 0.0
-        bar_width = max(2, int((width - left_pad - right_pad) * ratio))
-        label = display_tag_name(str(getattr(item, "tag", "") or ""))
-        color = str(getattr(item, "color", "") or palette.accent_blue)
-
         canvas.create_text(
-            left_pad - 10,
-            y + bar_height / 2,
-            text=label,
-            anchor="e",
-            fill=color,
-            font=("Segoe UI", 9, "bold"),
-        )
-        canvas.create_rectangle(
-            left_pad,
-            y,
-            width - right_pad,
-            y + bar_height,
-            fill=palette.surface_alt,
-            outline="",
-        )
-        canvas.create_rectangle(
-            left_pad,
-            y,
-            left_pad + bar_width,
-            y + bar_height,
-            fill=color,
-            outline="",
-        )
-        text_x = min(width - right_pad + 2, left_pad + bar_width + 8)
-        canvas.create_text(
-            text_x,
-            y + bar_height / 2,
-            text=f"{value:,.0f}",
+            30,
+            legend_y - 2,
             anchor="w",
+            text=tr("analytics.other_expenses", "Прочие расходы"),
             fill=palette.text_primary,
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 8),
         )
 
 
@@ -431,7 +409,7 @@ def build_analytics_tab(
     breakdown_frame = cast(ttk.Frame, breakdown_card.winfo_children()[-1])
     breakdown_title_label = cast(ttk.Label, breakdown_card.winfo_children()[0])
     breakdown_frame.grid_columnconfigure(0, weight=3)
-    breakdown_frame.grid_columnconfigure(1, weight=2)
+    breakdown_frame.grid_columnconfigure(1, weight=2, minsize=240)
     breakdown_frame.grid_rowconfigure(0, weight=1)
 
     breakdown_left = ttk.Frame(breakdown_frame, padding=(10, 10))
@@ -526,12 +504,13 @@ def build_analytics_tab(
 
     breakdown_right = ttk.Frame(breakdown_frame, padding=(0, 10, 10, 10))
     breakdown_right.grid(row=0, column=1, sticky="nsew")
+    breakdown_right.grid_propagate(False)
     breakdown_right.grid_columnconfigure(0, weight=1)
     breakdown_right.grid_rowconfigure(0, weight=1)
     category_canvas = tk.Canvas(
         breakdown_right,
-        width=420,
-        height=260,
+        width=220,
+        height=220,
         bg=palette.surface_elevated,
         highlightthickness=0,
     )
@@ -579,9 +558,9 @@ def build_analytics_tab(
     def _apply_breakdown_mode() -> None:
         is_tags_mode = bool(breakdown_by_tags_var.get())
         if is_tags_mode:
-            breakdown_frame.grid_columnconfigure(0, weight=4)
-            breakdown_frame.grid_columnconfigure(1, weight=4)
-            category_canvas.configure(width=420, height=260)
+            breakdown_frame.grid_columnconfigure(0, weight=3)
+            breakdown_frame.grid_columnconfigure(1, weight=2, minsize=240)
+            category_canvas.configure(width=220, height=220)
             category_breakdown_frame.grid_remove()
             tag_breakdown_frame.grid()
             breakdown_title_label.configure(
@@ -589,8 +568,8 @@ def build_analytics_tab(
             )
         else:
             breakdown_frame.grid_columnconfigure(0, weight=3)
-            breakdown_frame.grid_columnconfigure(1, weight=2)
-            category_canvas.configure(width=200, height=200)
+            breakdown_frame.grid_columnconfigure(1, weight=2, minsize=240)
+            category_canvas.configure(width=220, height=220)
             tag_breakdown_frame.grid_remove()
             category_breakdown_frame.grid()
             breakdown_title_label.configure(
@@ -610,10 +589,7 @@ def build_analytics_tab(
         nonlocal redraw_job
         redraw_job = None
         _draw_net_worth_line(timeline_canvas, last_timeline_data)
-        if breakdown_by_tags_var.get():
-            _draw_tag_bar_chart(category_canvas, last_breakdown_data)
-        else:
-            _draw_breakdown_pie(category_canvas, last_breakdown_data)
+        _draw_breakdown_pie(category_canvas, last_breakdown_data)
 
     def _refresh_analytics() -> None:
         nonlocal last_timeline_data, last_breakdown_data
@@ -789,10 +765,7 @@ def build_analytics_tab(
                 )
 
             last_breakdown_data = list(tag_data) if is_tags_mode else list(spending_data)
-            if is_tags_mode:
-                _draw_tag_bar_chart(category_canvas, last_breakdown_data)
-            else:
-                _draw_breakdown_pie(category_canvas, last_breakdown_data)
+            _draw_breakdown_pie(category_canvas, last_breakdown_data)
 
             monthly_data = context.controller.get_monthly_summary(start_date=start, end_date=end)
             monthly_tree.delete(*monthly_tree.get_children())
@@ -827,6 +800,10 @@ def build_analytics_tab(
     refresh_button.configure(command=_refresh_analytics)
     breakdown_by_tags_check.configure(command=_refresh_analytics)
 
+    def _toggle_tag_mode() -> None:
+        breakdown_by_tags_var.set(not bool(breakdown_by_tags_var.get()))
+        _refresh_analytics()
+
     def _bind_enter_refresh(entry: ttk.Entry) -> None:
         entry.bind("<Return>", lambda _event: _refresh_analytics())
 
@@ -850,4 +827,5 @@ def build_analytics_tab(
         monthly_tree=monthly_tree,
         timeline_canvas=timeline_canvas,
         refresh=_refresh_analytics,
+        toggle_tag_mode=_toggle_tag_mode,
     )

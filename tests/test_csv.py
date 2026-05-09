@@ -8,6 +8,7 @@ import pytest
 from domain.records import ExpenseRecord, IncomeRecord
 from domain.reports import Report
 from domain.transfers import Transfer
+from utils.csv_utils import report_from_csv, report_to_csv
 
 
 def test_to_csv():
@@ -19,7 +20,7 @@ def test_to_csv():
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp:
         tmp_path = tmp.name
     try:
-        report.to_csv(tmp_path)
+        report_to_csv(report, tmp_path)
         with open(tmp_path, encoding="utf-8") as f:
             reader = csv.reader(f)
             rows = list(reader)
@@ -42,7 +43,7 @@ def test_to_csv_with_initial_balance():
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp:
         tmp_path = tmp.name
     try:
-        report.to_csv(tmp_path)
+        report_to_csv(report, tmp_path)
         with open(tmp_path, encoding="utf-8") as f:
             reader = csv.reader(f)
             rows = list(reader)
@@ -68,7 +69,7 @@ def test_to_csv_with_opening_balance_label_for_filtered_report():
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp:
         tmp_path = tmp.name
     try:
-        report.to_csv(tmp_path)
+        report_to_csv(report, tmp_path)
         with open(tmp_path, encoding="utf-8") as f:
             rows = list(csv.reader(f))
         assert rows[0] == [
@@ -94,7 +95,7 @@ TOTAL,,,-2000.00"""
         tmp.write(csv_content)
         tmp_path = tmp.name
     try:
-        report = Report.from_csv(tmp_path)
+        report = report_from_csv(tmp_path)
         records = report.records()
         assert len(records) == 3
 
@@ -130,7 +131,7 @@ TOTAL,,,-50.00"""
         tmp.write(csv_content)
         tmp_path = tmp.name
     try:
-        report = Report.from_csv(tmp_path)
+        report = report_from_csv(tmp_path)
         records = report.records()
         assert len(records) == 2
 
@@ -152,7 +153,7 @@ TOTAL,,,-2000.00"""
         tmp.write(csv_content)
         tmp_path = tmp.name
     try:
-        report = Report.from_csv(tmp_path)
+        report = report_from_csv(tmp_path)
         records = report.records()
         assert len(records) == 2
         assert report._initial_balance == 50000.0
@@ -164,7 +165,7 @@ TOTAL,,,-2000.00"""
 
 def test_from_csv_file_not_found():
     with pytest.raises(FileNotFoundError):
-        Report.from_csv("nonexistent_file.csv")
+        report_from_csv("nonexistent_file.csv")
 
 
 def test_import_records_from_csv_with_partial_errors_keeps_valid_rows():
@@ -239,7 +240,7 @@ def test_csv_export_grouped_drill_down():
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp:
         tmp_path = tmp.name
     try:
-        filtered.to_csv(tmp_path)
+        report_to_csv(filtered, tmp_path)
         with open(tmp_path, encoding="utf-8") as f:
             reader = csv.reader(f)
             rows = list(reader)

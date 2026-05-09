@@ -361,23 +361,6 @@ class Report:
 
         return year, rows
 
-    def to_csv(self, filepath: str) -> None:
-        from utils.csv_utils import report_to_csv
-
-        report_to_csv(self, filepath)
-
-    @staticmethod
-    def from_csv(filepath: str) -> "Report":
-        from utils.csv_utils import report_from_csv
-
-        return report_from_csv(filepath)
-
-    @staticmethod
-    def from_xlsx(filepath: str) -> "Report":
-        from utils.excel_utils import report_from_xlsx
-
-        return report_from_xlsx(filepath)
-
     @staticmethod
     def _sort_key(record: Record) -> tuple[int, dt_date]:
         parsed = Report._record_date(record)

@@ -57,7 +57,7 @@ class _FakeApp:
             inline_editor_active=MagicMock(return_value=False),
         )
         self._reports_tab = SimpleNamespace(_on_generate=MagicMock(), _export=MagicMock())
-        self._analytics_bindings = SimpleNamespace(refresh=MagicMock())
+        self._analytics_bindings = SimpleNamespace(refresh=MagicMock(), toggle_tag_mode=MagicMock())
         self._budget_bindings = SimpleNamespace(add_budget=MagicMock(), delete_budget=MagicMock())
         self._debt_bindings = SimpleNamespace(
             pay_debt=MagicMock(),
@@ -68,7 +68,7 @@ class _FakeApp:
         self._refresh_charts = MagicMock()
         self._refresh_budgets = MagicMock()
         self._refresh_all = MagicMock()
-        self._shell = self
+        self._shell: object = self
         self._grab_widget = None
 
     def bind_all(self, sequence: str, handler, add: str | None = None) -> None:
@@ -243,6 +243,59 @@ def test_ctrl_w_writes_off_debt_only_on_debts_tab_without_text_focus() -> None:
     app._debt_bindings.write_off_debt.assert_called_once()
 
 
+def test_ctrl_r_refreshes_analytics_even_when_entry_has_focus() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    app = _make_app()
+    try:
+        register_hotkeys(app)
+        entry = ttk.Entry(root)
+        app._shell = root
+        app._focus_widget = entry
+        app._notebook.select(app._tab_widgets["analytics"])
+        _trigger_global_binding(
+            app, "<Control-KeyPress>", _key_event(keysym="r", char="r", keycode=82, state=0x0004)
+        )
+        app._analytics_bindings.refresh.assert_called_once()
+    finally:
+        root.destroy()
+
+
+def test_ctrl_t_toggles_analytics_tag_mode_only_on_analytics_tab() -> None:
+    app = _make_app()
+    register_hotkeys(app)
+    app._focus_widget = object()
+
+    _trigger_global_binding(
+        app, "<Control-KeyPress>", _key_event(keysym="t", char="t", keycode=84, state=0x0004)
+    )
+    app._analytics_bindings.toggle_tag_mode.assert_not_called()
+
+    app._notebook.select(app._tab_widgets["analytics"])
+    _trigger_global_binding(
+        app, "<Control-KeyPress>", _key_event(keysym="t", char="t", keycode=84, state=0x0004)
+    )
+    app._analytics_bindings.toggle_tag_mode.assert_called_once()
+
+
+def test_ctrl_t_toggles_analytics_tag_mode_even_when_entry_has_focus() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    app = _make_app()
+    try:
+        register_hotkeys(app)
+        entry = ttk.Entry(root)
+        app._shell = root
+        app._focus_widget = entry
+        app._notebook.select(app._tab_widgets["analytics"])
+        _trigger_global_binding(
+            app, "<Control-KeyPress>", _key_event(keysym="t", char="t", keycode=84, state=0x0004)
+        )
+        app._analytics_bindings.toggle_tag_mode.assert_called_once()
+    finally:
+        root.destroy()
+
+
 def test_enter_does_not_fire_when_modal_dialog_has_focus() -> None:
     root = tk.Tk()
     root.withdraw()
@@ -292,7 +345,7 @@ def test_show_hotkey_help_populates_expected_rows() -> None:
         ]
         assert len(trees) == 1
         tree = trees[0]
-        assert len(tree.get_children()) == 24
+        assert len(tree.get_children()) == 25
     finally:
         if getattr(app, "_hotkey_help_dialog", None) is not None:
             try:

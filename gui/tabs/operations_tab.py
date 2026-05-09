@@ -22,7 +22,7 @@ from gui.tabs.operations_support import (
     safe_destroy,
     show_import_preview_dialog,
 )
-from gui.tooltip import Tooltip
+from gui.tooltip import Tooltip, show_popup_tooltip
 from gui.ui_helpers import (
     ask_confirm,
     show_error,
@@ -577,19 +577,13 @@ def build_operations_tab(
             return
         _hide_tags_tooltip()
         tags_tooltip_text["value"] = text
-        tags_tooltip_window = tw = tk.Toplevel(tags_tree)
-        tw.wm_overrideredirect(True)
-        label = tk.Label(
-            tw,
+        tags_tooltip_window = show_popup_tooltip(
+            owner=tags_tree,
             text=text,
-            justify=tk.LEFT,
-            background="#ffffe1",
-            relief=tk.SOLID,
-            borderwidth=1,
-            font=("Segoe UI", 9),
+            preferred_x=event.x_root + 12,
+            preferred_y_bottom=event.y_root + 12,
+            widget_top_y=event.y_root,
         )
-        label.pack(ipadx=2, ipady=1)
-        tw.wm_geometry(f"+{event.x_root + 12}+{event.y_root + 12}")
 
     y_scroll = ttk.Scrollbar(list_frame, orient="vertical")
     y_scroll.grid(row=0, column=1, sticky="ns", pady=PAD_SM)
@@ -859,6 +853,176 @@ def build_operations_tab(
         except (tk.TclError, RuntimeError, AttributeError):
             return False
 
+    def edit_selected_transfer_inline(transfer_id: int) -> None:
+        try:
+            transfer = context.controller.get_transfer_for_edit(transfer_id)
+        except (ValueError, TypeError, RuntimeError):
+            show_error(
+                tr(
+                    "operations.transfer.error.edit_load_failed",
+                    "Не удалось загрузить перевод для редактирования.",
+                )
+            )
+            return
+
+        if edit_panel_state["panel"] is not None:
+            try:
+                edit_panel_state["panel"].destroy()
+            except (tk.TclError, RuntimeError):
+                pass
+            edit_panel_state["panel"] = None
+
+        edit_panel = ttk.Frame(list_frame, style="InlinePanel.TFrame", padding=(8, 6))
+        edit_panel.grid(row=4, column=0, columnspan=2, padx=6, sticky="ew")
+        edit_panel_state["panel"] = edit_panel
+
+        ttk.Label(edit_panel, text=tr("common.date", "Дата:")).grid(row=0, column=0, sticky="w")
+        date_edit_entry = ttk.Entry(edit_panel)
+        date_edit_entry.grid(row=0, column=1, sticky="ew")
+        ttk.Label(edit_panel, text=tr("operations.transfer.from", "Из кошелька:")).grid(
+            row=1, column=0, sticky="w"
+        )
+        from_wallet_var = tk.StringVar(value="")
+        from_wallet_menu = ttk.Combobox(
+            edit_panel,
+            textvariable=from_wallet_var,
+            values=[],
+            state="readonly",
+        )
+        from_wallet_menu.grid(row=1, column=1, sticky="ew")
+        ttk.Label(edit_panel, text=tr("operations.transfer.to", "В кошелек:")).grid(
+            row=2, column=0, sticky="w"
+        )
+        to_wallet_var = tk.StringVar(value="")
+        to_wallet_menu = ttk.Combobox(
+            edit_panel,
+            textvariable=to_wallet_var,
+            values=[],
+            state="readonly",
+        )
+        to_wallet_menu.grid(row=2, column=1, sticky="ew")
+        ttk.Label(edit_panel, text=tr("operations.transfer.description", "Описание:")).grid(
+            row=3, column=0, sticky="w"
+        )
+        description_edit_entry = ttk.Entry(edit_panel)
+        description_edit_entry.grid(row=3, column=1, sticky="ew")
+        edit_panel.grid_columnconfigure(1, weight=1)
+
+        date_value = (
+            transfer.date.isoformat() if hasattr(transfer.date, "isoformat") else str(transfer.date)
+        )
+        date_edit_entry.insert(0, date_value)
+        description_edit_entry.insert(0, transfer.description)
+
+        wallet_edit_map: dict[str, int] = {
+            f"[{wallet.id}] {wallet.name} ({wallet.currency})": wallet.id
+            for wallet in context.controller.load_active_wallets()
+        }
+        wallet_labels = list(wallet_edit_map.keys()) or [""]
+        from_wallet_menu["values"] = wallet_labels
+        to_wallet_menu["values"] = wallet_labels
+        from_wallet_var.set(
+            next(
+                (
+                    label
+                    for label, wallet_id in wallet_edit_map.items()
+                    if int(wallet_id) == int(transfer.from_wallet_id)
+                ),
+                wallet_labels[0],
+            )
+        )
+        to_wallet_var.set(
+            next(
+                (
+                    label
+                    for label, wallet_id in wallet_edit_map.items()
+                    if int(wallet_id) == int(transfer.to_wallet_id)
+                ),
+                wallet_labels[0],
+            )
+        )
+
+        def cancel_edit() -> None:
+            if edit_panel_state["panel"] is not None:
+                safe_destroy(edit_panel_state["panel"])
+                edit_panel_state["panel"] = None
+
+        def save_edit() -> None:
+            new_date = date_edit_entry.get().strip()
+            if not new_date:
+                show_error(tr("operations.transfer.error.date_required", "Укажите дату перевода."))
+                return
+            new_from_wallet_id = wallet_edit_map.get(from_wallet_var.get())
+            new_to_wallet_id = wallet_edit_map.get(to_wallet_var.get())
+            if new_from_wallet_id is None or new_to_wallet_id is None:
+                show_error(
+                    tr(
+                        "operations.transfer.error.wallets_required",
+                        "Выберите кошелек отправителя и получателя.",
+                    )
+                )
+                return
+            try:
+                context.controller.update_transfer_inline(
+                    transfer_id,
+                    new_date=new_date,
+                    new_from_wallet_id=new_from_wallet_id,
+                    new_to_wallet_id=new_to_wallet_id,
+                    new_description=description_edit_entry.get().strip(),
+                )
+                show_info(tr("operations.transfer.updated", "Перевод обновлен."))
+                refresh_operation_views(context)
+                _refresh_category_combo()
+                cancel_edit()
+            except (DomainError, ValueError, TypeError, RuntimeError) as error:
+                log_ui_error(
+                    logger,
+                    "UI_OPS_EDIT_TRANSFER_FAILED",
+                    error,
+                    transfer_id=transfer_id,
+                    new_from_wallet_id=new_from_wallet_id,
+                    new_to_wallet_id=new_to_wallet_id,
+                )
+                show_error(
+                    tr(
+                        "operations.transfer.error.update_failed",
+                        "Не удалось обновить перевод: {error}",
+                        error=error,
+                    )
+                )
+
+        edit_buttons = ttk.Frame(edit_panel, style="InlinePanel.TFrame")
+        edit_buttons.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        edit_buttons.grid_columnconfigure(0, weight=1)
+        edit_buttons.grid_columnconfigure(1, weight=1)
+        save_button = ttk.Button(
+            edit_buttons,
+            text=tr("common.save", "Сохранить"),
+            command=save_edit,
+            style="Primary.TButton",
+        )
+        save_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        cancel_button = ttk.Button(
+            edit_buttons,
+            text=tr("common.cancel", "Отмена"),
+            command=cancel_edit,
+        )
+        cancel_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        for widget in (
+            date_edit_entry,
+            from_wallet_menu,
+            to_wallet_menu,
+            description_edit_entry,
+            save_button,
+            cancel_button,
+        ):
+            widget.bind("<Escape>", lambda _event: (cancel_edit(), "break")[1], add="+")
+        date_edit_entry.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
+        to_wallet_menu.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
+        description_edit_entry.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
+        date_edit_entry.focus_set()
+        date_edit_entry.selection_range(0, tk.END)
+
     def edit_selected_record_inline() -> None:
         selection = records_tree.selection()
         if not selection:
@@ -883,12 +1047,7 @@ def build_operations_tab(
             return
 
         if record.transfer_id is not None:
-            show_error(
-                tr(
-                    "operations.error.transfer_edit_forbidden",
-                    "Записи, связанные с переводом, редактировать нельзя.",
-                )
-            )
+            edit_selected_transfer_inline(int(record.transfer_id))
             return
         if str(getattr(record, "category", "") or "").strip().lower() == "transfer":
             show_error(

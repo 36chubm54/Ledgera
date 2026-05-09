@@ -56,10 +56,7 @@ class ReportsFrame(ttk.Frame):
     def _build_controls(self) -> None:
         controls = ttk.Frame(self)
         controls.grid(row=0, column=0, sticky="ew")
-        controls.grid_columnconfigure(1, weight=1)
-        controls.grid_columnconfigure(3, weight=1)
-        controls.grid_columnconfigure(5, weight=1)
-        controls.grid_columnconfigure(7, weight=1)
+        controls.grid_columnconfigure(0, weight=1)
 
         self.period_start_var = tk.StringVar()
         self.period_end_var = tk.StringVar()
@@ -69,48 +66,69 @@ class ReportsFrame(ttk.Frame):
         self.group_var = tk.BooleanVar(value=True)
         self.totals_mode_var = tk.StringVar(value="fixed")
 
-        ttk.Label(controls, text=tr("common.from", "С даты:")).grid(row=0, column=0, sticky="w")
-        ttk.Entry(controls, textvariable=self.period_start_var, width=16).grid(
-            row=0, column=1, sticky="ew", padx=(6, 12)
+        top_filters = ttk.Frame(controls)
+        top_filters.grid(row=0, column=0, sticky="ew")
+        for column in (1, 3, 5, 7):
+            top_filters.grid_columnconfigure(column, weight=1, uniform="reports_filters")
+
+        ttk.Label(top_filters, text=tr("common.from", "С даты:")).grid(
+            row=0, column=0, sticky="w"
+        )
+        ttk.Entry(top_filters, textvariable=self.period_start_var, width=16).grid(
+            row=0, column=1, sticky="ew", padx=(6, 16)
         )
 
-        ttk.Label(controls, text=tr("common.to", "По дату:")).grid(row=0, column=2, sticky="w")
-        ttk.Entry(controls, textvariable=self.period_end_var, width=16).grid(
-            row=0, column=3, sticky="ew", padx=(6, 12)
+        ttk.Label(top_filters, text=tr("common.to", "По дату:")).grid(row=0, column=2, sticky="w")
+        ttk.Entry(top_filters, textvariable=self.period_end_var, width=16).grid(
+            row=0, column=3, sticky="ew", padx=(6, 16)
         )
 
-        ttk.Label(controls, text=tr("common.category", "Категория:")).grid(
+        ttk.Label(top_filters, text=tr("common.category", "Категория:")).grid(
             row=0, column=4, sticky="w"
         )
         self.category_combo = ttk.Combobox(
-            controls, textvariable=self.category_var, values=[], width=18
+            top_filters, textvariable=self.category_var, values=[], width=18
         )
-        self.category_combo.grid(row=0, column=5, sticky="ew", padx=(6, 12))
+        self.category_combo.grid(row=0, column=5, sticky="ew", padx=(6, 16))
 
-        ttk.Label(controls, text=tr("common.tags", "Теги:")).grid(row=0, column=6, sticky="w")
-        self.tag_combo = ttk.Combobox(controls, textvariable=self.tag_var, values=[], width=18)
-        self.tag_combo.grid(row=0, column=7, sticky="ew", padx=(6, 12))
-
-        ttk.Label(controls, text=tr("common.wallet", "Кошелек:")).grid(row=0, column=9, sticky="w")
+        ttk.Label(top_filters, text=tr("common.wallet", "Кошелек:")).grid(
+            row=0, column=6, sticky="w"
+        )
         self.wallet_menu = ttk.Combobox(
-            controls,
+            top_filters,
             textvariable=self.wallet_var,
             values=[],
             state="readonly",
         )
-        self.wallet_menu.grid(row=0, column=10, sticky="ew", padx=(6, 0))
+        self.wallet_menu.grid(row=0, column=7, sticky="ew", padx=(6, 0))
 
+        middle_row = ttk.Frame(controls)
+        middle_row.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        middle_row.grid_columnconfigure(0, weight=3)
+        middle_row.grid_columnconfigure(1, weight=2)
+        middle_row.grid_columnconfigure(2, weight=3)
+
+        tag_filters = ttk.Frame(middle_row)
+        tag_filters.grid(row=0, column=0, sticky="ew")
+        tag_filters.grid_columnconfigure(1, weight=1)
+        ttk.Label(tag_filters, text=tr("common.tags", "Теги:")).grid(row=0, column=0, sticky="w")
+        self.tag_combo = ttk.Combobox(tag_filters, textvariable=self.tag_var, values=[], width=18)
+        self.tag_combo.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
+        group_frame = ttk.Frame(middle_row)
+        group_frame.grid(row=0, column=1, sticky="ew", padx=(16, 16))
+        group_frame.grid_columnconfigure(1, weight=1)
         ttk.Checkbutton(
-            controls,
+            group_frame,
             text=tr("reports.group_by_category", "Группировать по категориям"),
             variable=self.group_var,
             command=self._apply_group_ui_state,
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ).grid(row=0, column=0, sticky="w")
 
         self._group_status_var = tk.StringVar(value="")
-        self.group_status_label = ttk.Label(controls, textvariable=self._group_status_var)
+        self.group_status_label = ttk.Label(group_frame, textvariable=self._group_status_var)
         self.group_status_label.grid(
-            row=1, column=2, columnspan=3, sticky="w", padx=(12, 0), pady=(8, 0)
+            row=0, column=1, sticky="w", padx=(12, 0)
         )
 
         # Hint for grouped view
@@ -124,14 +142,14 @@ class ReportsFrame(ttk.Frame):
         )
 
         self.group_back_button = ttk.Button(
-            controls,
+            group_frame,
             text=tr("common.back", "Назад"),
             command=self._on_group_back,
         )
-        self.group_back_button.grid(row=1, column=5, sticky="w", padx=(12, 0), pady=(6, 0))
+        self.group_back_button.grid(row=0, column=2, sticky="w", padx=(12, 0))
 
-        totals = ttk.Frame(controls)
-        totals.grid(row=1, column=6, columnspan=4, sticky="e", pady=(6, 0))
+        totals = ttk.Frame(middle_row)
+        totals.grid(row=0, column=2, sticky="e")
         ttk.Label(totals, text=tr("reports.totals_mode", "Режим итогов:")).grid(
             row=0, column=0, sticky="w", padx=(0, 8)
         )
@@ -151,7 +169,7 @@ class ReportsFrame(ttk.Frame):
         ).grid(row=0, column=2, sticky="w")
 
         buttons = ttk.Frame(controls)
-        buttons.grid(row=2, column=0, columnspan=11, sticky="w", pady=(10, 0))
+        buttons.grid(row=2, column=0, sticky="w", pady=(10, 0))
         ttk.Button(
             buttons,
             text=tr("reports.generate", "Сформировать"),

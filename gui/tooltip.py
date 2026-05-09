@@ -40,6 +40,55 @@ def _calculate_tooltip_position(
     return x, y
 
 
+def show_popup_tooltip(
+    *,
+    owner: tk.Widget,
+    text: str,
+    preferred_x: int,
+    preferred_y_bottom: int,
+    widget_top_y: int,
+    wraplength: int = 320,
+    background: str = "#ffffe1",
+    borderwidth: int = 1,
+    padx: int = 2,
+    pady: int = 1,
+) -> tk.Toplevel:
+    tooltip = tk.Toplevel(owner)
+    tooltip.withdraw()
+    tooltip.wm_overrideredirect(True)
+    label = tk.Label(
+        tooltip,
+        text=text,
+        justify=tk.LEFT,
+        background=background,
+        relief=tk.SOLID,
+        borderwidth=borderwidth,
+        font=("Segoe UI", 9),
+        wraplength=wraplength,
+    )
+    label.pack(ipadx=padx, ipady=pady)
+    tooltip.update_idletasks()
+
+    root = owner.winfo_toplevel()
+    x, y = _calculate_tooltip_position(
+        preferred_x=preferred_x,
+        preferred_y_bottom=preferred_y_bottom,
+        widget_top_y=widget_top_y,
+        tooltip_width=tooltip.winfo_width(),
+        tooltip_height=tooltip.winfo_height(),
+        boundary_left=root.winfo_rootx(),
+        boundary_right=min(root.winfo_rootx() + root.winfo_width(), owner.winfo_screenwidth()),
+        boundary_top=root.winfo_rooty(),
+        boundary_bottom=min(
+            root.winfo_rooty() + root.winfo_height(),
+            owner.winfo_screenheight(),
+        ),
+    )
+    tooltip.wm_geometry(f"+{x}+{y}")
+    tooltip.deiconify()
+    return tooltip
+
+
 class Tooltip:
     """Простой Tooltip для tkinter/ttk виджетов."""
 

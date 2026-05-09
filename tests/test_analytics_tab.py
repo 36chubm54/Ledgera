@@ -4,10 +4,11 @@ import sqlite3
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
+from types import SimpleNamespace
 
 from app.services import CurrencyService
 from gui.controllers import FinancialController
-from gui.tabs.analytics_tab import build_analytics_tab
+from gui.tabs.analytics_tab import _draw_breakdown_pie, build_analytics_tab
 from infrastructure.sqlite_repository import SQLiteRecordRepository
 
 
@@ -519,3 +520,45 @@ def test_analytics_tag_breakdown_toggle_renders_single_tag_tree(tmp_path: Path) 
     finally:
         context.destroy()
         repo.close()
+
+
+def test_draw_breakdown_pie_renders_single_full_slice() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        canvas = tk.Canvas(root, width=220, height=220)
+        canvas.pack()
+        root.update_idletasks()
+
+        item = SimpleNamespace(total_kzt=250.0, color="#5B8DEF")
+        _draw_breakdown_pie(canvas, [item])
+
+        shape_ids = canvas.find_all()
+        assert shape_ids
+        assert canvas.type(shape_ids[0]) == "oval"
+    finally:
+        root.destroy()
+
+
+def test_draw_breakdown_pie_aggregates_tail_into_other_slice() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        canvas = tk.Canvas(root, width=220, height=220)
+        canvas.pack()
+        root.update_idletasks()
+
+        data = [
+            SimpleNamespace(total_kzt=float(100 - idx), color=f"#0000{idx:02d}")
+            for idx in range(11)
+        ]
+        _draw_breakdown_pie(canvas, data)
+
+        text_values = [
+            canvas.itemcget(item_id, "text")
+            for item_id in canvas.find_all()
+            if canvas.type(item_id) == "text"
+        ]
+        assert "Прочие расходы" in text_values
+    finally:
+        root.destroy()

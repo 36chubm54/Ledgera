@@ -10,6 +10,7 @@ from domain.debt import Debt, DebtKind, DebtOperationType, DebtPayment, DebtStat
 from domain.distribution import FrozenDistributionRow
 from domain.goal import Goal
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord
+from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
 from infrastructure.repositories import JsonFileRecordRepository
@@ -250,6 +251,73 @@ def test_migration_is_safe_to_rerun_on_equivalent_dataset(tmp_path) -> None:
     assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM transfers")[0] == 1
     assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM records")[0] == 2
     assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM mandatory_expenses")[0] == 1
+    sqlite_storage.close()
+
+
+def test_migration_preserves_tag_metadata_from_full_backup_json(tmp_path) -> None:
+    json_path = tmp_path / "backup_tags.json"
+    sqlite_path = tmp_path / "records.db"
+    schema_path = Path(__file__).resolve().parents[1] / "db" / "schema.sql"
+
+    export_full_backup_to_json(
+        str(json_path),
+        wallets=[
+            Wallet(id=1, name="Main wallet", currency="KZT", initial_balance=0.0, system=True)
+        ],
+        records=[
+            ExpenseRecord(
+                id=1,
+                wallet_id=1,
+                date="2026-05-01",
+                amount_original=250.0,
+                currency="KZT",
+                rate_at_operation=1.0,
+                amount_kzt=250.0,
+                category="General",
+                tags=("coursework",),
+            )
+        ],
+        tags=[
+            Tag(
+                id=7,
+                name="coursework",
+                color="#9B51E0",
+                usage_count=1,
+                last_used_at="2026-05-01",
+            )
+        ],
+        mandatory_expenses=[],
+        transfers=[],
+        readonly=False,
+        storage_mode="sqlite",
+    )
+
+    args = Namespace(
+        json_path=str(json_path),
+        sqlite_path=str(sqlite_path),
+        schema_path=str(schema_path),
+        dry_run=False,
+    )
+
+    code = run_migration(args)
+    assert code == 0
+
+    sqlite_storage = SQLiteStorage(str(sqlite_path))
+    sqlite_storage.initialize_schema(str(schema_path))
+    tag_row = _query_one(
+        sqlite_storage,
+        "SELECT name, color, usage_count, last_used_at FROM tags ORDER BY id",
+    )
+    assert tuple(tag_row) == ("coursework", "#9B51E0", 1, "2026-05-01")
+    record_tag_row = _query_one(
+        sqlite_storage,
+        """
+        SELECT rt.record_id, t.name
+        FROM record_tags AS rt
+        JOIN tags AS t ON t.id = rt.tag_id
+        """,
+    )
+    assert tuple(record_tag_row) == (1, "coursework")
     sqlite_storage.close()
 
 

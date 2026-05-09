@@ -21,6 +21,7 @@ _LATIN_CYRILLIC_ALIASES: dict[str, tuple[str, ...]] = {
     "x": ("x", "ch", "cyrillic_che", "ч"),
     "p": ("p", "z", "cyrillic_ze", "з"),
     "r": ("r", "k", "cyrillic_ka", "к"),
+    "t": ("t", "cyrillic_ie", "е"),
     "w": ("w", "ts", "cyrillic_tse", "ц"),
 }
 
@@ -31,6 +32,7 @@ _LETTER_KEYCODES: dict[str, int] = {
     "i": 73,
     "p": 80,
     "r": 82,
+    "t": 84,
     "w": 87,
     "x": 88,
 }
@@ -259,6 +261,11 @@ def _show_hotkey_help(app: Any) -> None:
             "Ctrl+R",
             tr("tabs.analytics", "Аналитика"),
             tr("hotkeys.action.analytics.refresh", "Обновить аналитику"),
+        ),
+        (
+            "Ctrl+T",
+            tr("tabs.analytics", "Аналитика"),
+            tr("hotkeys.action.analytics.toggle_tags", "Переключить режим тегов"),
         ),
         ("Enter", tr("tabs.budget", "Бюджет"), tr("hotkeys.action.budget.add", "Добавить бюджет")),
         ("Del", tr("tabs.budget", "Бюджет"), tr("hotkeys.action.budget.delete", "Удалить бюджет")),
@@ -498,8 +505,15 @@ def register_hotkeys(app: Any) -> None:
             return _guarded_tab_action(
                 lambda: _call_action(
                     getattr(_tab_binding("_analytics_bindings", "analytics"), "refresh", None)
+                )
+            )
+        if _matches_letter_shortcut(event, "t"):
+            return _guarded_tab_action(
+                lambda: _call_action(
+                    getattr(
+                        _tab_binding("_analytics_bindings", "analytics"), "toggle_tag_mode", None
+                    )
                 ),
-                block_on_entry=True,
             )
         if _matches_letter_shortcut(event, "p"):
             return _guarded_tab_action(

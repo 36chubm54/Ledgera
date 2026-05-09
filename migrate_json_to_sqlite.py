@@ -14,13 +14,14 @@ from domain.debt import Debt, DebtPayment
 from domain.distribution import DistributionItem, DistributionSubitem, FrozenDistributionRow
 from domain.goal import Goal
 from domain.records import MandatoryExpenseRecord, Record
+from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
 from storage.json_storage import JsonStorage
 from storage.sqlite_storage import SQLiteStorage
 from utils.backup_utils import unwrap_backup_payload
 from utils.money import minor_to_money, rate_to_text, to_minor_units, to_money_float, to_rate_float
-from utils.tag_utils import normalize_tag_name, normalize_tag_names
+from utils.tag_utils import color_for_tag, normalize_tag_name, normalize_tag_names
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
@@ -248,6 +249,64 @@ def _has_any_data(sqlite_storage: SQLiteStorage) -> bool:
 def _all_positive_unique_ids(items: list, id_getter) -> bool:
     ids = [int(id_getter(item)) for item in items]
     return all(value > 0 for value in ids) and len(ids) == len(set(ids))
+
+
+def _materialize_tags(tags: list[Tag], records: list[Record]) -> list[Tag]:
+    usage_by_name: dict[str, int] = {}
+    last_used_by_name: dict[str, str] = {}
+    for record in records:
+        record_date = (
+            record.date.isoformat()
+            if hasattr(record.date, "isoformat") and not isinstance(record.date, str)
+            else str(record.date or "")
+        )
+        for tag_name in normalize_tag_names(tuple(getattr(record, "tags", ()) or ())):
+            key = tag_name.casefold()
+            usage_by_name[key] = usage_by_name.get(key, 0) + 1
+            if record_date and record_date > last_used_by_name.get(key, ""):
+                last_used_by_name[key] = record_date
+
+    tags_by_name: dict[str, Tag] = {}
+    for tag in tags:
+        normalized_name = normalize_tag_name(tag.name)
+        if not normalized_name:
+            continue
+        key = normalized_name.casefold()
+        tags_by_name[key] = Tag(
+            id=int(tag.id),
+            name=normalized_name,
+            color=str(tag.color or color_for_tag(normalized_name)),
+            usage_count=(
+                int(tag.usage_count)
+                if int(getattr(tag, "usage_count", 0) or 0) > 0
+                else usage_by_name.get(key, 0)
+            ),
+            last_used_at=str(tag.last_used_at or last_used_by_name.get(key, "")),
+        )
+
+    for record in records:
+        for tag_name in normalize_tag_names(tuple(getattr(record, "tags", ()) or ())):
+            key = tag_name.casefold()
+            if key in tags_by_name:
+                continue
+            tags_by_name[key] = Tag(
+                id=0,
+                name=tag_name,
+                color=color_for_tag(tag_name),
+                usage_count=usage_by_name.get(key, 0),
+                last_used_at=last_used_by_name.get(key, ""),
+            )
+
+    return sorted(
+        tags_by_name.values(),
+        key=lambda item: (item.id <= 0, item.id, item.name.casefold(), item.name),
+    )
+
+
+def _expected_record_tag_count(records: list[Record]) -> int:
+    return sum(
+        len(normalize_tag_names(tuple(getattr(record, "tags", ()) or ()))) for record in records
+    )
 
 
 def _set_sqlite_sequence(sqlite_storage: SQLiteStorage, table: str) -> None:
@@ -541,6 +600,60 @@ def _insert_records(
             mapping[int(record.id)] = int(lastrowid)
     if preserve_ids:
         _set_sqlite_sequence(sqlite_storage, "records")
+    return mapping
+
+
+def _insert_tags(
+    sqlite_storage: SQLiteStorage,
+    tags: list[Tag],
+    records: list[Record],
+    record_map: dict[int, int],
+) -> dict[str, int]:
+    mapping: dict[str, int] = {}
+    materialized_tags = _materialize_tags(tags, records)
+    explicit_ids = [int(tag.id) for tag in materialized_tags if int(tag.id) > 0]
+    preserve_tag_ids = len(explicit_ids) == len(set(explicit_ids))
+
+    for tag in materialized_tags:
+        payload = (
+            str(tag.name),
+            str(tag.color or color_for_tag(tag.name)),
+            int(tag.usage_count),
+            str(tag.last_used_at or ""),
+        )
+        if preserve_tag_ids and int(tag.id) > 0:
+            sqlite_storage.execute(
+                """
+                INSERT INTO tags (id, name, color, usage_count, last_used_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (int(tag.id), *payload),
+            )
+            mapping[str(tag.name).casefold()] = int(tag.id)
+        else:
+            cursor = sqlite_storage.execute(
+                """
+                INSERT INTO tags (name, color, usage_count, last_used_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                payload,
+            )
+            lastrowid = cursor.lastrowid
+            if lastrowid is None:
+                raise RuntimeError("Failed to insert tag: no row ID returned")
+            mapping[str(tag.name).casefold()] = int(lastrowid)
+
+    for record in records:
+        sqlite_record_id = record_map[int(record.id)]
+        for tag_name in normalize_tag_names(tuple(getattr(record, "tags", ()) or ())):
+            sqlite_tag_id = mapping[tag_name.casefold()]
+            sqlite_storage.execute(
+                "INSERT OR IGNORE INTO record_tags (record_id, tag_id) VALUES (?, ?)",
+                (sqlite_record_id, sqlite_tag_id),
+            )
+
+    if preserve_tag_ids and explicit_ids:
+        _set_sqlite_sequence(sqlite_storage, "tags")
     return mapping
 
 
@@ -917,6 +1030,8 @@ def _counts_from_sqlite(sqlite_storage: SQLiteStorage) -> dict[str, int]:
         "distribution_items": _get_counts("distribution_items"),
         "distribution_subitems": _get_counts("distribution_subitems"),
         "distribution_snapshots": _get_counts("distribution_snapshots"),
+        "tags": _get_counts("tags"),
+        "record_tags": _get_counts("record_tags"),
     }
 
 
@@ -1121,6 +1236,53 @@ def _record_signatures_from_sqlite(sqlite_storage: SQLiteStorage) -> list[tuple]
     ]
 
 
+def _tag_signatures_from_json(tags: list[Tag], records: list[Record]) -> list[tuple]:
+    return sorted(
+        (
+            str(tag.name),
+            str(tag.color or color_for_tag(tag.name)),
+            int(tag.usage_count),
+            str(tag.last_used_at or ""),
+        )
+        for tag in _materialize_tags(tags, records)
+    )
+
+
+def _tag_signatures_from_sqlite(sqlite_storage: SQLiteStorage) -> list[tuple]:
+    rows = sqlite_storage.query_all(
+        """
+        SELECT name, color, usage_count, last_used_at
+        FROM tags
+        ORDER BY lower(name), name
+        """
+    )
+    return [(str(row[0]), str(row[1] or ""), int(row[2]), str(row[3] or "")) for row in rows]
+
+
+def _record_tag_signatures_from_json(
+    records: list[Record],
+    *,
+    record_map: dict[int, int],
+) -> list[tuple]:
+    return sorted(
+        (record_map[int(record.id)], tag_name)
+        for record in records
+        for tag_name in normalize_tag_names(tuple(getattr(record, "tags", ()) or ()))
+    )
+
+
+def _record_tag_signatures_from_sqlite(sqlite_storage: SQLiteStorage) -> list[tuple]:
+    rows = sqlite_storage.query_all(
+        """
+        SELECT rt.record_id, t.name
+        FROM record_tags AS rt
+        JOIN tags AS t ON t.id = rt.tag_id
+        ORDER BY rt.record_id, lower(t.name), t.name
+        """
+    )
+    return [(int(row[0]), str(row[1])) for row in rows]
+
+
 def _mandatory_signatures_from_json(
     mandatory_expenses: list[MandatoryExpenseRecord],
     *,
@@ -1176,6 +1338,7 @@ def validate_migration(
     sqlite_storage: SQLiteStorage,
     wallets: list[Wallet],
     records: list[Record],
+    tags: list[Tag],
     transfers: list,
     mandatory_expenses: list[MandatoryExpenseRecord],
     budgets: list[Budget],
@@ -1213,6 +1376,8 @@ def validate_migration(
         "distribution_items": len(distribution_items),
         "distribution_subitems": len(distribution_subitems),
         "distribution_snapshots": len(distribution_snapshots),
+        "tags": len(_materialize_tags(tags, records)),
+        "record_tags": _expected_record_tag_count(records),
     }
     actual_counts = _counts_from_sqlite(sqlite_storage)
 
@@ -1282,6 +1447,13 @@ def validate_migration(
         record_map=record_map,
     ) != _record_signatures_from_sqlite(sqlite_storage):
         errors.append("Record payload mismatch")
+    if _tag_signatures_from_json(tags, records) != _tag_signatures_from_sqlite(sqlite_storage):
+        errors.append("Tag payload mismatch")
+    if _record_tag_signatures_from_json(
+        records,
+        record_map=record_map,
+    ) != _record_tag_signatures_from_sqlite(sqlite_storage):
+        errors.append("Record tag payload mismatch")
     if _mandatory_signatures_from_json(
         mandatory_expenses,
         wallet_map=wallet_map,
@@ -1324,6 +1496,7 @@ def _validate_existing_target_equivalence(
     sqlite_storage: SQLiteStorage,
     wallets: list[Wallet],
     records: list[Record],
+    tags: list[Tag],
     transfers: list,
     mandatory_expenses: list[MandatoryExpenseRecord],
     budgets: list[Budget],
@@ -1341,6 +1514,7 @@ def _validate_existing_target_equivalence(
         sqlite_storage=sqlite_storage,
         wallets=wallets,
         records=records,
+        tags=tags,
         transfers=transfers,
         mandatory_expenses=mandatory_expenses,
         budgets=budgets,
@@ -2085,6 +2259,7 @@ def _load_source_dataset(
 ) -> tuple[
     list[Wallet],
     list[Record],
+    list[Tag],
     list,
     list[MandatoryExpenseRecord],
     list[Budget],
@@ -2102,6 +2277,7 @@ def _load_source_dataset(
     payload = unwrap_backup_payload(raw_payload, force=True)
     raw_tags = payload.get("tags", [])
     raw_record_tags = payload.get("record_tags", [])
+    parsed_tags: list[Tag] = []
     if isinstance(raw_tags, list) and isinstance(raw_record_tags, list):
         tags_by_id: dict[int, str] = {}
         for item in raw_tags:
@@ -2111,6 +2287,15 @@ def _load_source_dataset(
             tag_name = normalize_tag_name(item.get("name"))
             if tag_id > 0 and tag_name:
                 tags_by_id[tag_id] = tag_name
+                parsed_tags.append(
+                    Tag(
+                        id=tag_id,
+                        name=tag_name,
+                        color=str(item.get("color", "") or ""),
+                        usage_count=max(0, int(item.get("usage_count", 0) or 0)),
+                        last_used_at=str(item.get("last_used_at", "") or ""),
+                    )
+                )
         record_tag_names: dict[int, list[str]] = {}
         for item in raw_record_tags:
             if not isinstance(item, dict):
@@ -2157,6 +2342,7 @@ def _load_source_dataset(
     return (
         wallets,
         records,
+        parsed_tags,
         transfers,
         mandatory_expenses,
         budgets,
@@ -2185,6 +2371,7 @@ def run_dry_run(args: argparse.Namespace) -> int:
         (
             wallets,
             records,
+            tags,
             transfers,
             mandatory_expenses,
             budgets,
@@ -2218,6 +2405,7 @@ def run_dry_run(args: argparse.Namespace) -> int:
         print(f"  wallets: {len(wallets)}")
         print(f"  transfers: {len(transfers)}")
         print(f"  records: {len(records)}")
+        print(f"  tags: {len(_materialize_tags(tags, records))}")
         print(f"  mandatory_expenses: {len(mandatory_expenses)}")
         print(f"  budgets: {len(budgets)}")
         print(f"  debts: {len(debts)}")
@@ -2250,6 +2438,7 @@ def run_migration(args: argparse.Namespace) -> int:
         (
             wallets,
             records,
+            tags,
             transfers,
             mandatory_expenses,
             budgets,
@@ -2286,6 +2475,7 @@ def run_migration(args: argparse.Namespace) -> int:
                 sqlite_storage,
                 wallets=wallets,
                 records=records,
+                tags=tags,
                 transfers=transfers,
                 mandatory_expenses=mandatory_expenses,
                 budgets=budgets,
@@ -2317,32 +2507,35 @@ def run_migration(args: argparse.Namespace) -> int:
         debt_map = _insert_debts(sqlite_storage, debts)
         print("[4/9] Migrating records...")
         record_map = _insert_records(sqlite_storage, records, wallet_map, transfer_map)
-        print("[5/9] Migrating mandatory_expenses...")
+        print("[5/13] Migrating tags...")
+        _insert_tags(sqlite_storage, tags, records, record_map)
+        print("[6/13] Migrating mandatory_expenses...")
         mandatory_map = _insert_mandatory_expenses(sqlite_storage, mandatory_expenses, wallet_map)
-        print("[6/9] Migrating budgets...")
+        print("[7/13] Migrating budgets...")
         _insert_budgets(sqlite_storage, budgets)
-        print("[7/9] Migrating debt_payments...")
+        print("[8/13] Migrating debt_payments...")
         debt_payment_map = _insert_debt_payments(
             sqlite_storage,
             debt_payments,
             debt_map,
             record_map,
         )
-        print("[8/12] Migrating assets...")
+        print("[9/13] Migrating assets...")
         asset_map = _insert_assets(sqlite_storage, assets)
-        print("[9/12] Migrating asset_snapshots...")
+        print("[10/13] Migrating asset_snapshots...")
         asset_snapshot_map = _insert_asset_snapshots(sqlite_storage, asset_snapshots, asset_map)
-        print("[10/12] Migrating goals...")
+        print("[11/13] Migrating goals...")
         goal_map = _insert_goals(sqlite_storage, goals)
-        print("[11/12] Migrating distribution structure...")
+        print("[12/13] Migrating distribution structure...")
         _insert_distribution_structure(sqlite_storage, distribution_items, distribution_subitems)
-        print("[12/12] Migrating distribution_snapshots...")
+        print("[13/13] Migrating distribution_snapshots...")
         _insert_distribution_snapshots(sqlite_storage, distribution_snapshots)
 
         valid, errors = validate_migration(
             sqlite_storage=sqlite_storage,
             wallets=wallets,
             records=records,
+            tags=tags,
             transfers=transfers,
             mandatory_expenses=mandatory_expenses,
             budgets=budgets,

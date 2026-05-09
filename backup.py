@@ -125,6 +125,7 @@ def export_to_json(
                 )
                 wallets = snapshot_repo.load_wallets()
                 records = snapshot_repo.load_all()
+                tags = snapshot_repo.list_tags()
                 transfers = snapshot_repo.load_transfers()
                 mandatory_expenses = snapshot_repo.load_mandatory_expenses()
                 debts = snapshot_repo.load_debts()
@@ -136,6 +137,7 @@ def export_to_json(
                     json_path,
                     wallets=wallets,
                     records=records,
+                    tags=tags,
                     mandatory_expenses=mandatory_expenses,
                     budgets=budget_service.get_budgets(),
                     debts=debts,
