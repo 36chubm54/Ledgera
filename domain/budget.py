@@ -42,8 +42,8 @@ class Budget:
     category: str
     start_date: str
     end_date: str
-    limit_kzt: float
-    limit_kzt_minor: int
+    limit_base: float
+    limit_base_minor: int
     include_mandatory: bool
     scope_type: str = "category"
     scope_value: str = ""
@@ -89,19 +89,19 @@ class Budget:
 @dataclass(frozen=True)
 class BudgetResult:
     budget: Budget
-    spent_kzt: float
+    spent_base: float
     spent_minor: int
     status: BudgetStatus
     pace_status: PaceStatus
     usage_pct: float
     time_pct: float
-    remaining_kzt: float
-    forecast_remaining_kzt: float | None = None
-    forecast_delta_kzt: float | None = None
+    remaining_base: float
+    forecast_remaining_base: float | None = None
+    forecast_delta_base: float | None = None
     forecast_days_left: int | None = None
     forecast_status_key: str | None = None
     forecast_status_params: dict[str, Any] | None = None
 
     @property
     def is_over(self) -> bool:
-        return self.spent_minor >= self.budget.limit_kzt_minor
+        return self.spent_minor >= self.budget.limit_base_minor

@@ -17,10 +17,25 @@ from domain.goal import GoalProgress
 from domain.validation import ensure_not_future, parse_ymd
 from gui.i18n import tr
 from gui.logging_utils import log_ui_error
-from gui.ui_helpers import ask_confirm, bind_label_wrap, center_dialog, show_error, show_info
+from gui.ui_helpers import (
+    ask_confirm,
+    bind_label_wrap,
+    center_dialog,
+    enable_treeview_column_autosize,
+    parse_numeric_input,
+    show_error,
+    show_info,
+)
 from gui.ui_theme import PAD_SM, PAD_XL, create_card_section, get_palette
 
 logger = logging.getLogger(__name__)
+
+
+def _base_currency_code(controller: Any) -> str:
+    getter = getattr(controller, "get_base_currency_code", None)
+    if callable(getter):
+        return str(getter() or "").strip().upper() or "KZT"
+    return "KZT"
 
 
 class DashboardTabContext(Protocol):
@@ -47,10 +62,6 @@ class DashboardTabBindings:
     refresh: Callable[[], None]
 
 
-def _format_money(value: float) -> str:
-    return f"{float(value):,.0f} KZT"
-
-
 def _minor_to_money_text(value_minor: int) -> str:
     return f"{float(value_minor) / 100.0:,.2f}"
 
@@ -64,7 +75,7 @@ def _parse_positive_amount(raw_value: str, *, field_name: str) -> float:
     if not text:
         raise ValueError(f"{field_name} is required")
     try:
-        value = float(text.replace(",", ""))
+        value = parse_numeric_input(text)
     except ValueError as exc:
         raise ValueError(f"{field_name} must be a number") from exc
     if value <= 0:
@@ -246,7 +257,12 @@ def _prepare_bulk_snapshot_entries(
     return entries
 
 
-def _draw_trend(canvas: tk.Canvas, data: list[DashboardTrendPoint]) -> None:
+def _draw_trend(
+    canvas: tk.Canvas,
+    data: list[DashboardTrendPoint],
+    *,
+    format_amount: Callable[[float], str] | None = None,
+) -> None:
     canvas.delete("all")
     palette = get_palette()
     canvas.configure(bg=palette.surface_elevated, highlightbackground=palette.border_soft)
@@ -343,10 +359,11 @@ def _draw_trend(canvas: tk.Canvas, data: list[DashboardTrendPoint]) -> None:
                 font=("Segoe UI", 8),
             )
 
+    y_label = format_amount or (lambda value: f"{value:,.0f}")
     canvas.create_text(
         pad["left"] - 6,
         pad["top"],
-        text=f"{max_value:,.0f}",
+        text=y_label(float(max_value)),
         fill=palette.chart_empty,
         font=("Segoe UI", 8),
         anchor="e",
@@ -354,14 +371,19 @@ def _draw_trend(canvas: tk.Canvas, data: list[DashboardTrendPoint]) -> None:
     canvas.create_text(
         pad["left"] - 6,
         height - pad["bottom"],
-        text=f"{min_value:,.0f}",
+        text=y_label(float(min_value)),
         fill=palette.chart_empty,
         font=("Segoe UI", 8),
         anchor="e",
     )
 
 
-def _draw_allocation(canvas: tk.Canvas, data: list[DashboardAllocationSlice]) -> None:
+def _draw_allocation(
+    canvas: tk.Canvas,
+    data: list[DashboardAllocationSlice],
+    *,
+    format_money: Callable[[float], str] | None = None,
+) -> None:
     canvas.delete("all")
     palette = get_palette()
     canvas.configure(bg=palette.surface_elevated, highlightbackground=palette.border_soft)
@@ -382,7 +404,7 @@ def _draw_allocation(canvas: tk.Canvas, data: list[DashboardAllocationSlice]) ->
         )
         return
 
-    total = sum(float(item.amount_kzt) for item in data)
+    total = sum(float(item.amount_base) for item in data)
     if total <= 0:
         canvas.create_text(
             width // 2,
@@ -393,9 +415,10 @@ def _draw_allocation(canvas: tk.Canvas, data: list[DashboardAllocationSlice]) ->
         )
         return
 
+    money_text = format_money or (lambda value: f"{value:,.0f}")
     start_angle = 90.0
     for index, item in enumerate(data):
-        amount = float(item.amount_kzt)
+        amount = float(item.amount_base)
         sweep = amount / total * 360.0
         color = palette.chart_series[index % len(palette.chart_series)]
         canvas.create_arc(
@@ -429,7 +452,7 @@ def _draw_allocation(canvas: tk.Canvas, data: list[DashboardAllocationSlice]) ->
     canvas.create_text(
         center_x,
         center_y + 12,
-        text=_format_money(total),
+        text=money_text(total),
         fill=palette.chart_text,
         font=("Segoe UI", 10, "bold"),
     )
@@ -452,7 +475,7 @@ def _draw_allocation(canvas: tk.Canvas, data: list[DashboardAllocationSlice]) ->
             legend_x + 18,
             y + 14,
             anchor="nw",
-            text=f"{item.share_pct:.1f}% • {_format_money(item.amount_kzt)}",
+            text=f"{item.share_pct:.1f}% • {money_text(item.amount_base)}",
             fill=palette.chart_empty,
             font=("Segoe UI", 8),
         )
@@ -848,7 +871,7 @@ def show_create_goal_dialog(
 
     title_var = tk.StringVar()
     amount_var = tk.StringVar()
-    currency_var = tk.StringVar(value="KZT")
+    currency_var = tk.StringVar(value=_base_currency_code(context.controller))
     created_at_var = tk.StringVar(value=date.today().isoformat())
     target_date_var = tk.StringVar()
     description_var = tk.StringVar()
@@ -997,7 +1020,11 @@ def show_asset_editor_dialog(
         value="bank" if initial_asset is None else str(initial_asset.category.value)
     )
     currency_var = tk.StringVar(
-        value="KZT" if initial_asset is None else str(initial_asset.currency)
+        value=(
+            _base_currency_code(context.controller)
+            if initial_asset is None
+            else str(initial_asset.currency)
+        )
     )
     created_at_var = tk.StringVar(
         value=date.today().isoformat() if initial_asset is None else str(initial_asset.created_at)
@@ -1208,6 +1235,7 @@ def show_manage_assets_dialog(
     tree.column("currency", width=80, anchor="center")
     tree.column("created_at", width=110, anchor="center")
     tree.column("status", width=90, anchor="center")
+    enable_treeview_column_autosize(tree, columns=("name",), max_width=360)
 
     actions = ttk.Frame(content)
     actions.grid(row=2, column=0, sticky="ew", pady=(12, 0))
@@ -1349,6 +1377,28 @@ def build_dashboard_tab(
     context: DashboardTabContext,
 ) -> DashboardTabBindings:
     palette = get_palette()
+
+    def display_code() -> str:
+        getter = getattr(context.controller, "get_display_currency_code", None)
+        if callable(getter):
+            return str(getter() or "").strip().upper() or "KZT"
+        getter = getattr(context.controller, "get_display_currency", None)
+        if callable(getter):
+            return str(getter() or "").strip().upper() or "KZT"
+        return "KZT"
+
+    def format_display_amount(amount: float, precision: int = 0) -> str:
+        formatter = getattr(context.controller, "format_display_amount", None)
+        if callable(formatter):
+            return str(formatter(amount, precision=precision))
+        return f"{float(amount):,.{precision}f}"
+
+    def format_display_money(amount: float, precision: int = 0) -> str:
+        formatter = getattr(context.controller, "format_display_money", None)
+        if callable(formatter):
+            return str(formatter(amount, precision=precision))
+        return f"{format_display_amount(amount, precision=precision)} {display_code()}"
+
     parent.grid_columnconfigure(0, weight=1)
     parent.grid_rowconfigure(1, weight=1)
 
@@ -1534,11 +1584,27 @@ def build_dashboard_tab(
         nonlocal redraw_job
         redraw_job = None
         if last_payload is None:
-            _draw_trend(trend_canvas, [])
-            _draw_allocation(allocation_canvas, [])
+            _draw_trend(
+                trend_canvas,
+                [],
+                format_amount=lambda value: format_display_amount(value, precision=0),
+            )
+            _draw_allocation(
+                allocation_canvas,
+                [],
+                format_money=lambda value: format_display_money(value, precision=0),
+            )
             return
-        _draw_trend(trend_canvas, list(last_payload.trend))
-        _draw_allocation(allocation_canvas, list(last_payload.allocation))
+        _draw_trend(
+            trend_canvas,
+            list(last_payload.trend),
+            format_amount=lambda value: format_display_amount(value, precision=0),
+        )
+        _draw_allocation(
+            allocation_canvas,
+            list(last_payload.allocation),
+            format_money=lambda value: format_display_money(value, precision=0),
+        )
 
     def _refresh() -> None:
         nonlocal last_payload
@@ -1551,14 +1617,14 @@ def build_dashboard_tab(
                 text=tr(
                     "dashboard.net_worth",
                     "Чистый капитал: {amount}",
-                    amount=_format_money(payload.summary.net_worth_kzt),
+                    amount=format_display_money(payload.summary.net_worth_base, precision=0),
                 )
             )
             assets_total_label.config(
                 text=tr(
                     "dashboard.assets_total",
                     "Активы всего: {amount}",
-                    amount=_format_money(payload.summary.assets_total_kzt),
+                    amount=format_display_money(payload.summary.assets_total_base, precision=0),
                 )
             )
             goals_status_label.config(

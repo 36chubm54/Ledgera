@@ -39,7 +39,7 @@ def _build_json_fixture(json_path: str) -> None:
         amount_original=100.0,
         currency="KZT",
         rate_at_operation=1.0,
-        amount_kzt=100.0,
+        amount_base=100.0,
         description="move",
     )
     records = [
@@ -51,7 +51,7 @@ def _build_json_fixture(json_path: str) -> None:
             amount_original=100.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=100.0,
+            amount_base=100.0,
             category="Transfer",
         ),
         IncomeRecord(
@@ -62,7 +62,7 @@ def _build_json_fixture(json_path: str) -> None:
             amount_original=100.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=100.0,
+            amount_base=100.0,
             category="Transfer",
         ),
     ]
@@ -74,7 +74,7 @@ def _build_json_fixture(json_path: str) -> None:
             amount_original=50.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=50.0,
+            amount_base=50.0,
             category="Mandatory",
             description="Rent",
             period="monthly",
@@ -140,7 +140,7 @@ def test_migration_moves_all_data_and_preserves_ids(tmp_path) -> None:
     row = _query_one(
         sqlite_storage,
         """
-        SELECT date, auto_pay, amount_original_minor, amount_kzt_minor, rate_at_operation_text
+        SELECT date, auto_pay, amount_original_minor, amount_base_minor, rate_at_operation_text
         FROM mandatory_expenses
         ORDER BY id
         LIMIT 1
@@ -160,7 +160,7 @@ def test_migration_moves_all_data_and_preserves_ids(tmp_path) -> None:
     transfer_row = _query_one(
         sqlite_storage,
         """
-        SELECT amount_original_minor, amount_kzt_minor, rate_at_operation_text
+        SELECT amount_original_minor, amount_base_minor, rate_at_operation_text
         FROM transfers
         WHERE id = 1
         """,
@@ -205,7 +205,7 @@ def test_migration_accepts_empty_mandatory_dates_as_equivalent(tmp_path) -> None
                 amount_original=50.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=50.0,
+                amount_base=50.0,
                 category="Mandatory",
                 description="No date",
                 period="monthly",
@@ -251,22 +251,34 @@ def test_migration_is_safe_to_rerun_on_equivalent_dataset(tmp_path) -> None:
     assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM transfers")[0] == 1
     assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM records")[0] == 2
     assert _query_one(sqlite_storage, "SELECT COUNT(*) FROM mandatory_expenses")[0] == 1
-    assert _query_one(
-        sqlite_storage,
-        "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'wallets'",
-    )[0] == 1
-    assert _query_one(
-        sqlite_storage,
-        "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'transfers'",
-    )[0] == 1
-    assert _query_one(
-        sqlite_storage,
-        "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'records'",
-    )[0] == 1
-    assert _query_one(
-        sqlite_storage,
-        "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'mandatory_expenses'",
-    )[0] == 1
+    assert (
+        _query_one(
+            sqlite_storage,
+            "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'wallets'",
+        )[0]
+        == 1
+    )
+    assert (
+        _query_one(
+            sqlite_storage,
+            "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'transfers'",
+        )[0]
+        == 1
+    )
+    assert (
+        _query_one(
+            sqlite_storage,
+            "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'records'",
+        )[0]
+        == 1
+    )
+    assert (
+        _query_one(
+            sqlite_storage,
+            "SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'mandatory_expenses'",
+        )[0]
+        == 1
+    )
     sqlite_storage.close()
 
 
@@ -288,7 +300,7 @@ def test_migration_preserves_tag_metadata_from_full_backup_json(tmp_path) -> Non
                 amount_original=250.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=250.0,
+                amount_base=250.0,
                 category="General",
                 tags=("coursework",),
             )
@@ -450,8 +462,8 @@ def test_migration_moves_budgets_from_full_backup_json(tmp_path) -> None:
                 category="Food",
                 start_date="2026-03-01",
                 end_date="2026-03-31",
-                limit_kzt=1500.0,
-                limit_kzt_minor=150000,
+                limit_base=1500.0,
+                limit_base_minor=150000,
                 include_mandatory=True,
             )
         ],
@@ -474,7 +486,7 @@ def test_migration_moves_budgets_from_full_backup_json(tmp_path) -> None:
     budget_row = _query_one(
         sqlite_storage,
         """
-        SELECT category, start_date, end_date, limit_kzt_minor, include_mandatory
+        SELECT category, start_date, end_date, limit_base_minor, include_mandatory
         FROM budgets
         ORDER BY id
         LIMIT 1
@@ -565,7 +577,7 @@ def test_migration_moves_debts_and_debt_payments_from_full_backup_json(tmp_path)
         amount_original=25.0,
         currency="KZT",
         rate_at_operation=1.0,
-        amount_kzt=25.0,
+        amount_base=25.0,
         category="Debt payment",
     )
     debt_payment = DebtPayment(

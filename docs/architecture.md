@@ -43,6 +43,13 @@ Supported business areas include:
 | `utils` | Format-specific helpers and shared technical helpers | `backup_utils.py`, `import_core.py`, `csv_utils.py`, `excel_utils.py`, `pdf_utils.py`, `money.py`, `charting.py`, `debt_report_utils.py`, `tabular_utils.py` |
 | `tests` | Regression, contract, and integration-like coverage | `test_*` modules across all subsystems |
 
+Current implementation note:
+
+- the table above describes the intended ownership boundaries
+- application-side repository capabilities are now expressed through `app/repository_protocols.py`
+- the desktop runtime still depends primarily on `infrastructure/sqlite_repository.py` as the only fully featured backend for preferences, audit, analytics, planning, and shell-facing workflows
+- treat JSON storage and other adapters as narrower persistence backends, not as drop-in replacements for the full runtime feature set
+
 ## 3. Key Runtime Flows
 
 ### 3.1 Startup
@@ -63,6 +70,7 @@ Important startup concerns:
 - optional currency refresh
 - auto-application of mandatory payments
 - deferred GUI work and safe `after(...)` scheduling through `gui.runtime_coordinator.UiRuntimeCoordinator`
+- eager build of `Infographics` and `Operations`, with the remaining tabs composed lazily on first activation
 - online-mode status refresh through `gui.status_bar_coordinator.StatusBarCoordinator`
 - lazy tab build and rebuild routing through `gui.tab_lifecycle`
 
@@ -71,6 +79,12 @@ Important startup concerns:
 Typical path:
 
 `GUI tab -> FinancialController -> use case / service -> SQLiteRecordRepository -> SQLiteStorage`
+
+This remains the practical runtime path even after the recent contract cleanup:
+
+- upper layers use narrower repository protocols where possible
+- the main app runtime is still composed around the SQLite repository as the concrete provider of those capabilities
+- contributors should read `app/repository_protocols.py` as the application-facing contract surface and `infrastructure/sqlite_repository.py` as the concrete runtime implementation behind it
 
 Examples:
 
@@ -283,6 +297,10 @@ This subsystem is responsible for:
 - live rebuilding of shell strings and theme-aware widgets/dialogs
 - keeping Tk styling, localized strings, and shell state synchronized during runtime preference changes
 
+Current implementation note:
+
+- persisted runtime preferences require schema-meta support, which is currently provided by the SQLite runtime repository
+
 It also owns the shared desktop-shell design primitives:
 
 - spacing tokens and card-style section composition
@@ -300,6 +318,7 @@ Tag-heavy UI also lives close to this layer:
 Core modules:
 
 - `gui/tkinter_gui.py`
+- `gui/shell/*`
 - `gui/ui_theme.py`
 - `gui/runtime_coordinator.py`
 - `gui/startup_coordinator.py`
@@ -316,6 +335,11 @@ This subsystem is responsible for:
 - coordinating shell rebuilds when runtime theme/language state changes
 - applying redesign conventions across form-heavy and table-heavy tabs
 - isolating background polling, deferred startup, status refresh, and lazy tab lifecycle outside the main shell class
+- keeping first paint responsive by deferring charts/budget/distribution refresh work until after the shell becomes interactive
+
+Current implementation note:
+
+- `gui/tkinter_gui.py` is now treated as a composition shell, while `gui/shell/*` owns most shell-specific lifecycle, status, notebook, refresh, preferences, records, and startup orchestration
 
 ### 4.10 Hotkeys
 
@@ -352,16 +376,25 @@ This subsystem is responsible for:
 
 - preserving the public `CurrencyService` adapter interface used by application services and UI
 - fetching exchange rates through ordered providers instead of a single hardcoded RSS implementation
-- routing `KZT`-base online refresh through `NBKProvider`, then `OpenExchangeProvider`, then `StaticProvider`
-- optionally enabling `CBRProvider` for `RUB`-base configurations
+- building provider chains through `CurrencyProviderRegistry` and `ProviderBuildContext`
+- routing `KZT`-base online refresh through `NBKProvider`, then `ExchangeRateProvider`, then `StaticProvider`
+- optionally enabling `CBRProvider` for `RUB`-base or explicit provider-order configurations
 - keeping offline defaults and cached rates available when online providers fail
+- exposing a whitelist-aware `display_currency` selector instead of blindly surfacing every cached currency code
 
 Provider hierarchy:
 
 - `NBKProvider` parses the National Bank of Kazakhstan RSS feed and remains the primary source for `KZT`
 - `CBRProvider` parses the Rambler mirror of the Central Bank of Russia rates table and exposes `RUB`-base rates for environments where direct `cbr.ru` access is blocked
-- `OpenExchangeProvider` normalizes `USD`-base JSON quotes into the app's base currency
+- `ExchangeRateProvider` normalizes `USD`-base JSON quotes from [ExchangeRate-API](https://www.exchangerate-api.com/) into the app's target base currency
 - `StaticProvider` returns hardcoded defaults and never performs network I/O
+
+Configuration model:
+
+- `provider_order` overrides the whole chain explicitly when present
+- otherwise `provider_mode` chooses between `fallback_provider` and `commercial_fallback_provider`
+- `exchange_rate_api_key` can come from `currency_config.json` or env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY`
+- `display_currency_whitelist` constrains which codes appear in the status-bar switcher
 
 Aggregation rules:
 
@@ -392,6 +425,7 @@ Main SQLite tables:
 Important data-model notes:
 
 - money values often use dual storage: human-readable values plus exact `*_minor`
+- multicurrency storage is now two-layered: `base_currency` lives in `schema_meta` and defines persisted `amount_base` / `limit_base` values, while `display_currency` is a runtime-only presentation choice in `CurrencyService`
 - records may reference `transfer_id` and `related_debt_id`
 - debt, asset, and goal data affect read-only wealth calculations
 - tag groups are overlapping coverage views, not mutually exclusive accounting partitions

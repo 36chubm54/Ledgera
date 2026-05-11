@@ -6,6 +6,7 @@ import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
+from tkinter import font as tkfont
 from tkinter import ttk
 from typing import Any
 
@@ -61,6 +62,7 @@ def draw_expense_pie(
     expense_legend_canvas: tk.Canvas | None,
     expense_legend_frame: tk.Frame | None,
     records: Any,
+    format_money: Callable[[float], str] | None = None,
 ) -> None:
     if (
         pie_month_var is None
@@ -125,9 +127,16 @@ def draw_expense_pie(
 
     total = sum(value for _, value in data)
     start = 90.0
+    legend_font = tkfont.nametofont("TkDefaultFont").copy()
+    legend_font.configure(size=8)
+    amount_font = legend_font
     for index, (category, value) in enumerate(data):
         extent = (value / total) * 360
-        color = palette.chart_empty if grouped_other and index == len(data) - 1 else colors[index % len(colors)]
+        color = (
+            palette.chart_empty
+            if grouped_other and index == len(data) - 1
+            else colors[index % len(colors)]
+        )
         expense_pie_canvas.create_arc(
             x0,
             y0,
@@ -144,6 +153,7 @@ def draw_expense_pie(
         legend_row = tk.Frame(expense_legend_frame, bg=palette.surface_elevated)
         legend_row.pack(fill="x", anchor="w", pady=1, padx=6)
         legend_row.grid_columnconfigure(1, weight=1)
+        legend_row.grid_columnconfigure(2, weight=0)
         color_box = tk.Canvas(
             legend_row,
             width=10,
@@ -153,16 +163,34 @@ def draw_expense_pie(
         )
         color_box.create_rectangle(0, 0, 10, 10, fill=color, outline=color)
         color_box.grid(row=0, column=0, sticky="nw", padx=(0, 6), pady=2)
-        tk.Label(
+        amount_text = (format_money or (lambda amount: f"{amount:.2f}"))(value)
+        available_width = _legend_category_max_width(
+            canvas_width=expense_legend_canvas.winfo_width(),
+            amount_text=amount_text,
+            amount_font=amount_font,
+        )
+        category_label = tk.Label(
             legend_row,
-            text=f"{cleaned_category}: {value:.2f} KZT",
-            font=("Segoe UI", 8),
-            wraplength=max(96, expense_legend_canvas.winfo_width() - 42),
-            justify="left",
+            text=_fit_legend_category(
+                cleaned_category,
+                font=legend_font,
+                max_width=available_width,
+            ),
+            font=legend_font,
             anchor="w",
             bg=palette.surface_elevated,
             fg=palette.chart_text,
-        ).grid(row=0, column=1, sticky="w")
+        )
+        category_label.grid(row=0, column=1, sticky="ew")
+        tk.Label(
+            legend_row,
+            text=amount_text,
+            font=amount_font,
+            justify="right",
+            anchor="e",
+            bg=palette.surface_elevated,
+            fg=palette.chart_text,
+        ).grid(row=0, column=2, sticky="e", padx=(8, 0))
 
 
 def _group_minor_categories(
@@ -182,6 +210,32 @@ def _clean_category(category: str) -> str:
         return category
     cleaned = category.replace("\r", " ").replace("\n", " ")
     return " ".join(cleaned.split())
+
+
+def _fit_legend_category(category: str, *, font: tkfont.Font, max_width: int) -> str:
+    text = str(category or "")
+    if not text:
+        return text
+    if font.measure(text) <= max_width:
+        return text
+    ellipsis = "..."
+    ellipsis_width = font.measure(ellipsis)
+    if ellipsis_width >= max_width:
+        return ellipsis
+    trimmed = text
+    while trimmed and font.measure(trimmed) + ellipsis_width > max_width:
+        trimmed = trimmed[:-1]
+    return f"{trimmed.rstrip()}{ellipsis}"
+
+
+def _legend_category_max_width(
+    *, canvas_width: int, amount_text: str, amount_font: tkfont.Font
+) -> int:
+    safe_canvas_width = max(canvas_width, 120)
+    amount_width = amount_font.measure(str(amount_text or ""))
+    # Reserve space for color box, paddings, and a small breathing gap before the amount.
+    reserved_width = amount_width + 34
+    return max(72, safe_canvas_width - reserved_width)
 
 
 def _filter_records_by_month(records: Any, month_value: str) -> list[Any]:

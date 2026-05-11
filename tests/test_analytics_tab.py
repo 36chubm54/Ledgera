@@ -43,20 +43,20 @@ def _insert_transfer(
     from_wallet_id: int,
     to_wallet_id: int,
     date: str,
-    amount_kzt: float,
+    amount_base: float,
 ) -> None:
     conn.execute(
         "INSERT INTO transfers "
         "(id, from_wallet_id, to_wallet_id, date, amount_original, currency, "
-        "rate_at_operation, amount_kzt, description) "
+        "rate_at_operation, amount_base, description) "
         "VALUES (?, ?, ?, ?, ?, 'KZT', 1.0, ?, 'Transfer')",
         (
             int(transfer_id),
             int(from_wallet_id),
             int(to_wallet_id),
             str(date),
-            float(amount_kzt),
-            float(amount_kzt),
+            float(amount_base),
+            float(amount_base),
         ),
     )
     conn.commit()
@@ -68,22 +68,22 @@ def _insert_record(
     record_type: str,
     date: str,
     wallet_id: int,
-    amount_kzt: float,
+    amount_base: float,
     transfer_id=None,
     category: str = "General",
 ) -> None:
     conn.execute(
         "INSERT INTO records "
         "(type, date, wallet_id, transfer_id, amount_original, currency, "
-        "rate_at_operation, amount_kzt, category) "
+        "rate_at_operation, amount_base, category) "
         "VALUES (?, ?, ?, ?, ?, 'KZT', 1.0, ?, ?)",
         (
             str(record_type),
             str(date),
             int(wallet_id),
             transfer_id,
-            float(amount_kzt),
-            float(amount_kzt),
+            float(amount_base),
+            float(amount_base),
             str(category),
         ),
     )
@@ -142,9 +142,13 @@ def test_monthly_summary_three_months_returns_three_rows(tmp_path: Path) -> None
     conn = sqlite3.connect(db_path)
     try:
         _insert_wallet(conn, 1)
-        _insert_record(conn, record_type="income", date="2026-01-05", wallet_id=1, amount_kzt=100.0)
-        _insert_record(conn, record_type="expense", date="2026-02-05", wallet_id=1, amount_kzt=20.0)
-        _insert_record(conn, record_type="income", date="2026-03-05", wallet_id=1, amount_kzt=10.0)
+        _insert_record(
+            conn, record_type="income", date="2026-01-05", wallet_id=1, amount_base=100.0
+        )
+        _insert_record(
+            conn, record_type="expense", date="2026-02-05", wallet_id=1, amount_base=20.0
+        )
+        _insert_record(conn, record_type="income", date="2026-03-05", wallet_id=1, amount_base=10.0)
     finally:
         conn.close()
 
@@ -163,10 +167,10 @@ def test_savings_rate_positive_when_income_exceeds_expenses(tmp_path: Path) -> N
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=1000.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=200.0
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=200.0
         )
     finally:
         conn.close()
@@ -185,10 +189,10 @@ def test_savings_rate_negative_when_expenses_exceed_income(tmp_path: Path) -> No
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=1000.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=2000.0
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=2000.0
         )
     finally:
         conn.close()
@@ -208,10 +212,10 @@ def test_transfer_records_do_not_affect_savings_rate(tmp_path: Path) -> None:
         _insert_wallet(conn, 1)
         _insert_wallet(conn, 2)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=1000.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=200.0
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=200.0
         )
 
         _insert_transfer(
@@ -220,14 +224,14 @@ def test_transfer_records_do_not_affect_savings_rate(tmp_path: Path) -> None:
             from_wallet_id=1,
             to_wallet_id=2,
             date="2026-01-10",
-            amount_kzt=500.0,
+            amount_base=500.0,
         )
         _insert_record(
             conn,
             record_type="expense",
             date="2026-01-10",
             wallet_id=1,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )
@@ -236,7 +240,7 @@ def test_transfer_records_do_not_affect_savings_rate(tmp_path: Path) -> None:
             record_type="income",
             date="2026-01-10",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )
@@ -271,7 +275,7 @@ def test_get_spending_by_category_with_limit_returns_at_most_limit(tmp_path: Pat
                 record_type="expense",
                 date=f"2026-01-{idx:02d}",
                 wallet_id=1,
-                amount_kzt=amount,
+                amount_base=amount,
                 category=cat,
             )
     finally:
@@ -291,9 +295,15 @@ def test_get_year_income_and_avg_monthly_income_year_to_date(tmp_path: Path) -> 
     conn = sqlite3.connect(db_path)
     try:
         _insert_wallet(conn, 1)
-        _insert_record(conn, record_type="income", date="2026-01-05", wallet_id=1, amount_kzt=100.0)
-        _insert_record(conn, record_type="income", date="2026-02-05", wallet_id=1, amount_kzt=200.0)
-        _insert_record(conn, record_type="income", date="2026-03-05", wallet_id=1, amount_kzt=999.0)
+        _insert_record(
+            conn, record_type="income", date="2026-01-05", wallet_id=1, amount_base=100.0
+        )
+        _insert_record(
+            conn, record_type="income", date="2026-02-05", wallet_id=1, amount_base=200.0
+        )
+        _insert_record(
+            conn, record_type="income", date="2026-03-05", wallet_id=1, amount_base=999.0
+        )
     finally:
         conn.close()
 
@@ -313,10 +323,10 @@ def test_average_monthly_expenses_and_financial_freedom_ratio(tmp_path: Path) ->
     try:
         _insert_wallet(conn, 1, initial_balance=1200.0)
         _insert_record(
-            conn, record_type="expense", date="2026-01-10", wallet_id=1, amount_kzt=200.0
+            conn, record_type="expense", date="2026-01-10", wallet_id=1, amount_base=200.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-02-10", wallet_id=1, amount_kzt=200.0
+            conn, record_type="expense", date="2026-02-10", wallet_id=1, amount_base=200.0
         )
     finally:
         conn.close()
@@ -329,11 +339,11 @@ def test_average_monthly_expenses_and_financial_freedom_ratio(tmp_path: Path) ->
         repo.close()
 
 
-def test_convert_kzt_to_usd_uses_configured_rate(tmp_path: Path) -> None:
+def test_convert_base_to_usd_uses_configured_rate(tmp_path: Path) -> None:
     repo, controller = _make_controller(tmp_path / "analytics.db")
     try:
         # Default CurrencyService rate in tests: 500 KZT per USD
-        assert controller.convert_kzt_to_usd(1000.0) == 2.0
+        assert controller.convert_base_to_usd(1000.0) == 2.0
     finally:
         repo.close()
 
@@ -345,13 +355,13 @@ def test_get_year_expense_and_time_costs_use_year_to_date_expenses(tmp_path: Pat
     try:
         _insert_wallet(conn, 1, initial_balance=0.0)
         _insert_record(
-            conn, record_type="expense", date="2026-01-10", wallet_id=1, amount_kzt=3100.0
+            conn, record_type="expense", date="2026-01-10", wallet_id=1, amount_base=3100.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-02-10", wallet_id=1, amount_kzt=3100.0
+            conn, record_type="expense", date="2026-02-10", wallet_id=1, amount_base=3100.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-03-10", wallet_id=1, amount_kzt=900.0
+            conn, record_type="expense", date="2026-03-10", wallet_id=1, amount_base=900.0
         )
     finally:
         conn.close()
@@ -391,7 +401,7 @@ def test_analytics_tab_net_worth_uses_period_end_date() -> None:
         def get_year_income(self, year: int, *, up_to_date: str | None = None) -> float:
             return 0.0
 
-        def convert_kzt_to_usd(self, amount_kzt: float) -> float:
+        def convert_base_to_usd(self, amount_base: float) -> float:
             return 0.0
 
         def get_year_expense(self, year: int, *, up_to_date: str | None = None) -> float:
@@ -465,7 +475,7 @@ def test_analytics_tag_breakdown_toggle_renders_single_tag_tree(tmp_path: Path) 
             record_type="expense",
             date="2026-01-05",
             wallet_id=1,
-            amount_kzt=900.0,
+            amount_base=900.0,
             category="Food",
         )
         record_id = int(conn.execute("SELECT MAX(id) FROM records").fetchone()[0])
@@ -530,7 +540,7 @@ def test_draw_breakdown_pie_renders_single_full_slice() -> None:
         canvas.pack()
         root.update_idletasks()
 
-        item = SimpleNamespace(total_kzt=250.0, color="#5B8DEF")
+        item = SimpleNamespace(total_base=250.0, color="#5B8DEF")
         _draw_breakdown_pie(canvas, [item])
 
         shape_ids = canvas.find_all()
@@ -549,7 +559,7 @@ def test_draw_breakdown_pie_aggregates_tail_into_other_slice() -> None:
         root.update_idletasks()
 
         data = [
-            SimpleNamespace(total_kzt=float(100 - idx), color=f"#0000{idx:02d}")
+            SimpleNamespace(total_base=float(100 - idx), color=f"#0000{idx:02d}")
             for idx in range(11)
         ]
         _draw_breakdown_pie(canvas, data)

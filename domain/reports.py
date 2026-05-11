@@ -59,7 +59,7 @@ class Report:
 
     def total_fixed(self) -> float:
         """Accounting total by operation-time rates."""
-        return self._initial_balance + sum(r.signed_amount_kzt() for r in self._profit_records())
+        return self._initial_balance + sum(r.signed_amount_base() for r in self._profit_records())
 
     def total(self) -> float:
         """Backward-compatible alias."""
@@ -69,7 +69,7 @@ class Report:
         total = self._initial_balance
         for record in self._profit_records():
             converted = float(currency_service.convert(record.amount_original, record.currency))
-            sign = 1.0 if record.signed_amount_kzt() >= 0 else -1.0
+            sign = 1.0 if record.signed_amount_base() >= 0 else -1.0
             total += sign * abs(converted)
         return total
 
@@ -272,11 +272,11 @@ class Report:
         for record in self._profit_records():
             record_date = self._record_date(record)
             if record_date is not None and record_date < start:
-                total += record.signed_amount_kzt()
+                total += record.signed_amount_base()
         return total
 
     def net_profit_fixed(self) -> float:
-        return sum(r.signed_amount_kzt() for r in self._profit_records())
+        return sum(r.signed_amount_base() for r in self._profit_records())
 
     @staticmethod
     def _record_date(record: Record) -> dt_date | None:

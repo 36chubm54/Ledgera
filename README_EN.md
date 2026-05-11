@@ -2,7 +2,7 @@
 
 Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals.
 
-The current `v1.15.2` patch completes the post-`v1.15.1` stabilization pass: it clarifies the `KZT` amount-editing contract, restores top-level tag metadata during bulk restore flows, and unifies `sqlite_sequence` maintenance across import, migration, and replace paths.
+The current `v2.0.0-alpha.2` build completes the breaking-change move to a two-layer currency model and finishes the upper-layer architecture cleanup: SQLite now stores normalized values as `amount_base` / `limit_base` in `base_currency`, `display_currency` controls presentation only, and shell/runtime orchestration has been pushed out of the main entry-point modules into narrower helpers.
 
 ## 🚀 Quick Start
 
@@ -14,7 +14,7 @@ The current `v1.15.2` patch completes the post-`v1.15.1` stabilization pass: it 
 ### Installation
 
 ```bash
-cd "Проект ФУ/project"
+cd "Проект ФУ/FinAccountingApp-dev"
 
 python -m venv .venv
 
@@ -45,18 +45,19 @@ pip install -r requirements-dev.txt
 python main.py
 ```
 
-The app starts a Tkinter GUI on top of SQLite runtime storage. Core tabs can be built lazily, and post-startup maintenance runs after the first window paint.
+The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` and `Operations` are built eagerly, the remaining tabs are built lazily, and post-startup maintenance plus heavier refresh passes run after the first window paint.
 
 ## ✨ Core Features
 
 - Track income, expenses, mandatory payments, and wallet-to-wallet transfers
-- Multi-currency records normalized into base currency `KZT`
+- Multi-currency records normalized into `base_currency` (default `KZT`)
+- Two-layer multicurrency model with persisted `base_currency` and runtime-only `display_currency`
 - Operation tags with free-form entry, normalization, suggestions, color coding, and sidecar display in the journal
 - Reports with fixed-rate and current-rate totals, grouped view, tag filters, and `CSV` / `XLSX` / `PDF` export
 - Financial analytics: `net worth`, cashflow, category breakdown, tag coverage, and monthly summary
 - Category and tag budgets with live progress, pace tracking, and forecast status
 - Debt and loan tracking with repayment history and write-off flows
-- Distribution System for monthly net-income allocation
+- Distribution System for monthly net-income allocation and frozen snapshots
 - Wealth layer: `Assets`, `Goals`, and a dedicated wealth `Dashboard`
 - Full backup / import / migration for `JSON` ↔ `SQLite`
 - Read-only Data Audit Engine for runtime consistency checks, including tag integrity
@@ -68,6 +69,14 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. Core tabs can be 
 - Section-aware `JSON` import so records-only restore does not wipe unrelated `debts/assets/goals/budgets`
 - Safer persistence behavior: corrupt JSON quarantine, `.error` copies on save failure, atomic backup/export paths
 - Patch-level stabilization on top of `v1.15.0`: safer import/runtime flows, GUI coordinator split, and tighter rollback/durability guarantees
+- Inline editing now distinguishes operation-currency amounts from persisted base-value equivalents instead of treating everything as implicit `KZT`
+
+## 💱 Multicurrency Model
+
+- `base_currency` defines the persisted normalized values in SQLite (`amount_base`, `limit_base`) and is stored in `schema_meta`
+- `display_currency` affects only UI presentation and can be switched at runtime from the status bar
+- Business calculations continue to operate on base amounts; UI conversion is done on demand through `CurrencyService.to_display(...)`
+- By default, the display selector is limited to the whitelist `KZT` / `USD` / `EUR` / `RUB`, even if cached rates contain more currency codes
 
 ## 🖥️ Application Tabs
 
@@ -105,6 +114,7 @@ Also important:
 | --- | --- |
 | `gui.controllers.FinancialController` | Main integration surface for GUI and high-level app flows |
 | `app.repository.RecordRepository` | Application-level repository contract consumed by use cases |
+| `app.repository_protocols` | Narrow capability contracts for the runtime repository instead of direct concrete typing |
 | `app.import_support.run_import_transaction(...)` | Rollback-safe orchestration between controller/import service and the runtime repository |
 | `app.preferences_service` | Runtime persistence helpers for `theme`, `language`, and online-mode UI preferences |
 | `app.audit_runner` | App-level audit launch helper for GUI/controller flows |
@@ -117,6 +127,7 @@ Also important:
 | `services.distribution_service.DistributionService` | Monthly distribution and frozen rows |
 | `infrastructure.sqlite_repository.SQLiteRecordRepository` | Primary runtime repository |
 | `storage.sqlite_storage.SQLiteStorage` | Low-level SQLite adapter / schema bootstrap |
+| `infrastructure.currency_providers.CurrencyProviderRegistry` | Registry and extension point for rate providers |
 
 Practical highlights in the current working tree:
 
@@ -126,6 +137,8 @@ Practical highlights in the current working tree:
 - `gui.startup_coordinator.DeferredStartupCoordinator` — deferred startup flow, mandatory auto-payments, and post-startup maintenance
 - `gui.status_bar_coordinator.StatusBarCoordinator` — online-mode toggles and recurring status refresh logic
 - `gui.tab_lifecycle` — lazy tab build and lifecycle dispatch outside the main shell class
+- `gui.shell.*` — shell-specific lifecycle/refresh/preferences/status helpers extracted from `gui.tkinter_gui`
+- `CurrencyService.get_available_display_currencies()` — whitelist-aware display switcher values instead of the full cached-rate set
 - `FinanceService.get_import_capabilities()` — a single capability model for the import pipeline instead of ad-hoc attribute probing
 - `services.import_payload_support`, `services.import_replace_support`, `services.import_execution_support`, `services.import_mandatory_support` — a split import stack instead of one oversized service body
 - `FinancialController.list_tags()` / `search_tags()` / `set_tag_color()` — app-level entry points for tag-aware UI and analytics
@@ -173,6 +186,7 @@ Global shortcuts are registered through `gui.hotkeys.register_hotkeys(app)` once
 | `Ctrl+Shift+X` | Reports | Export report to XLSX |
 | `Ctrl+Shift+P` | Reports | Export report to PDF |
 | `Ctrl+R` | Analytics | Refresh analytics (recalculate metrics) |
+| `Ctrl+T` | Analytics | Toggle tag mode |
 | `Enter` | Budget | Add a new budget |
 | `Del` | Budget | Delete the selected budget |
 | `F2` | Budget | Edit the selected budget |
@@ -260,12 +274,21 @@ The detailed layer map, runtime flows, and module guide now live in `docs/archit
 
 ## 💱 Supported Currencies
 
-- `KZT` — base currency
-- `RUB`
-- `USD`
-- `EUR`
+- By default, the UI display selector uses `KZT`, `USD`, `EUR`, and `RUB`
+- In the current alpha config, the default base currency is `KZT`
+- The provider chain can load a wider set of rates when allowed by config and the active online provider
 
-Rates are provided through `CurrencyService`; offline mode keeps the last known state.
+Rates are provided through `CurrencyService` and an ordered provider chain:
+
+- `NBKProvider` — primary online source for `KZT`
+- `ExchangeRateProvider` — API-key-based fallback provider
+- `CBRProvider` — optional `RUB`-base provider via the Rambler mirror
+- `StaticProvider` — safe offline fallback with no network I/O
+
+Useful configuration points:
+
+- `currency_config.json` — `provider_mode`, `fallback_provider`, `commercial_fallback_provider`, `display_currency_whitelist`
+- env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` — runtime override for `exchange_rate_api_key`
 
 ## 📄 License
 

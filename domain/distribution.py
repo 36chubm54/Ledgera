@@ -36,7 +36,7 @@ class SubitemResult:
     """Calculated amount for a single distribution subitem."""
 
     subitem: DistributionSubitem
-    amount_kzt: float
+    amount_base: float
     amount_minor: int
 
 
@@ -45,7 +45,7 @@ class ItemResult:
     """Calculated amount for a single top-level distribution item."""
 
     item: DistributionItem
-    amount_kzt: float
+    amount_base: float
     amount_minor: int
     subitem_results: tuple[SubitemResult, ...]
 
@@ -55,7 +55,7 @@ class MonthlyDistribution:
     """Calculated distribution results for a single month."""
 
     month: str
-    net_income_kzt: float
+    net_income_base: float
     net_income_minor: int
     item_results: tuple[ItemResult, ...]
     is_negative: bool

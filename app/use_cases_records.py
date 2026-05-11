@@ -9,9 +9,9 @@ from app.use_case_support import (
     build_rate,
     commission_marker,
     is_commission_for_transfer,
-    wallet_balance_kzt,
+    wallet_balance_base,
     wallet_by_id,
-    wallet_initial_balance_kzt,
+    wallet_initial_balance_base,
 )
 from domain.errors import DomainError
 from domain.import_policy import ImportPolicy
@@ -25,6 +25,12 @@ from utils.tag_utils import find_numeric_only_tags
 from .services import CurrencyService
 
 logger = logging.getLogger(__name__)
+
+
+def _base_currency_code(currency: CurrencyService | None) -> str:
+    if currency is not None:
+        return str(currency.base_currency or "KZT").upper()
+    return "KZT"
 
 
 class CreateIncome:
@@ -41,7 +47,7 @@ class CreateIncome:
         currency: str,
         category: str = "General",
         description: str = "",
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
         tags: tuple[str, ...] = (),
@@ -53,10 +59,10 @@ class CreateIncome:
         wallet = wallet_by_id(self._repository, wallet_id)
         if not wallet.is_active:
             raise ValueError("Cannot create operation for inactive wallet")
-        if amount_kzt is None:
-            amount_kzt = self._currency.convert(amount, currency)
+        if amount_base is None:
+            amount_base = self._currency.convert(amount, currency)
         if rate_at_operation is None:
-            rate_at_operation = build_rate(amount, amount_kzt, currency)
+            rate_at_operation = build_rate(amount, amount_base, currency)
         record = IncomeRecord(
             date=date,
             wallet_id=wallet_id,
@@ -64,17 +70,17 @@ class CreateIncome:
             amount_original=to_money_float(amount),
             currency=currency.upper(),
             rate_at_operation=to_rate_float(rate_at_operation),
-            amount_kzt=to_money_float(amount_kzt),
+            amount_base=to_money_float(amount_base),
             category=category,
             description=description,
             tags=tags,
         )
         self._repository.save(record)
         logger.info(
-            "Income record created date=%s wallet_id=%s amount_kzt=%s category=%s",
+            "Income record created date=%s wallet_id=%s amount_base=%s category=%s",
             date,
             wallet_id,
-            amount_kzt,
+            amount_base,
             category,
         )
 
@@ -93,7 +99,7 @@ class CreateExpense:
         currency: str,
         category: str = "General",
         description: str = "",
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
         tags: tuple[str, ...] = (),
@@ -105,14 +111,14 @@ class CreateExpense:
         wallet = wallet_by_id(self._repository, wallet_id)
         if not wallet.is_active:
             raise ValueError("Cannot create operation for inactive wallet")
-        if amount_kzt is None:
-            amount_kzt = self._currency.convert(amount, currency)
+        if amount_base is None:
+            amount_base = self._currency.convert(amount, currency)
         if rate_at_operation is None:
-            rate_at_operation = build_rate(amount, amount_kzt, currency)
-        amount_kzt_value = to_money_float(amount_kzt)
+            rate_at_operation = build_rate(amount, amount_base, currency)
+        amount_base_value = to_money_float(amount_base)
         if not wallet.allow_negative:
-            balance = wallet_balance_kzt(wallet, self._repository.load_all(), self._currency)
-            if to_money_float(quantize_money(balance) - quantize_money(amount_kzt_value)) < 0:
+            balance = wallet_balance_base(wallet, self._repository.load_all(), self._currency)
+            if to_money_float(quantize_money(balance) - quantize_money(amount_base_value)) < 0:
                 raise ValueError("Insufficient funds in wallet")
         record = ExpenseRecord(
             date=date,
@@ -121,17 +127,17 @@ class CreateExpense:
             amount_original=to_money_float(amount),
             currency=currency.upper(),
             rate_at_operation=to_rate_float(rate_at_operation),
-            amount_kzt=amount_kzt_value,
+            amount_base=amount_base_value,
             category=category,
             description=description,
             tags=tags,
         )
         self._repository.save(record)
         logger.info(
-            "Expense record created date=%s wallet_id=%s amount_kzt=%s category=%s",
+            "Expense record created date=%s wallet_id=%s amount_base=%s category=%s",
             date,
             wallet_id,
-            amount_kzt,
+            amount_base,
             category,
         )
 
@@ -155,13 +161,13 @@ class GenerateReport:
             )
         if wallet_id is None:
             initial_balance = sum(
-                wallet_initial_balance_kzt(wallet, self._currency) for wallet in wallets
+                wallet_initial_balance_base(wallet, self._currency) for wallet in wallets
             )
         else:
             initial_balance = 0.0
             for wallet in wallets:
                 if wallet.id == wallet_id:
-                    initial_balance = wallet_initial_balance_kzt(wallet, self._currency)
+                    initial_balance = wallet_initial_balance_base(wallet, self._currency)
                     break
         return Report(self._repository.load_all(), initial_balance, wallet_id=wallet_id)
 
@@ -219,7 +225,7 @@ class SoftDeleteWallet:
         wallet = wallet_by_id(self._repository, wallet_id)
         if wallet.system:
             raise ValueError("System wallet cannot be deleted")
-        balance = wallet_balance_kzt(wallet, self._repository.load_all(), self._currency)
+        balance = wallet_balance_base(wallet, self._repository.load_all(), self._currency)
         if abs(balance) > 1e-9:
             raise ValueError("Wallet with non-zero balance cannot be deleted")
         if not self._repository.soft_delete_wallet(wallet_id):
@@ -237,7 +243,7 @@ class CalculateWalletBalance:
         wallet = next((w for w in wallets if w.id == wallet_id), None)
         if wallet is None:
             raise ValueError(f"Wallet not found: {wallet_id}")
-        return wallet_balance_kzt(wallet, self._repository.load_all(), self._currency)
+        return wallet_balance_base(wallet, self._repository.load_all(), self._currency)
 
 
 class CalculateNetWorth:
@@ -248,14 +254,14 @@ class CalculateNetWorth:
     def execute_fixed(self) -> float:
         wallets = self._repository.load_active_wallets()
         records = self._repository.load_all()
-        total = sum(wallet_balance_kzt(wallet, records, self._currency) for wallet in wallets)
+        total = sum(wallet_balance_base(wallet, records, self._currency) for wallet in wallets)
         for debt in self._repository.load_debts():
-            remaining_kzt = minor_to_money(int(debt.remaining_amount_minor))
+            remaining_base = minor_to_money(int(debt.remaining_amount_minor))
             if str(debt.kind.value) == "loan":
-                total += remaining_kzt
+                total += remaining_base
             else:
-                total -= remaining_kzt
-        total += self._assets_total_kzt()
+                total -= remaining_base
+        total += self._assets_total_base()
         return total
 
     def execute_current(self) -> float:
@@ -269,24 +275,24 @@ class CalculateNetWorth:
                 converted = quantize_money(
                     self._currency.convert(record.amount_original, record.currency)
                 )
-                sign = 1.0 if record.signed_amount_kzt() >= 0 else -1.0
+                sign = 1.0 if record.signed_amount_base() >= 0 else -1.0
                 total += converted if sign >= 0 else -abs(converted)
         for debt in self._repository.load_debts():
             converted = quantize_money(
                 self._currency.convert(
                     minor_to_money(int(debt.remaining_amount_minor)),
-                    str(debt.currency or "KZT"),
+                    str(debt.currency or _base_currency_code(self._currency)),
                 )
             )
             if str(debt.kind.value) == "loan":
                 total += converted
             else:
                 total -= abs(converted)
-        total += quantize_money(self._assets_total_kzt())
+        total += quantize_money(self._assets_total_base())
         return float(total)
 
-    def _assets_total_kzt(self) -> float:
-        total = self._repository.get_total_assets_kzt(self._currency, active_only=True)
+    def _assets_total_base(self) -> float:
+        total = self._repository.get_total_assets_base(self._currency, active_only=True)
         return 0.0 if total is None else float(total)
 
 
@@ -306,7 +312,7 @@ class CreateTransfer:
         description: str = "",
         commission_amount: float = 0.0,
         commission_currency: str | None = None,
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
     ) -> int:
         if from_wallet_id == to_wallet_id:
@@ -326,30 +332,30 @@ class CreateTransfer:
         if not from_wallet.is_active or not to_wallet.is_active:
             raise ValueError("Transfers are allowed only between active wallets")
 
-        if amount_kzt is None:
-            transfer_kzt = to_money_float(self._currency.convert(amount_original, currency))
+        if amount_base is None:
+            transfer_base = to_money_float(self._currency.convert(amount_original, currency))
         else:
-            transfer_kzt = to_money_float(amount_kzt)
+            transfer_base = to_money_float(amount_base)
         if rate_at_operation is None:
-            transfer_rate = build_rate(amount_original, transfer_kzt, currency)
+            transfer_rate = build_rate(amount_original, transfer_base, currency)
         else:
             transfer_rate = to_rate_float(rate_at_operation)
 
         commission_ccy = (commission_currency or currency).upper()
-        commission_kzt = 0.0
+        commission_base = 0.0
         commission_rate = 1.0
         if commission_amount > 0:
-            commission_kzt = to_money_float(
+            commission_base = to_money_float(
                 self._currency.convert(commission_amount, commission_ccy)
             )
-            commission_rate = build_rate(commission_amount, commission_kzt, commission_ccy)
+            commission_rate = build_rate(commission_amount, commission_base, commission_ccy)
 
         records = self._repository.load_all()
-        from_balance = wallet_balance_kzt(from_wallet, records, self._currency)
+        from_balance = wallet_balance_base(from_wallet, records, self._currency)
         projected_balance = to_money_float(
             quantize_money(from_balance)
-            - quantize_money(transfer_kzt)
-            - quantize_money(commission_kzt)
+            - quantize_money(transfer_base)
+            - quantize_money(commission_base)
         )
         if not from_wallet.allow_negative and projected_balance < 0:
             raise ValueError("Insufficient funds in source wallet")
@@ -364,7 +370,7 @@ class CreateTransfer:
             amount_original=to_money_float(amount_original),
             currency=currency.upper(),
             rate_at_operation=transfer_rate,
-            amount_kzt=transfer_kzt,
+            amount_base=transfer_base,
             description=description,
         )
 
@@ -376,7 +382,7 @@ class CreateTransfer:
             amount_original=to_money_float(amount_original),
             currency=currency.upper(),
             rate_at_operation=transfer_rate,
-            amount_kzt=transfer_kzt,
+            amount_base=transfer_base,
             category="Transfer",
             description=description,
         )
@@ -388,7 +394,7 @@ class CreateTransfer:
             amount_original=to_money_float(amount_original),
             currency=currency.upper(),
             rate_at_operation=transfer_rate,
-            amount_kzt=transfer_kzt,
+            amount_base=transfer_base,
             category="Transfer",
             description=description,
         )
@@ -405,25 +411,25 @@ class CreateTransfer:
                 amount_original=to_money_float(commission_amount),
                 currency=commission_ccy,
                 rate_at_operation=commission_rate,
-                amount_kzt=commission_kzt,
+                amount_base=commission_base,
                 category="Commission",
                 description=marker,
             )
             updated_records.append(commission_record)
             logger.info(
-                "Transfer commission record created transfer_id=%s wallet=%s amount_kzt=%.2f",
+                "Transfer commission record created transfer_id=%s wallet=%s amount_base=%.2f",
                 transfer_id,
                 from_wallet_id,
-                commission_kzt,
+                commission_base,
             )
 
         self._repository.replace_records_and_transfers(updated_records, updated_transfers)
         logger.info(
-            "Transfer records created transfer_id=%s from_wallet=%s to_wallet=%s amount_kzt=%.2f",
+            "Transfer records created transfer_id=%s from_wallet=%s to_wallet=%s amount_base=%.2f",
             transfer_id,
             from_wallet_id,
             to_wallet_id,
-            transfer_kzt,
+            transfer_base,
         )
         return transfer_id
 
@@ -480,7 +486,7 @@ class UpdateTransfer:
         new_from_wallet_id: int,
         new_to_wallet_id: int,
         new_description: str | None = None,
-        new_amount_kzt: float | None = None,
+        new_amount_base: float | None = None,
     ) -> None:
         from domain.validation import ensure_not_future, parse_ymd
 
@@ -504,24 +510,26 @@ class UpdateTransfer:
         if not from_wallet.is_active or not to_wallet.is_active:
             raise ValueError("Transfers are allowed only between active wallets")
 
-        updated_amount_kzt = (
-            to_money_float(new_amount_kzt)
-            if new_amount_kzt is not None
-            else to_money_float(transfer.amount_kzt)
+        updated_amount_base = (
+            to_money_float(new_amount_base)
+            if new_amount_base is not None
+            else to_money_float(transfer.amount_base)
         )
-        if updated_amount_kzt <= 0:
-            raise ValueError("Transfer amount_kzt must be positive")
-        is_kzt_transfer = str(transfer.currency or "KZT").upper() == "KZT"
+        if updated_amount_base <= 0:
+            raise ValueError("Transfer amount_base must be positive")
+        is_kzt_transfer = str(
+            transfer.currency or _base_currency_code(self._currency)
+        ).upper() == _base_currency_code(self._currency)
         updated_amount_original = (
-            updated_amount_kzt if is_kzt_transfer else to_money_float(transfer.amount_original)
+            updated_amount_base if is_kzt_transfer else to_money_float(transfer.amount_original)
         )
         updated_rate = (
             1.0
             if is_kzt_transfer
             else build_rate(
                 float(transfer.amount_original),
-                updated_amount_kzt,
-                str(transfer.currency or "KZT"),
+                updated_amount_base,
+                str(transfer.currency or _base_currency_code(self._currency)),
             )
         )
 
@@ -550,14 +558,14 @@ class UpdateTransfer:
             if record.transfer_id != int(transfer_id)
             and not is_commission_for_transfer(record, int(transfer_id))
         ]
-        commission_total_kzt = sum(
-            to_money_float(record.amount_kzt or 0.0) for record in commission_records
+        commission_total_base = sum(
+            to_money_float(record.amount_base or 0.0) for record in commission_records
         )
-        from_balance = wallet_balance_kzt(from_wallet, preserved_records, self._currency)
+        from_balance = wallet_balance_base(from_wallet, preserved_records, self._currency)
         projected_balance = to_money_float(
             quantize_money(from_balance)
-            - quantize_money(updated_amount_kzt)
-            - quantize_money(commission_total_kzt)
+            - quantize_money(updated_amount_base)
+            - quantize_money(commission_total_base)
         )
         if not from_wallet.allow_negative and projected_balance < 0:
             raise ValueError("Insufficient funds in source wallet")
@@ -572,7 +580,7 @@ class UpdateTransfer:
             date=parsed_date,
             description=normalized_description,
             amount_original=updated_amount_original,
-            amount_kzt=updated_amount_kzt,
+            amount_base=updated_amount_base,
             rate_at_operation=updated_rate,
         )
         updated_records: list[Record] = []
@@ -585,7 +593,7 @@ class UpdateTransfer:
                         date=parsed_date,
                         description=normalized_description,
                         amount_original=updated_amount_original,
-                        amount_kzt=updated_amount_kzt,
+                        amount_base=updated_amount_base,
                         rate_at_operation=updated_rate,
                     )
                 )
@@ -597,7 +605,7 @@ class UpdateTransfer:
                         date=parsed_date,
                         description=normalized_description,
                         amount_original=updated_amount_original,
-                        amount_kzt=updated_amount_kzt,
+                        amount_base=updated_amount_base,
                         rate_at_operation=updated_rate,
                     )
                 )
@@ -676,6 +684,7 @@ class ImportFromCSV:
             target = next((item for item in linked if isinstance(item, IncomeRecord)), None)
             if source is None or target is None or len(linked) != 2:
                 raise ValueError(f"Transfer integrity violated for #{transfer_id}")
+
             transfers.append(
                 Transfer(
                     id=transfer_id,
@@ -683,9 +692,11 @@ class ImportFromCSV:
                     to_wallet_id=target.wallet_id,
                     date=source.date,
                     amount_original=to_money_float(source.amount_original or 0.0),
-                    currency=str(source.currency or "KZT").upper(),
+                    currency=str(
+                        source.currency or self._repository.get_system_wallet().currency
+                    ).upper(),
                     rate_at_operation=to_rate_float(source.rate_at_operation),
-                    amount_kzt=to_money_float(source.amount_kzt or 0.0),
+                    amount_base=to_money_float(source.amount_base or 0.0),
                     description=str(source.description or ""),
                 )
             )

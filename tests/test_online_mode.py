@@ -11,8 +11,10 @@ from infrastructure.currency_aggregator import CurrencyAggregator
 from infrastructure.currency_providers import (
     BaseRateProvider,
     CBRProvider,
+    CurrencyProviderRegistry,
+    ExchangeRateProvider,
     NBKProvider,
-    OpenExchangeProvider,
+    ProviderBuildContext,
     ProviderFetchError,
     StaticProvider,
 )
@@ -159,7 +161,7 @@ def test_refresh_rates_updates_timestamp_when_online():
     svc.set_online(True)
     old_fetched = svc.last_fetched_at
     assert old_fetched is not None
-    svc._aggregator = StubAggregator(rates={"USD": 506.0}, provider_name="open_exchange")
+    svc._aggregator = StubAggregator(rates={"USD": 506.0}, provider_name="exchange_rate")
     assert svc.refresh_rates() is True
     assert isinstance(svc.last_fetched_at, datetime)
     assert svc.last_fetched_at >= old_fetched
@@ -234,9 +236,50 @@ def test_aggregator_uses_first_successful_provider():
     assert aggregator.last_provider_name == "nbk"
 
 
-def test_open_exchange_provider_raises_without_api_key():
-    provider = OpenExchangeProvider(api_key="")
+def test_exchange_rate_provider_raises_without_api_key():
+    provider = ExchangeRateProvider(api_key="")
     with pytest.raises(ProviderFetchError, match="No API key configured"):
+        provider.fetch()
+
+
+def test_exchange_rate_provider_parses_conversion_rates(monkeypatch):
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda *args, **kwargs: FakeResponse(
+            payload={
+                "result": "success",
+                "base_code": "USD",
+                "conversion_rates": {
+                    "USD": 1,
+                    "KZT": 500.0,
+                    "EUR": 0.92,
+                    "RUB": 90.0,
+                },
+            }
+        ),
+    )
+
+    provider = ExchangeRateProvider(api_key="test-key", target_base="KZT")
+    assert provider.fetch() == {
+        "USD": 500.0,
+        "KZT": 1.0,
+        "EUR": 543.4782608695652,
+        "RUB": 5.555555555555555,
+    }
+
+
+def test_exchange_rate_provider_raises_on_api_error(monkeypatch):
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda *args, **kwargs: FakeResponse(
+            payload={"result": "error", "error-type": "quota-reached"}
+        ),
+    )
+
+    provider = ExchangeRateProvider(api_key="test-key", target_base="KZT")
+    with pytest.raises(ProviderFetchError, match="quota-reached"):
         provider.fetch()
 
 
@@ -246,3 +289,151 @@ def test_currency_service_accepts_injected_aggregator():
         aggregator=StubAggregator(rates={"USD": 507.0}, provider_name="nbk"),
     )
     assert svc.get_rate("USD") == 507.0
+
+
+def test_display_currency_default_equals_base():
+    svc = CurrencyService(rates={"USD": 500.0}, base="KZT")
+    assert svc.display_currency == svc.base_currency
+
+
+def test_to_display_same_currency():
+    svc = CurrencyService(rates={"USD": 500.0}, base="KZT")
+    assert svc.to_display(1000.0) == 1000.0
+
+
+def test_to_display_converts_correctly():
+    svc = CurrencyService(rates={"USD": 500.0}, base="KZT")
+    svc.set_display_currency("USD")
+    assert svc.to_display(500_000.0) == 1000.0
+
+
+def test_display_symbol_known_currencies():
+    svc = CurrencyService(rates={"USD": 500.0, "EUR": 590.0, "RUB": 6.5}, base="KZT")
+    assert svc.display_symbol == "₸"
+    svc.set_display_currency("USD")
+    assert svc.display_symbol == "$"
+    svc.set_display_currency("EUR")
+    assert svc.display_symbol == "€"
+    svc.set_display_currency("RUB")
+    assert svc.display_symbol == "₽"
+
+
+def test_available_display_currencies_use_whitelist_not_full_cache():
+    svc = CurrencyService(
+        rates={"USD": 500.0, "EUR": 590.0, "RUB": 6.5, "GBP": 640.0, "JPY": 3.2},
+        base="KZT",
+    )
+
+    assert svc.get_available_display_currencies() == ["EUR", "KZT", "RUB", "USD"]
+
+
+def test_available_display_currencies_keep_current_selection_outside_whitelist():
+    svc = CurrencyService(
+        rates={"USD": 500.0, "EUR": 590.0, "RUB": 6.5, "GBP": 640.0},
+        base="KZT",
+    )
+    svc.set_display_currency("GBP")
+
+    assert svc.get_available_display_currencies() == ["EUR", "GBP", "KZT", "RUB", "USD"]
+
+
+def test_currency_service_uses_provider_registry_extension():
+    registry = CurrencyProviderRegistry()
+
+    class RegistryProvider(BaseRateProvider):
+        @property
+        def name(self) -> str:
+            return "custom"
+
+        def fetch(self) -> dict[str, float]:
+            return {"USD": 499.0, "EUR": 555.0}
+
+    registry.register("custom", lambda _context: RegistryProvider())
+    registry.register("static", lambda context: StaticProvider(context.default_rates))
+
+    svc = CurrencyService(
+        base="KZT",
+        provider_registry=registry,
+        aggregator=None,
+    )
+    svc._config["provider_order"] = ["custom", "static"]
+    svc._aggregator = svc._build_default_aggregator()
+
+    assert svc.refresh_rates() is False
+    assert svc._aggregator.fetch_rates() == {"USD": 499.0, "EUR": 555.0}
+
+
+def test_provider_order_config_overrides_primary_and_fallback():
+    svc = CurrencyService()
+    svc._config["provider_order"] = ["static", "nbk", "static"]
+
+    assert svc._resolve_provider_order() == ["static", "nbk"]
+
+
+def test_provider_mode_commercial_switches_fallback_provider():
+    svc = CurrencyService()
+    svc._config["provider_mode"] = "commercial"
+    svc._config["primary_provider"] = "nbk"
+    svc._config["fallback_provider"] = "exchange_rate"
+    svc._config["commercial_fallback_provider"] = "cbr"
+
+    assert svc._resolve_provider_order() == ["nbk", "cbr", "static"]
+
+
+def test_provider_mode_personal_uses_regular_fallback_provider():
+    svc = CurrencyService()
+    svc._config["provider_mode"] = "personal"
+    svc._config["primary_provider"] = "nbk"
+    svc._config["fallback_provider"] = "exchange_rate"
+    svc._config["commercial_fallback_provider"] = "cbr"
+
+    assert svc._resolve_provider_order() == ["nbk", "exchange_rate", "static"]
+
+
+def test_non_kzt_base_uses_exchange_rate_as_default_primary():
+    svc = CurrencyService(base="USD")
+    svc._config["provider_mode"] = "personal"
+    svc._config["fallback_provider"] = "static"
+
+    assert svc._resolve_provider_order() == ["exchange_rate", "static"]
+
+
+def test_non_kzt_base_still_respects_provider_mode_fallback_selection():
+    svc = CurrencyService(base="USD")
+    svc._config["provider_mode"] = "commercial"
+    svc._config["primary_provider"] = "static"
+    svc._config["fallback_provider"] = "exchange_rate"
+    svc._config["commercial_fallback_provider"] = "cbr"
+
+    assert svc._resolve_provider_order() == ["static", "cbr"]
+
+
+def test_provider_registry_factory_receives_build_context():
+    registry = CurrencyProviderRegistry()
+    seen: list[ProviderBuildContext] = []
+
+    registry.register(
+        "capture",
+        lambda context: seen.append(context) or StaticProvider(context.default_rates),
+    )
+
+    context = ProviderBuildContext(
+        target_base="KZT",
+        config={"exchange_rate_api_key": "abc"},
+        default_rates={"USD": 500.0},
+    )
+    provider = registry.create("capture", context)
+
+    assert provider is not None
+    assert seen and seen[0] == context
+
+
+def test_load_config_uses_environment_api_key(monkeypatch, tmp_path):
+    config_path = tmp_path / "currency_config.json"
+    config_path.write_text('{"exchange_rate_api_key": ""}', encoding="utf-8")
+    monkeypatch.setattr(CurrencyService, "CONFIG_FILE", config_path)
+    monkeypatch.setenv(CurrencyService.EXCHANGE_RATE_API_KEY_ENV, "env-secret")
+
+    svc = CurrencyService()
+
+    assert svc._config["exchange_rate_api_key"] == "env-secret"

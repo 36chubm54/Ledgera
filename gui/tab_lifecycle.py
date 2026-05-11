@@ -87,6 +87,7 @@ class TabBuildContext(Protocol):
     _budget_bindings: Any
     _debt_bindings: Any
     _distribution_bindings: Any
+    _settings_bindings: Any
     refresh_wallets: Any
 
     def bind_all(
@@ -203,6 +204,8 @@ def build_tab(app: Any, tab_key: str) -> bool:
     if tab_key == "settings":
         from gui.tabs.settings_tab import build_settings_tab
 
-        build_settings_tab(app.tab_settings, cast(SettingsTabContext, app), app._import_formats)
+        app._settings_bindings = build_settings_tab(
+            app.tab_settings, cast(SettingsTabContext, app), app._import_formats
+        )
         return True
     return False

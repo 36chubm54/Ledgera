@@ -57,20 +57,20 @@ def _insert_transfer(
     from_wallet_id: int,
     to_wallet_id: int,
     date: str,
-    amount_kzt: float,
+    amount_base: float,
 ) -> None:
     conn.execute(
         "INSERT INTO transfers "
         "(id, from_wallet_id, to_wallet_id, date, amount_original, currency, "
-        "rate_at_operation, amount_kzt, description) "
+        "rate_at_operation, amount_base, description) "
         "VALUES (?, ?, ?, ?, ?, 'KZT', 1.0, ?, 'Transfer')",
         (
             int(transfer_id),
             int(from_wallet_id),
             int(to_wallet_id),
             str(date),
-            float(amount_kzt),
-            float(amount_kzt),
+            float(amount_base),
+            float(amount_base),
         ),
     )
     conn.commit()
@@ -82,22 +82,22 @@ def _insert_record(
     record_type: str,
     date: str,
     wallet_id: int,
-    amount_kzt: float,
+    amount_base: float,
     transfer_id=None,
     category: str = "General",
 ) -> None:
     conn.execute(
         "INSERT INTO records "
         "(type, date, wallet_id, transfer_id, amount_original, currency, "
-        "rate_at_operation, amount_kzt, category) "
+        "rate_at_operation, amount_base, category) "
         "VALUES (?, ?, ?, ?, ?, 'KZT', 1.0, ?, ?)",
         (
             str(record_type),
             str(date),
             int(wallet_id),
             transfer_id,
-            float(amount_kzt),
-            float(amount_kzt),
+            float(amount_base),
+            float(amount_base),
             str(category),
         ),
     )
@@ -125,7 +125,7 @@ def test_get_net_worth_timeline_single_income_single_month(tmp_path: Path) -> No
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="income", date="2026-01-10", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-10", wallet_id=1, amount_base=1000.0
         )
     finally:
         conn.close()
@@ -145,10 +145,10 @@ def test_get_net_worth_timeline_is_cumulative_across_months(tmp_path: Path) -> N
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="income", date="2026-01-10", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-10", wallet_id=1, amount_base=1000.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-02-01", wallet_id=1, amount_kzt=200.0
+            conn, record_type="expense", date="2026-02-01", wallet_id=1, amount_base=200.0
         )
     finally:
         conn.close()
@@ -171,7 +171,7 @@ def test_get_net_worth_timeline_includes_wallet_initial_balance(tmp_path: Path) 
     try:
         _insert_wallet(conn, 1, initial_balance=50000.0)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=1000.0
         )
     finally:
         conn.close()
@@ -191,7 +191,7 @@ def test_get_net_worth_timeline_converts_multi_currency_initial_balance(tmp_path
     try:
         _insert_wallet_with_currency(conn, 1, currency="USD", initial_balance=10.0)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=1000.0
         )
     finally:
         conn.close()
@@ -217,14 +217,14 @@ def test_get_net_worth_timeline_transfer_pair_is_neutral(tmp_path: Path) -> None
             from_wallet_id=1,
             to_wallet_id=2,
             date="2026-01-15",
-            amount_kzt=500.0,
+            amount_base=500.0,
         )
         _insert_record(
             conn,
             record_type="expense",
             date="2026-01-15",
             wallet_id=1,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )
@@ -233,7 +233,7 @@ def test_get_net_worth_timeline_transfer_pair_is_neutral(tmp_path: Path) -> None
             record_type="income",
             date="2026-01-15",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )
@@ -264,10 +264,10 @@ def test_get_monthly_cashflow_single_month_income_and_expense(tmp_path: Path) ->
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=1000.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=400.0
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=400.0
         )
     finally:
         conn.close()
@@ -295,14 +295,14 @@ def test_get_monthly_cashflow_excludes_transfer_records(tmp_path: Path) -> None:
             from_wallet_id=1,
             to_wallet_id=2,
             date="2026-01-10",
-            amount_kzt=500.0,
+            amount_base=500.0,
         )
         _insert_record(
             conn,
             record_type="expense",
             date="2026-01-10",
             wallet_id=1,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )
@@ -311,12 +311,16 @@ def test_get_monthly_cashflow_excludes_transfer_records(tmp_path: Path) -> None:
             record_type="income",
             date="2026-01-10",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )
-        _insert_record(conn, record_type="income", date="2026-01-11", wallet_id=1, amount_kzt=100.0)
-        _insert_record(conn, record_type="expense", date="2026-01-12", wallet_id=1, amount_kzt=40.0)
+        _insert_record(
+            conn, record_type="income", date="2026-01-11", wallet_id=1, amount_base=100.0
+        )
+        _insert_record(
+            conn, record_type="expense", date="2026-01-12", wallet_id=1, amount_base=40.0
+        )
     finally:
         conn.close()
 
@@ -336,9 +340,9 @@ def test_get_monthly_cashflow_respects_start_and_end_date_filters(tmp_path: Path
     conn = sqlite3.connect(db_path)
     try:
         _insert_wallet(conn, 1)
-        _insert_record(conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=10.0)
-        _insert_record(conn, record_type="income", date="2026-02-01", wallet_id=1, amount_kzt=20.0)
-        _insert_record(conn, record_type="income", date="2026-03-01", wallet_id=1, amount_kzt=30.0)
+        _insert_record(conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=10.0)
+        _insert_record(conn, record_type="income", date="2026-02-01", wallet_id=1, amount_base=20.0)
+        _insert_record(conn, record_type="income", date="2026-03-01", wallet_id=1, amount_base=30.0)
     finally:
         conn.close()
 
@@ -368,21 +372,21 @@ def test_get_cumulative_income_expense_accumulates_monotonically(tmp_path: Path)
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=1000.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=200.0
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=200.0
         )
-        _insert_record(conn, record_type="income", date="2026-02-01", wallet_id=1, amount_kzt=50.0)
+        _insert_record(conn, record_type="income", date="2026-02-01", wallet_id=1, amount_base=50.0)
         _insert_record(
             conn,
             record_type="mandatory_expense",
             date="2026-02-02",
             wallet_id=1,
-            amount_kzt=10.0,
+            amount_base=10.0,
             category="Mandatory",
         )
-        _insert_record(conn, record_type="expense", date="2026-03-01", wallet_id=1, amount_kzt=5.0)
+        _insert_record(conn, record_type="expense", date="2026-03-01", wallet_id=1, amount_base=5.0)
     finally:
         conn.close()
 
@@ -404,8 +408,12 @@ def test_timeline_service_is_read_only(tmp_path: Path) -> None:
     conn = sqlite3.connect(db_path)
     try:
         _insert_wallet(conn, 1, initial_balance=1000.0)
-        _insert_record(conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=100.0)
-        _insert_record(conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=50.0)
+        _insert_record(
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=100.0
+        )
+        _insert_record(
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=50.0
+        )
     finally:
         conn.close()
 

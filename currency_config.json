@@ -1,8 +1,11 @@
 {
   "base_currency": "KZT",
+  "provider_mode": "personal",
   "primary_provider": "nbk",
-  "fallback_provider": "open_exchange",
-  "open_exchange_api_key": "",
+  "fallback_provider": "exchange_rate",
+  "commercial_fallback_provider": "exchange_rate",
+  "display_currency_whitelist": ["KZT", "USD", "EUR", "RUB"],
+  "exchange_rate_api_key": "",
   "enable_cbr": false,
   "auto_update": true,
   "update_interval_minutes": 60

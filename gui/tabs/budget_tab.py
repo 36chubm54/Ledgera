@@ -14,9 +14,10 @@ from gui.i18n import tr
 from gui.tooltip import Tooltip
 from gui.ui_helpers import (
     ask_confirm,
-    ask_text,
+    ask_numeric_text,
     attach_treeview_scrollbars,
     bind_label_wrap,
+    enable_treeview_column_autosize,
     set_status,
     show_error,
 )
@@ -53,6 +54,12 @@ class BudgetTabBindings:
     add_budget: Callable[[], None]
     edit_budget: Callable[[], None]
     delete_budget: Callable[[], None]
+
+
+def _normalize_budget_limit_input(raw: str) -> str:
+    from gui.ui_helpers import normalize_numeric_input
+
+    return normalize_numeric_input(raw)
 
 
 def _visual_budget_state(result: BudgetResult) -> str:
@@ -140,6 +147,16 @@ def build_budget_tab(
     context: BudgetTabContext,
 ) -> BudgetTabBindings:
     palette = get_palette()
+
+    def display_currency() -> str:
+        return context.controller.get_display_currency_code()
+
+    def format_display_amount(amount: float, precision: int = 0) -> str:
+        return context.controller.format_display_amount(amount, precision=precision)
+
+    def format_display_money(amount: float, precision: int = 0) -> str:
+        return context.controller.format_display_money(amount, precision=precision)
+
     parent.grid_columnconfigure(0, weight=1)
     parent.grid_rowconfigure(1, weight=1)
 
@@ -180,7 +197,7 @@ def build_budget_tab(
     end_date_entry = ttk.Entry(form_frame, width=12)
     end_date_entry.grid(row=0, column=5, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(form_frame, text=tr("budget.limit_kzt", "Лимит (KZT):")).grid(
+    ttk.Label(form_frame, text=tr("budget.limit_base", "Лимит (валюта базы):")).grid(
         row=2, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
     )
     limit_entry = ttk.Entry(form_frame, width=16)
@@ -223,19 +240,24 @@ def build_budget_tab(
     budget_tree = ttk.Treeview(list_frame, columns=columns, show="headings", height=10)
     enable_treeview_zebra(budget_tree)
 
-    for col, text, width, anchor in (
-        ("category", tr("common.category_short", "Категория"), 170, "w"),
-        ("period", tr("common.period", "Период"), 180, "w"),
-        ("include", tr("budget.include_short", "Обязательные"), 120, "center"),
-        ("limit", tr("budget.limit", "Лимит"), 70, "e"),
-        ("spent", tr("budget.spent", "Потрачено"), 100, "e"),
-        ("remaining", tr("budget.remaining", "Остаток"), 100, "e"),
-        ("usage", tr("budget.usage_short", "%"), 65, "center"),
-        ("pace", tr("budget.pace", "Темп"), 85, "center"),
-        ("status", tr("common.status", "Статус"), 250, "center"),
+    for col, text, width, stretch, anchor in (
+        ("category", tr("common.category_short", "Категория"), 170, True, "w"),
+        ("period", tr("common.period", "Период"), 220, False, "w"),
+        ("include", tr("budget.include_short", "Обязательные"), 130, False, "center"),
+        ("limit", tr("budget.limit", "Лимит"), 120, False, "e"),
+        ("spent", tr("budget.spent", "Потрачено"), 150, False, "e"),
+        ("remaining", tr("budget.remaining", "Остаток"), 150, False, "e"),
+        ("usage", tr("budget.usage_short", "%"), 65, False, "center"),
+        ("pace", tr("budget.pace", "Темп"), 85, False, "center"),
+        ("status", tr("common.status", "Статус"), 160, True, "center"),
     ):
         budget_tree.heading(col, text=text)
-        budget_tree.column(col, width=width, anchor=anchor)  # type: ignore[arg-type]
+        budget_tree.column(col, width=width, stretch=stretch, anchor=anchor)  # type: ignore[arg-type]
+    enable_treeview_column_autosize(
+        budget_tree,
+        columns=("category", "status"),
+        max_width=420,
+    )
 
     budget_tree.tag_configure("overspent", foreground=palette.danger)
     budget_tree.tag_configure("overpace", foreground=palette.warning)
@@ -307,10 +329,12 @@ def build_budget_tab(
         if not result.forecast_status_key:
             return None
         params = dict(result.forecast_status_params or {})
+        if "amount_base" in params:
+            params["amount_base"] = format_display_money(float(params["amount_base"]), precision=0)
         fallbacks = {
             "budget.forecast.overspend_in_days": "Прогноз перерасхода через {days} дн.",
             "budget.forecast.overspend": "Прогноз перерасхода",
-            "budget.forecast.remaining": "Прогноз остатка: {amount_kzt:,.0f} KZT",
+            "budget.forecast.remaining": "Прогноз остатка: {amount_base}",
         }
         return tr(
             result.forecast_status_key,
@@ -335,6 +359,14 @@ def build_budget_tab(
         except (ValueError, TypeError, RuntimeError) as err:
             logger.warning("Budget refresh error: %s", err)
             return
+        budget_tree.heading("limit", text=f"{tr('budget.limit', 'Лимит')} ({display_currency()})")
+        budget_tree.heading(
+            "spent",
+            text=f"{tr('budget.spent', 'Потрачено')} ({display_currency()})",
+        )
+        budget_tree.heading(
+            "remaining", text=f"{tr('budget.remaining', 'Остаток')} ({display_currency()})"
+        )
 
         last_results = list(results)
         budget_tree.delete(*budget_tree.get_children())
@@ -349,9 +381,9 @@ def build_budget_tab(
                     budget.category,
                     f"{budget.start_date}  ->  {budget.end_date}",
                     tr("common.yes", "Да") if budget.include_mandatory else tr("common.no", "Нет"),
-                    f"{budget.limit_kzt:,.0f}",
-                    f"{result.spent_kzt:,.0f}",
-                    f"{result.remaining_kzt:,.0f}",
+                    format_display_amount(budget.limit_base, precision=0),
+                    format_display_amount(result.spent_base, precision=0),
+                    format_display_amount(result.remaining_base, precision=0),
                     f"{result.usage_pct:.1f}%",
                     _display_pace_status(result.pace_status),
                     forecast_status if forecast_status else _display_budget_status(result.status),
@@ -402,8 +434,8 @@ def build_budget_tab(
             )
             return
         try:
-            limit_kzt = float(raw_limit.replace(" ", "").replace(",", "."))
-            if limit_kzt <= 0:
+            limit_base = float(raw_limit.replace(" ", "").replace(",", "."))
+            if limit_base <= 0:
                 raise ValueError
         except ValueError:
             show_error(tr("budget.error.limit_positive", "Лимит должен быть положительным числом."))
@@ -414,7 +446,7 @@ def build_budget_tab(
                 category=category,
                 start_date=start_date,
                 end_date=end_date,
-                limit_kzt=limit_kzt,
+                limit_base=limit_base,
                 include_mandatory=include_mandatory_var.get(),
                 scope_type=scope_type,
                 scope_value=category,
@@ -454,25 +486,20 @@ def build_budget_tab(
         if target is None:
             show_error(tr("budget.error.select_first", "Сначала выберите бюджет."))
             return
-        new_limit_str = ask_text(
+        new_limit_str = ask_numeric_text(
             tr("budget.limit.title", "Изменение лимита"),
             tr(
                 "budget.limit.prompt",
-                "Новый лимит (KZT) для '{category}':",
+                "Новый лимит в валюте базы для '{category}':",
                 category=target.category,
             ),
-            initialvalue=f"{target.limit_kzt:,.0f}",
+            initialvalue=f"{float(target.limit_base):.0f}",
             parent=parent,
         )
         if not new_limit_str:
             return
-        normalized = new_limit_str.replace(" ", "")
-        if "," in normalized and "." not in normalized:
-            normalized = normalized.replace(",", ".")
-        else:
-            normalized = normalized.replace(",", "")
         try:
-            context.controller.update_budget_limit(target.id, float(normalized))
+            context.controller.update_budget_limit(target.id, float(new_limit_str))
         except (ValueError, TypeError) as error:
             show_error(tr("budget.error.invalid_limit", "Некорректный лимит: {error}", error=error))
             return

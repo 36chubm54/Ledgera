@@ -20,7 +20,7 @@ def test_parse_import_file_rejects_large_file(monkeypatch, tmp_path: Path) -> No
 def test_parse_import_file_rejects_csv_row_limit(monkeypatch, tmp_path: Path) -> None:
     csv_path = tmp_path / "rows.csv"
     csv_path.write_text(
-        "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_kzt\n"
+        "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base\n"
         "2026-01-01,income,1,Salary,10,USD,500,5000\n"
         "2026-01-02,income,1,Salary,10,USD,500,5000\n",
         encoding="utf-8",
@@ -102,7 +102,7 @@ def test_parse_import_file_keeps_fractional_transfer_aggregate_id_verbatim(tmp_p
                 "amount_original": 10,
                 "currency": "KZT",
                 "rate_at_operation": 1,
-                "amount_kzt": 10,
+                "amount_base": 10,
             }
         ],
     }
@@ -200,8 +200,8 @@ def test_parse_import_file_reads_budgets_from_json(tmp_path: Path) -> None:
                 "category": "Food",
                 "start_date": "2026-03-01",
                 "end_date": "2026-03-31",
-                "limit_kzt": 1500.0,
-                "limit_kzt_minor": 150000,
+                "limit_base": 1500.0,
+                "limit_base_minor": 150000,
                 "include_mandatory": True,
             }
         ],
@@ -231,7 +231,7 @@ def test_parse_import_file_reads_debts_from_json(tmp_path: Path) -> None:
                 "amount_original": 25.0,
                 "currency": "KZT",
                 "rate_at_operation": 1.0,
-                "amount_kzt": 25.0,
+                "amount_base": 25.0,
             }
         ],
         "mandatory_expenses": [],
@@ -294,5 +294,5 @@ def test_parse_transfer_row_supports_legacy_policy() -> None:
     assert records is not None
     assert transfer.currency == "KZT"
     assert transfer.amount_original == 1500.0
-    assert transfer.amount_kzt == 1500.0
+    assert transfer.amount_base == 1500.0
     assert next_transfer_id == 2

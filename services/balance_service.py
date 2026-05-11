@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.currency_support import convert_money_to_kzt
+from app.repository_protocols import SqlQueryRepository
+from services.currency_support import convert_money_to_base
 from services.sqlite_money_sql import minor_amount_expr, money_expr, signed_minor_amount_expr
 
 
@@ -33,7 +33,7 @@ class BalanceService:
     Never writes to the database.
     """
 
-    def __init__(self, repository: SQLiteRecordRepository, currency_service=None) -> None:
+    def __init__(self, repository: SqlQueryRepository, currency_service=None) -> None:
         self._repo = repository
         self._currency = currency_service
 
@@ -64,7 +64,7 @@ class BalanceService:
             wallet_id = int(row[0])
             delta = self._sum_signed_records(wallet_id=wallet_id, up_to_date=date)
             balance = (
-                convert_money_to_kzt(
+                convert_money_to_base(
                     float(row[3]),
                     str(row[2]),
                     self._currency,
@@ -113,7 +113,7 @@ class BalanceService:
         )
         if not row:
             return 0.0
-        return convert_money_to_kzt(float(row[0]), str(row[1]), self._currency)
+        return convert_money_to_base(float(row[0]), str(row[1]), self._currency)
 
     def _sum_signed_records(
         self,
@@ -122,14 +122,14 @@ class BalanceService:
         up_to_date: str | None,
     ) -> float:
         """
-        SUM of signed amount_kzt for a wallet, optionally filtered to date <= up_to_date.
-        Sign: income -> +amount_kzt, expense/mandatory_expense -> -amount_kzt.
+        SUM of signed amount_base for a wallet, optionally filtered to date <= up_to_date.
+        Sign: income -> +amount_base, expense/mandatory_expense -> -amount_base.
         """
         if up_to_date is None:
             sql = """
                 SELECT COALESCE(SUM(
                     """
-            sql += signed_minor_amount_expr("amount_kzt")
+            sql += signed_minor_amount_expr("amount_base")
             sql += """
                 ), 0.0)
                 FROM records
@@ -140,7 +140,7 @@ class BalanceService:
             sql = """
                 SELECT COALESCE(SUM(
                     """
-            sql += signed_minor_amount_expr("amount_kzt")
+            sql += signed_minor_amount_expr("amount_base")
             sql += """
                 ), 0.0)
                 FROM records
@@ -151,7 +151,7 @@ class BalanceService:
 
     def _sum_by_type(self, record_type: str, start_date: str, end_date: str) -> float:
         """
-        SUM of amount_kzt for a given type in [start_date, end_date].
+        SUM of amount_base for a given type in [start_date, end_date].
         Transfer records (category = 'Transfer') are excluded.
         For 'expense', also includes mandatory_expense type.
         """
@@ -159,7 +159,7 @@ class BalanceService:
             sql = """
                 SELECT COALESCE(SUM(
                     """
-            sql += minor_amount_expr("amount_kzt")
+            sql += minor_amount_expr("amount_base")
             sql += """
                 ), 0.0)
                 FROM records
@@ -172,7 +172,7 @@ class BalanceService:
             sql = """
                 SELECT COALESCE(SUM(
                     """
-            sql += minor_amount_expr("amount_kzt")
+            sql += minor_amount_expr("amount_base")
             sql += """
                 ), 0.0)
                 FROM records

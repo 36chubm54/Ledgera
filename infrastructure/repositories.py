@@ -68,10 +68,10 @@ class RecordRepository(ABC):
         """Optional: update color for a known tag."""
         return None
 
-    def get_total_assets_kzt(
+    def get_total_assets_base(
         self, currency: "CurrencyService", *, active_only: bool = True
     ) -> float | None:
-        """Optional: return total asset value in KZT for net-worth calculations."""
+        """Optional: return total asset value in base currency for net-worth calculations."""
         return None
 
     @abstractmethod
@@ -329,6 +329,24 @@ class JsonFileRecordRepository(RecordRepository):
                     return currency
         return "KZT"
 
+    @classmethod
+    def _base_currency_from_data(cls, data: dict | None) -> str:
+        if isinstance(data, dict):
+            wallets = data.get("wallets")
+            if isinstance(wallets, list):
+                for item in wallets:
+                    if not isinstance(item, dict):
+                        continue
+                    wallet_id = cls._as_strict_int(item.get("id"))
+                    if wallet_id in (SYSTEM_WALLET_ID, None) or bool(item.get("system", False)):
+                        currency = str(item.get("currency", "") or "").strip().upper()
+                        if currency:
+                            return currency
+            records = data.get("records")
+            if isinstance(records, list):
+                return cls._resolve_base_currency(records)
+        return "KZT"
+
     @staticmethod
     def _is_transfer_commission(item: dict) -> bool:
         return str(item.get("category", "") or "").strip().lower() == "commission"
@@ -477,7 +495,10 @@ class JsonFileRecordRepository(RecordRepository):
                 wallet_payload = {
                     "id": wallet_id,
                     "name": str(wallet_item.get("name", "") or f"Wallet {wallet_id}"),
-                    "currency": str(wallet_item.get("currency", "KZT") or "KZT").upper(),
+                    "currency": str(
+                        wallet_item.get("currency", self._base_currency_from_data(data))
+                        or self._base_currency_from_data(data)
+                    ).upper(),
                     "initial_balance": self._as_float(wallet_item.get("initial_balance"), 0.0),
                     "system": bool(wallet_item.get("system", False)),
                     "allow_negative": bool(wallet_item.get("allow_negative", False)),
@@ -711,7 +732,7 @@ class JsonFileRecordRepository(RecordRepository):
             "amount_original": record.amount_original,
             "currency": record.currency,
             "rate_at_operation": record.rate_at_operation,
-            "amount_kzt": record.amount_kzt,
+            "amount_base": record.amount_base,
             "category": record.category,
             "description": str(getattr(record, "description", "") or ""),
             "tags": list(normalize_tag_names(tuple(getattr(record, "tags", ()) or ()))),
@@ -721,16 +742,21 @@ class JsonFileRecordRepository(RecordRepository):
         return payload
 
     def _parse_record_common(self, item: dict) -> dict:
-        # Lazy migration for legacy records without amount_kzt.
-        if "amount_kzt" in item:
-            amount_kzt = self._as_float(item.get("amount_kzt", 0.0), 0.0)
-            amount_original = self._as_float(item.get("amount_original", amount_kzt), amount_kzt)
+        # Lazy migration for legacy records without amount_base.
+        if "amount_base" in item:
+            amount_base = self._as_float(item.get("amount_base", 0.0), 0.0)
+            amount_original = self._as_float(item.get("amount_original", amount_base), amount_base)
+            currency = str(item.get("currency", "KZT") or "KZT").upper()
+            rate_at_operation = self._as_float(item.get("rate_at_operation", 1.0), 1.0)
+        elif "amount_kzt" in item:
+            amount_base = self._as_float(item.get("amount_kzt", 0.0), 0.0)
+            amount_original = self._as_float(item.get("amount_original", amount_base), amount_base)
             currency = str(item.get("currency", "KZT") or "KZT").upper()
             rate_at_operation = self._as_float(item.get("rate_at_operation", 1.0), 1.0)
         else:
             legacy_amount = self._as_float(item.get("amount", 0.0), 0.0)
             amount_original = legacy_amount
-            amount_kzt = legacy_amount
+            amount_base = legacy_amount
             currency = "KZT"
             rate_at_operation = 1.0
 
@@ -753,7 +779,7 @@ class JsonFileRecordRepository(RecordRepository):
             "amount_original": amount_original,
             "currency": currency,
             "rate_at_operation": rate_at_operation,
-            "amount_kzt": amount_kzt,
+            "amount_base": amount_base,
             "category": str(item.get("category", "General") or "General"),
             "description": str(item.get("description", "") or ""),
             "tags": normalize_tag_names(tuple(item.get("tags", []) or [])),
@@ -867,6 +893,7 @@ class JsonFileRecordRepository(RecordRepository):
 
     def load_wallets(self) -> list[Wallet]:
         data = self._load_data()
+        base_currency = self._base_currency_from_data(data)
         wallets: list[Wallet] = []
         for index, item in enumerate(data.get("wallets", [])):
             if not isinstance(item, dict):
@@ -882,7 +909,7 @@ class JsonFileRecordRepository(RecordRepository):
                 Wallet(
                     id=wallet_id,
                     name=str(item.get("name", "") or f"Wallet {wallet_id}"),
-                    currency=str(item.get("currency", "KZT") or "KZT").upper(),
+                    currency=str(item.get("currency", base_currency) or base_currency).upper(),
                     initial_balance=self._as_float(item.get("initial_balance"), 0.0),
                     system=bool(item.get("system", wallet_id == SYSTEM_WALLET_ID)),
                     allow_negative=bool(item.get("allow_negative", False)),
@@ -938,10 +965,11 @@ class JsonFileRecordRepository(RecordRepository):
                 if isinstance(item, dict)
             ]
             next_id = max(existing_ids, default=0) + 1
+            base_currency = self._base_currency_from_data(data)
             wallet = Wallet(
                 id=next_id,
                 name=str(name or f"Wallet {next_id}"),
-                currency=str(currency or "KZT").upper(),
+                currency=str(currency or base_currency).upper(),
                 initial_balance=float(initial_balance),
                 system=bool(system),
                 allow_negative=bool(allow_negative),
@@ -997,6 +1025,7 @@ class JsonFileRecordRepository(RecordRepository):
 
     def load_debts(self) -> list[Debt]:
         data = self._load_data()
+        base_currency = self._base_currency_from_data(data)
         debts: list[Debt] = []
         for index, item in enumerate(data.get("debts", [])):
             if not isinstance(item, dict):
@@ -1014,7 +1043,7 @@ class JsonFileRecordRepository(RecordRepository):
                         remaining_amount_minor=self._require_strict_int(
                             item.get("remaining_amount_minor"), "debt.remaining_amount_minor"
                         ),
-                        currency=str(item.get("currency", "KZT") or "KZT").upper(),
+                        currency=str(item.get("currency", base_currency) or base_currency).upper(),
                         interest_rate=self._as_float(item.get("interest_rate"), 0.0),
                         status=DebtStatus(str(item.get("status", "open") or "open")),
                         created_at=str(item.get("created_at", "") or ""),
@@ -1145,6 +1174,7 @@ class JsonFileRecordRepository(RecordRepository):
             return True
 
     def get_system_wallet(self) -> Wallet:
+        data = self._load_data()
         wallets = self.load_wallets()
         for wallet in wallets:
             if wallet.id == SYSTEM_WALLET_ID or wallet.system:
@@ -1152,7 +1182,7 @@ class JsonFileRecordRepository(RecordRepository):
         return Wallet(
             id=SYSTEM_WALLET_ID,
             name="Main wallet",
-            currency="KZT",
+            currency=self._base_currency_from_data(data),
             initial_balance=0.0,
             system=True,
             allow_negative=False,
@@ -1171,7 +1201,7 @@ class JsonFileRecordRepository(RecordRepository):
             "amount_original": float(transfer.amount_original),
             "currency": str(transfer.currency).upper(),
             "rate_at_operation": float(transfer.rate_at_operation),
-            "amount_kzt": float(transfer.amount_kzt),
+            "amount_base": float(transfer.amount_base),
             "description": str(transfer.description or ""),
         }
 
@@ -1192,6 +1222,7 @@ class JsonFileRecordRepository(RecordRepository):
 
     def load_transfers(self) -> list[Transfer]:
         data = self._load_data()
+        base_currency = self._base_currency_from_data(data)
         transfers: list[Transfer] = []
         for index, item in enumerate(data.get("transfers", [])):
             if not isinstance(item, dict):
@@ -1209,9 +1240,12 @@ class JsonFileRecordRepository(RecordRepository):
                         ),
                         date=str(item.get("date", "") or ""),
                         amount_original=self._as_float(item.get("amount_original"), 0.0),
-                        currency=str(item.get("currency", "KZT") or "KZT").upper(),
+                        currency=str(item.get("currency", base_currency) or base_currency).upper(),
                         rate_at_operation=self._as_float(item.get("rate_at_operation"), 1.0),
-                        amount_kzt=self._as_float(item.get("amount_kzt"), 0.0),
+                        amount_base=self._as_float(
+                            item.get("amount_base", item.get("amount_kzt")),
+                            0.0,
+                        ),
                         description=str(item.get("description", "") or ""),
                     )
                 )

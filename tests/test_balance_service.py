@@ -48,7 +48,7 @@ def build_test_db(
                 """
                 INSERT INTO transfers (
                     id, from_wallet_id, to_wallet_id, date, amount_original, currency,
-                    rate_at_operation, amount_kzt, description
+                    rate_at_operation, amount_base, description
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -59,7 +59,7 @@ def build_test_db(
                     transfer["amount_original"],
                     transfer["currency"],
                     transfer["rate_at_operation"],
-                    transfer["amount_kzt"],
+                    transfer["amount_base"],
                     transfer.get("description", ""),
                 ),
             )
@@ -69,7 +69,7 @@ def build_test_db(
                 """
                 INSERT INTO records (
                     id, type, date, wallet_id, transfer_id, amount_original, currency,
-                    rate_at_operation, amount_kzt, category, description, period
+                    rate_at_operation, amount_base, category, description, period
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -81,7 +81,7 @@ def build_test_db(
                     record["amount_original"],
                     record["currency"],
                     record["rate_at_operation"],
-                    record["amount_kzt"],
+                    record["amount_base"],
                     record.get("category", "General"),
                     record.get("description", ""),
                     record.get("period"),
@@ -118,7 +118,7 @@ def _record(
     record_type: str,
     date: str,
     wallet_id: int,
-    amount_kzt: float,
+    amount_base: float,
     category: str = "General",
     transfer_id: int | None = None,
 ) -> dict:
@@ -128,10 +128,10 @@ def _record(
         "date": date,
         "wallet_id": wallet_id,
         "transfer_id": transfer_id,
-        "amount_original": amount_kzt,
+        "amount_original": amount_base,
         "currency": "KZT",
         "rate_at_operation": 1.0,
-        "amount_kzt": amount_kzt,
+        "amount_base": amount_base,
         "category": category,
         "description": "",
         "period": "monthly" if record_type == "mandatory_expense" else None,
@@ -144,17 +144,17 @@ def _transfer(
     from_wallet_id: int,
     to_wallet_id: int,
     date: str,
-    amount_kzt: float,
+    amount_base: float,
 ) -> dict:
     return {
         "id": transfer_id,
         "from_wallet_id": from_wallet_id,
         "to_wallet_id": to_wallet_id,
         "date": date,
-        "amount_original": amount_kzt,
+        "amount_original": amount_base,
         "currency": "KZT",
         "rate_at_operation": 1.0,
-        "amount_kzt": amount_kzt,
+        "amount_base": amount_base,
         "description": "Transfer",
     }
 
@@ -213,8 +213,8 @@ def test_get_wallet_balance_adds_income_records(tmp_path: Path) -> None:
         tmp_path,
         wallets=[_wallet(1, initial_balance=1000.0)],
         records=[
-            _record(1, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=200.0),
-            _record(2, record_type="income", date="2026-01-02", wallet_id=1, amount_kzt=50.0),
+            _record(1, record_type="income", date="2026-01-01", wallet_id=1, amount_base=200.0),
+            _record(2, record_type="income", date="2026-01-02", wallet_id=1, amount_base=50.0),
         ],
     )
     try:
@@ -229,13 +229,13 @@ def test_get_wallet_balance_subtracts_expense_records(tmp_path: Path) -> None:
         tmp_path,
         wallets=[_wallet(1, initial_balance=1000.0)],
         records=[
-            _record(1, record_type="expense", date="2026-01-01", wallet_id=1, amount_kzt=120.0),
+            _record(1, record_type="expense", date="2026-01-01", wallet_id=1, amount_base=120.0),
             _record(
                 2,
                 record_type="mandatory_expense",
                 date="2026-01-02",
                 wallet_id=1,
-                amount_kzt=30.0,
+                amount_base=30.0,
                 category="Mandatory",
             ),
         ],
@@ -252,9 +252,9 @@ def test_get_wallet_balance_respects_inclusive_date_filter(tmp_path: Path) -> No
         tmp_path,
         wallets=[_wallet(1, initial_balance=1000.0)],
         records=[
-            _record(1, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=200.0),
-            _record(2, record_type="expense", date="2026-01-10", wallet_id=1, amount_kzt=50.0),
-            _record(3, record_type="income", date="2026-01-20", wallet_id=1, amount_kzt=500.0),
+            _record(1, record_type="income", date="2026-01-01", wallet_id=1, amount_base=200.0),
+            _record(2, record_type="expense", date="2026-01-10", wallet_id=1, amount_base=50.0),
+            _record(3, record_type="income", date="2026-01-20", wallet_id=1, amount_base=500.0),
         ],
     )
     try:
@@ -272,7 +272,7 @@ def test_get_total_balance_is_unchanged_by_transfer_between_wallets(tmp_path: Pa
             _wallet(2, name="Card", initial_balance=500.0),
         ],
         transfers=[
-            _transfer(1, from_wallet_id=1, to_wallet_id=2, date="2026-01-05", amount_kzt=300.0)
+            _transfer(1, from_wallet_id=1, to_wallet_id=2, date="2026-01-05", amount_base=300.0)
         ],
         records=[
             _record(
@@ -280,7 +280,7 @@ def test_get_total_balance_is_unchanged_by_transfer_between_wallets(tmp_path: Pa
                 record_type="expense",
                 date="2026-01-05",
                 wallet_id=1,
-                amount_kzt=300.0,
+                amount_base=300.0,
                 category="Transfer",
                 transfer_id=1,
             ),
@@ -289,7 +289,7 @@ def test_get_total_balance_is_unchanged_by_transfer_between_wallets(tmp_path: Pa
                 record_type="income",
                 date="2026-01-05",
                 wallet_id=2,
-                amount_kzt=300.0,
+                amount_base=300.0,
                 category="Transfer",
                 transfer_id=1,
             ),
@@ -329,8 +329,8 @@ def test_total_balance_matches_sum_of_individual_wallet_balances(tmp_path: Path)
             _wallet(2, name="Card", initial_balance=200.0),
         ],
         records=[
-            _record(1, record_type="income", date="2026-02-01", wallet_id=1, amount_kzt=50.0),
-            _record(2, record_type="expense", date="2026-02-01", wallet_id=2, amount_kzt=30.0),
+            _record(1, record_type="income", date="2026-02-01", wallet_id=1, amount_base=50.0),
+            _record(2, record_type="expense", date="2026-02-01", wallet_id=2, amount_base=30.0),
         ],
     )
     try:
@@ -346,14 +346,14 @@ def test_get_cashflow_returns_income_expenses_and_net(tmp_path: Path) -> None:
         tmp_path,
         wallets=[_wallet(1, initial_balance=0.0)],
         records=[
-            _record(1, record_type="income", date="2026-03-01", wallet_id=1, amount_kzt=400.0),
-            _record(2, record_type="expense", date="2026-03-02", wallet_id=1, amount_kzt=150.0),
+            _record(1, record_type="income", date="2026-03-01", wallet_id=1, amount_base=400.0),
+            _record(2, record_type="expense", date="2026-03-02", wallet_id=1, amount_base=150.0),
             _record(
                 3,
                 record_type="mandatory_expense",
                 date="2026-03-03",
                 wallet_id=1,
-                amount_kzt=50.0,
+                amount_base=50.0,
                 category="Mandatory",
             ),
         ],
@@ -373,16 +373,16 @@ def test_get_cashflow_excludes_transfer_category_records(tmp_path: Path) -> None
         tmp_path,
         wallets=[_wallet(1, initial_balance=0.0), _wallet(2, initial_balance=0.0)],
         transfers=[
-            _transfer(1, from_wallet_id=1, to_wallet_id=2, date="2026-03-10", amount_kzt=500.0)
+            _transfer(1, from_wallet_id=1, to_wallet_id=2, date="2026-03-10", amount_base=500.0)
         ],
         records=[
-            _record(1, record_type="income", date="2026-03-01", wallet_id=1, amount_kzt=1000.0),
+            _record(1, record_type="income", date="2026-03-01", wallet_id=1, amount_base=1000.0),
             _record(
                 2,
                 record_type="expense",
                 date="2026-03-10",
                 wallet_id=1,
-                amount_kzt=500.0,
+                amount_base=500.0,
                 category="Transfer",
                 transfer_id=1,
             ),
@@ -391,11 +391,11 @@ def test_get_cashflow_excludes_transfer_category_records(tmp_path: Path) -> None
                 record_type="income",
                 date="2026-03-10",
                 wallet_id=2,
-                amount_kzt=500.0,
+                amount_base=500.0,
                 category="Transfer",
                 transfer_id=1,
             ),
-            _record(4, record_type="expense", date="2026-03-15", wallet_id=1, amount_kzt=100.0),
+            _record(4, record_type="expense", date="2026-03-15", wallet_id=1, amount_base=100.0),
         ],
     )
     try:
@@ -413,9 +413,9 @@ def test_get_income_filters_by_date_range(tmp_path: Path) -> None:
         tmp_path,
         wallets=[_wallet(1, initial_balance=0.0)],
         records=[
-            _record(1, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=10.0),
-            _record(2, record_type="income", date="2026-02-10", wallet_id=1, amount_kzt=20.0),
-            _record(3, record_type="income", date="2026-03-01", wallet_id=1, amount_kzt=30.0),
+            _record(1, record_type="income", date="2026-01-01", wallet_id=1, amount_base=10.0),
+            _record(2, record_type="income", date="2026-02-10", wallet_id=1, amount_base=20.0),
+            _record(3, record_type="income", date="2026-03-01", wallet_id=1, amount_base=30.0),
         ],
     )
     try:
@@ -430,13 +430,13 @@ def test_get_expenses_includes_mandatory_expense_type(tmp_path: Path) -> None:
         tmp_path,
         wallets=[_wallet(1, initial_balance=0.0)],
         records=[
-            _record(1, record_type="expense", date="2026-04-01", wallet_id=1, amount_kzt=70.0),
+            _record(1, record_type="expense", date="2026-04-01", wallet_id=1, amount_base=70.0),
             _record(
                 2,
                 record_type="mandatory_expense",
                 date="2026-04-02",
                 wallet_id=1,
-                amount_kzt=30.0,
+                amount_base=30.0,
                 category="Mandatory",
             ),
         ],
@@ -473,17 +473,17 @@ def test_balance_service_does_not_write_to_db(tmp_path: Path) -> None:
             _wallet(2, name="Card", initial_balance=200.0),
         ],
         transfers=[
-            _transfer(1, from_wallet_id=1, to_wallet_id=2, date="2026-05-03", amount_kzt=25.0)
+            _transfer(1, from_wallet_id=1, to_wallet_id=2, date="2026-05-03", amount_base=25.0)
         ],
         records=[
-            _record(1, record_type="income", date="2026-05-01", wallet_id=1, amount_kzt=50.0),
-            _record(2, record_type="expense", date="2026-05-02", wallet_id=1, amount_kzt=10.0),
+            _record(1, record_type="income", date="2026-05-01", wallet_id=1, amount_base=50.0),
+            _record(2, record_type="expense", date="2026-05-02", wallet_id=1, amount_base=10.0),
             _record(
                 3,
                 record_type="expense",
                 date="2026-05-03",
                 wallet_id=1,
-                amount_kzt=25.0,
+                amount_base=25.0,
                 category="Transfer",
                 transfer_id=1,
             ),
@@ -492,7 +492,7 @@ def test_balance_service_does_not_write_to_db(tmp_path: Path) -> None:
                 record_type="income",
                 date="2026-05-03",
                 wallet_id=2,
-                amount_kzt=25.0,
+                amount_base=25.0,
                 category="Transfer",
                 transfer_id=1,
             ),
@@ -501,7 +501,7 @@ def test_balance_service_does_not_write_to_db(tmp_path: Path) -> None:
                 record_type="mandatory_expense",
                 date="2026-05-04",
                 wallet_id=2,
-                amount_kzt=5.0,
+                amount_base=5.0,
                 category="Mandatory",
             ),
         ],

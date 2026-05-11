@@ -21,7 +21,7 @@ def import_mandatory_payload(
     *,
     parsed: ParsedImportData,
     policy: ImportPolicy,
-    fixed_amount_kzt_fn: FixedOptionalMoney,
+    fixed_amount_base_fn: FixedOptionalMoney,
     fixed_rate_fn: FixedOptionalRate,
     normalize_description_fn: NormalizeMandatoryDescription,
     logger: logging.Logger,
@@ -66,7 +66,7 @@ def import_mandatory_payload(
             description=description,
             period=str(record.period),
             date=str(record.date or ""),
-            amount_kzt=fixed_amount_kzt_fn(record.amount_kzt),
+            amount_base=fixed_amount_base_fn(record.amount_base),
             rate_at_operation=fixed_rate_fn(record.rate_at_operation),
         )
         imported += 1

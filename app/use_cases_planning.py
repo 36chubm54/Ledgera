@@ -20,7 +20,7 @@ class CreateBudget:
         category: str,
         start_date: str,
         end_date: str,
-        limit_kzt: float,
+        limit_base: float,
         *,
         include_mandatory: bool = False,
         scope_type: str = "category",
@@ -30,7 +30,7 @@ class CreateBudget:
             category,
             start_date,
             end_date,
-            limit_kzt,
+            limit_base,
             include_mandatory=include_mandatory,
             scope_type=scope_type,
             scope_value=scope_value,
@@ -49,8 +49,8 @@ class UpdateBudgetLimit:
     def __init__(self, budget_service: BudgetService) -> None:
         self._service = budget_service
 
-    def execute(self, budget_id: int, new_limit_kzt: float) -> Budget:
-        return self._service.update_budget_limit(budget_id, new_limit_kzt)
+    def execute(self, budget_id: int, new_limit_base: float) -> Budget:
+        return self._service.update_budget_limit(budget_id, new_limit_base)
 
 
 class CreateDebt:
@@ -62,7 +62,7 @@ class CreateDebt:
         *,
         contact_name: str,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         created_at: str,
         currency: str = "KZT",
         interest_rate: float = 0.0,
@@ -71,7 +71,7 @@ class CreateDebt:
         return self._service.create_debt(
             contact_name=contact_name,
             wallet_id=wallet_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             created_at=created_at,
             currency=currency,
             interest_rate=interest_rate,
@@ -88,7 +88,7 @@ class CreateLoan:
         *,
         contact_name: str,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         created_at: str,
         currency: str = "KZT",
         interest_rate: float = 0.0,
@@ -97,7 +97,7 @@ class CreateLoan:
         return self._service.create_loan(
             contact_name=contact_name,
             wallet_id=wallet_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             created_at=created_at,
             currency=currency,
             interest_rate=interest_rate,
@@ -114,14 +114,14 @@ class RegisterDebtPayment:
         *,
         debt_id: int,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         payment_date: str,
         description: str = "",
     ) -> DebtPayment:
         return self._service.register_payment(
             debt_id=debt_id,
             wallet_id=wallet_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             payment_date=payment_date,
             description=description,
         )
@@ -135,12 +135,12 @@ class RegisterDebtWriteOff:
         self,
         *,
         debt_id: int,
-        amount_kzt: float,
+        amount_base: float,
         payment_date: str,
     ) -> DebtPayment:
         return self._service.register_write_off(
             debt_id=debt_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             payment_date=payment_date,
         )
 

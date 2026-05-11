@@ -15,6 +15,8 @@ from domain.transfers import Transfer
 from domain.wallets import Wallet
 from utils.money import to_minor_units
 
+EXPECTED_IMPORT_FAILURES = (RuntimeError, ValueError, TypeError, OSError, sqlite3.Error)
+
 
 def run_import_transaction(repository: RecordRepository, operation, logger: logging.Logger):
     sqlite_conn = getattr(repository, "_conn", None)
@@ -25,7 +27,7 @@ def run_import_transaction(repository: RecordRepository, operation, logger: logg
         sqlite_conn.backup(sqlite_snapshot)
         try:
             return operation()
-        except Exception as operation_error:
+        except EXPECTED_IMPORT_FAILURES as operation_error:
             logger.exception("IMPORT_TXN_SQLITE_OP_FAILED error=%s", operation_error)
             try:
                 sqlite_conn.rollback()
@@ -35,6 +37,22 @@ def run_import_transaction(repository: RecordRepository, operation, logger: logg
                 logger.exception(
                     "IMPORT_TXN_SQLITE_ROLLBACK_FAILED error=%s rollback_error=%s",
                     operation_error,
+                    rollback_error,
+                )
+                raise RuntimeError(
+                    "Import failed and SQLite rollback snapshot restore also failed"
+                ) from rollback_error
+            raise
+        except Exception as unexpected_error:
+            logger.exception("IMPORT_TXN_SQLITE_OP_UNEXPECTED error=%s", unexpected_error)
+            try:
+                sqlite_conn.rollback()
+                sqlite_snapshot.backup(raw_sqlite_conn)
+                sqlite_conn.commit()
+            except (sqlite3.Error, RuntimeError, OSError) as rollback_error:
+                logger.exception(
+                    "IMPORT_TXN_SQLITE_ROLLBACK_FAILED unexpected_error=%s rollback_error=%s",
+                    unexpected_error,
                     rollback_error,
                 )
                 raise RuntimeError(
@@ -72,7 +90,7 @@ def run_import_transaction(repository: RecordRepository, operation, logger: logg
             debt_payments_snapshot = None
     try:
         return operation()
-    except Exception as operation_error:
+    except EXPECTED_IMPORT_FAILURES as operation_error:
         logger.exception("IMPORT_TXN_REPO_OP_FAILED error=%s", operation_error)
         try:
             if debts_snapshot is not None and debt_payments_snapshot is not None:
@@ -97,6 +115,37 @@ def run_import_transaction(repository: RecordRepository, operation, logger: logg
             logger.exception(
                 "IMPORT_TXN_REPO_ROLLBACK_FAILED error=%s rollback_error=%s",
                 operation_error,
+                rollback_error,
+            )
+            raise RuntimeError(
+                "Import failed and repository rollback also failed"
+            ) from rollback_error
+        raise
+    except Exception as unexpected_error:
+        logger.exception("IMPORT_TXN_REPO_OP_UNEXPECTED error=%s", unexpected_error)
+        try:
+            if debts_snapshot is not None and debt_payments_snapshot is not None:
+                repository.replace_all_data(
+                    wallets=wallets_snapshot,
+                    records=records_snapshot,
+                    mandatory_expenses=mandatory_snapshot,
+                    tags=tags_snapshot,
+                    transfers=transfers_snapshot,
+                    debts=debts_snapshot,
+                    debt_payments=debt_payments_snapshot,
+                )
+            else:
+                repository.replace_all_data(
+                    wallets=wallets_snapshot,
+                    records=records_snapshot,
+                    mandatory_expenses=mandatory_snapshot,
+                    tags=tags_snapshot,
+                    transfers=transfers_snapshot,
+                )
+        except (RuntimeError, ValueError, TypeError, OSError, sqlite3.Error) as rollback_error:
+            logger.exception(
+                "IMPORT_TXN_REPO_ROLLBACK_FAILED unexpected_error=%s rollback_error=%s",
+                unexpected_error,
                 rollback_error,
             )
             raise RuntimeError(
@@ -155,7 +204,7 @@ def normalize_operation_ids_for_import(repository: RecordRepository) -> None:
                 continue
             related_debt_id = getattr(record, "related_debt_id", None)
             record_type = "expense" if isinstance(record, ExpenseRecord) else "income"
-            amount_minor = to_minor_units(float(record.amount_kzt or 0.0))
+            amount_minor = to_minor_units(float(record.amount_base or 0.0))
             operation_date = str(record.date)
             category = str(record.category or "").strip().casefold()
             generic_payment_candidates[

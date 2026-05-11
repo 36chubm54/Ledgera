@@ -45,7 +45,7 @@ DATA_HEADERS = [
     "amount_original",
     "currency",
     "rate_at_operation",
-    "amount_kzt",
+    "amount_base",
     "description",
     "tags",
     "period",
@@ -56,11 +56,12 @@ DATA_HEADERS = [
 MANDATORY_HEADERS = [
     "type",
     "date",
+    "wallet_id",
     "category",
     "amount_original",
     "currency",
     "rate_at_operation",
-    "amount_kzt",
+    "amount_base",
     "description",
     "period",
 ]
@@ -246,14 +247,14 @@ def report_to_xlsx(report: Report, filepath: str, *, debts: list[Debt] | None = 
                     record_date,
                     report_record_type_label(record),
                     record.category,
-                    record.amount_kzt,
+                    record.amount_base,
                     format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
                 ]
             )
             _style_data_row(ws, ws.max_row, amount_columns=(4,))
 
     total = report.total_fixed()
-    records_total = sum(r.signed_amount_kzt() for r in report.records())
+    records_total = sum(r.signed_amount_base() for r in report.records())
     if ws is not None:
         ws.append(["SUBTOTAL", "", "", records_total, ""])
         _style_total_row(ws, ws.max_row, fill=SUBTOTAL_FILL, amount_columns=(4,))
@@ -342,8 +343,8 @@ def report_to_xlsx(report: Report, filepath: str, *, debts: list[Debt] | None = 
                 subreport.records(),
                 key=lambda rr: (0, rr.date) if isinstance(rr.date, dt_date) else (1, dt_date.max),
             ):
-                amount = float(getattr(record, "amount_kzt", 0.0) or 0.0)
-                records_total += float(record.signed_amount_kzt())
+                amount = float(getattr(record, "amount_base", 0.0) or 0.0)
+                records_total += float(record.signed_amount_base())
                 display_date = getattr(record, "date", "")
                 if isinstance(display_date, dt_date):
                     display_date = display_date.isoformat()
@@ -392,13 +393,13 @@ def grouped_report_to_xlsx(
         ws["C3"].font = Font(italic=True, color="666666")
         ws.freeze_panes = "A3"
 
-        total_kzt = 0.0
-        for category, operations_count, amount_kzt in grouped_rows:
-            total_kzt += float(amount_kzt)
-            ws.append([category, int(operations_count), float(amount_kzt)])
+        total_base = 0.0
+        for category, operations_count, amount_base in grouped_rows:
+            total_base += float(amount_base)
+            ws.append([category, int(operations_count), float(amount_base)])
             _style_data_row(ws, ws.max_row, amount_columns=(3,))
 
-        ws.append(["TOTAL", "", total_kzt])
+        ws.append(["TOTAL", "", total_base])
         _style_total_row(ws, ws.max_row, fill=TOTAL_FILL, amount_columns=(3,))
         ws.auto_filter.ref = f"A2:C{ws.max_row}"
         _set_auto_width(ws)

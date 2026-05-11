@@ -10,11 +10,10 @@ from typing import Protocol
 from domain.currency import CurrencyService as DomainCurrencyService
 from infrastructure.currency_aggregator import CurrencyAggregator
 from infrastructure.currency_providers import (
-    CBRProvider,
-    NBKProvider,
-    OpenExchangeProvider,
+    DEFAULT_PROVIDER_REGISTRY,
+    CurrencyProviderRegistry,
+    ProviderBuildContext,
     ProviderFetchError,
-    StaticProvider,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,12 +35,17 @@ class CurrencyService:
 
     CACHE_FILE = Path(__file__).resolve().parents[1] / "currency_rates.json"
     CONFIG_FILE = Path(__file__).resolve().parents[1] / "currency_config.json"
+    EXCHANGE_RATE_API_KEY_ENV = "FINACCOUNTING_EXCHANGE_RATE_API_KEY"
+    DEFAULT_DISPLAY_CURRENCY_WHITELIST = ("KZT", "USD", "EUR", "RUB")
     DEFAULT_RATES = {"USD": 500.0, "EUR": 590.0, "RUB": 6.5}
     DEFAULT_CONFIG = {
         "base_currency": "KZT",
+        "provider_mode": "personal",
         "primary_provider": "nbk",
-        "fallback_provider": "open_exchange",
-        "open_exchange_api_key": "",
+        "fallback_provider": "exchange_rate",
+        "commercial_fallback_provider": "exchange_rate",
+        "display_currency_whitelist": list(DEFAULT_DISPLAY_CURRENCY_WHITELIST),
+        "exchange_rate_api_key": "",
         "enable_cbr": False,
         "auto_update": True,
         "update_interval_minutes": 60,
@@ -53,12 +57,15 @@ class CurrencyService:
         base: str = "KZT",
         use_online: bool = False,
         aggregator: RateAggregator | None = None,
+        provider_registry: CurrencyProviderRegistry | None = None,
     ):
         self._base = (base or "KZT").upper()
+        self._display_currency = self._base
         self._use_online = bool(use_online)
         self._online_lock = threading.Lock()
         self._last_fetched_at: datetime | None = None
         self._config = self._load_config()
+        self._provider_registry = provider_registry or DEFAULT_PROVIDER_REGISTRY
         self._aggregator: RateAggregator = aggregator or self._build_default_aggregator()
 
         if rates is not None:
@@ -96,6 +103,51 @@ class CurrencyService:
 
     def get_all_rates(self) -> dict[str, float]:
         return self._service.get_all_rates()
+
+    @property
+    def display_currency(self) -> str:
+        return self._display_currency
+
+    def get_available_display_currencies(self) -> list[str]:
+        configured = self._config.get("display_currency_whitelist")
+        allowed = (
+            configured
+            if isinstance(configured, list)
+            else list(self.DEFAULT_DISPLAY_CURRENCY_WHITELIST)
+        )
+        normalized_allowed = {
+            str(code or "").strip().upper() for code in allowed if str(code or "").strip()
+        }
+        available = {self.base_currency}
+        current = self.display_currency
+        rates = {str(code or "").strip().upper() for code in self.get_all_rates()}
+        if current:
+            available.add(current)
+        for code in normalized_allowed:
+            if code == self.base_currency or code in rates:
+                available.add(code)
+        return sorted(available)
+
+    def set_display_currency(self, code: str) -> None:
+        normalized = (code or "").strip().upper()
+        if not normalized:
+            raise ValueError("Display currency is required")
+        if normalized != self.base_currency and normalized not in self.get_all_rates():
+            raise ValueError(f"Unsupported currency: {code}")
+        self._display_currency = normalized
+
+    def to_display(self, amount_base: float) -> float:
+        if self.display_currency == self.base_currency:
+            return float(amount_base)
+        rate = self.get_rate(self.display_currency)
+        if rate == 0:
+            raise ValueError(f"Unsupported currency: {self.display_currency}")
+        return float(amount_base) / rate
+
+    @property
+    def display_symbol(self) -> str:
+        symbols = {"KZT": "₸", "USD": "$", "EUR": "€", "RUB": "₽"}
+        return symbols.get(self.display_currency, self.display_currency)
 
     @property
     def is_online(self) -> bool:
@@ -186,27 +238,64 @@ class CurrencyService:
                     config.update(payload)
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             logger.exception("Failed to load currency configuration, using defaults")
+        api_key = str(os.environ.get(self.EXCHANGE_RATE_API_KEY_ENV, "") or "").strip()
+        if api_key:
+            config["exchange_rate_api_key"] = api_key
         return config
 
     def _build_default_aggregator(self) -> CurrencyAggregator:
         providers = []
+        context = ProviderBuildContext(
+            target_base=self._base,
+            config=self._config,
+            default_rates=self.DEFAULT_RATES,
+        )
         for name in self._resolve_provider_order():
-            provider = self._create_provider(name)
+            provider = self._provider_registry.create(name, context)
             if provider is not None:
                 providers.append(provider)
+            else:
+                logger.warning("Unknown or unavailable currency provider configured: %s", name)
         return CurrencyAggregator(providers=providers, logger=logger)
 
-    def _resolve_provider_order(self) -> list[str]:
-        primary = str(self._config.get("primary_provider", "nbk") or "nbk").lower()
-        fallback = str(self._config.get("fallback_provider", "open_exchange") or "open_exchange").lower()
-        enable_cbr = bool(self._config.get("enable_cbr", False))
-
+    def _default_primary_provider(self, *, enable_cbr: bool) -> str:
+        if self._base == "KZT":
+            return "nbk"
         if self._base == "RUB" and enable_cbr:
-            candidates = ["cbr", fallback, "static"]
-        elif self._base == "KZT":
-            candidates = [primary, fallback, "static"]
+            return "cbr"
+        return "exchange_rate"
+
+    def _resolve_provider_order(self) -> list[str]:
+        configured_order = self._config.get("provider_order")
+        if isinstance(configured_order, list):
+            ordered = [
+                str(name).strip().lower() for name in configured_order if str(name or "").strip()
+            ]
+            deduped: list[str] = []
+            for name in ordered:
+                if name not in deduped:
+                    deduped.append(name)
+            if "static" not in deduped:
+                deduped.append("static")
+            return deduped
+
+        provider_mode = str(self._config.get("provider_mode", "personal") or "personal").lower()
+        fallback_key = (
+            "commercial_fallback_provider" if provider_mode == "commercial" else "fallback_provider"
+        )
+        fallback = str(self._config.get(fallback_key, "exchange_rate") or "exchange_rate").lower()
+        enable_cbr = bool(self._config.get("enable_cbr", False))
+        configured_primary = str(self._config.get("primary_provider", "") or "").lower()
+        default_primary = self._default_primary_provider(enable_cbr=enable_cbr)
+        if configured_primary and (
+            self._base == "KZT"
+            or configured_primary != str(self.DEFAULT_CONFIG["primary_provider"])
+        ):
+            primary = configured_primary
         else:
-            candidates = ["open_exchange", "static"]
+            primary = default_primary
+
+        candidates = [primary, fallback, "static"]
 
         ordered: list[str] = []
         for name in candidates:
@@ -215,23 +304,6 @@ class CurrencyService:
         if "static" not in ordered:
             ordered.append("static")
         return ordered
-
-    def _create_provider(self, name: str):
-        if name == "nbk":
-            if self._base != "KZT":
-                return None
-            return NBKProvider()
-        if name == "cbr":
-            return CBRProvider(target_base=self._base)
-        if name == "open_exchange":
-            return OpenExchangeProvider(
-                api_key=str(self._config.get("open_exchange_api_key", "") or ""),
-                target_base=self._base,
-            )
-        if name == "static":
-            return StaticProvider(self.DEFAULT_RATES)
-        logger.warning("Unknown currency provider configured: %s", name)
-        return None
 
     def _load_cached(self) -> dict[str, float] | None:
         try:

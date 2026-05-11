@@ -25,7 +25,7 @@ class TransferRow(TypedDict):
     amount: float
     currency: str
     rate_at_operation: float
-    amount_kzt: float
+    amount_base: float
     description: str
 
 
@@ -65,7 +65,7 @@ def build_import_operations(
             amount_original=to_money_float(source.amount_original or 0.0),
             currency=str(source.currency).upper(),
             rate_at_operation=to_rate_float(source.rate_at_operation),
-            amount_kzt=to_money_float(source.amount_kzt or 0.0),
+            amount_base=to_money_float(source.amount_base or 0.0),
             description=str(source.description or ""),
         )
         transfers.append(transfer)
@@ -78,7 +78,7 @@ def build_import_operations(
                 amount_original=to_money_float(source.amount_original or 0.0),
                 currency=str(source.currency).upper(),
                 rate_at_operation=to_rate_float(source.rate_at_operation),
-                amount_kzt=to_money_float(source.amount_kzt or 0.0),
+                amount_base=to_money_float(source.amount_base or 0.0),
                 category="Transfer",
             )
         )
@@ -92,7 +92,7 @@ def build_import_operations(
                 amount_original=to_money_float(source.amount_original or 0.0),
                 currency=str(source.currency).upper(),
                 rate_at_operation=to_rate_float(source.rate_at_operation),
-                amount_kzt=to_money_float(source.amount_kzt or 0.0),
+                amount_base=to_money_float(source.amount_base or 0.0),
                 category="Transfer",
             )
         )
@@ -117,7 +117,7 @@ def build_import_operations(
             amount_original=to_money_float(transfer_row["amount"]),
             currency=str(transfer_row["currency"]).upper(),
             rate_at_operation=to_rate_float(transfer_row["rate_at_operation"]),
-            amount_kzt=to_money_float(transfer_row["amount_kzt"]),
+            amount_base=to_money_float(transfer_row["amount_base"]),
             description=str(transfer_row.get("description", "")),
         )
         transfers.append(transfer)
@@ -130,7 +130,7 @@ def build_import_operations(
                 amount_original=to_money_float(transfer.amount_original),
                 currency=str(transfer.currency).upper(),
                 rate_at_operation=to_rate_float(transfer.rate_at_operation),
-                amount_kzt=to_money_float(transfer.amount_kzt),
+                amount_base=to_money_float(transfer.amount_base),
                 category="Transfer",
             )
         )
@@ -144,7 +144,7 @@ def build_import_operations(
                 amount_original=to_money_float(transfer.amount_original),
                 currency=str(transfer.currency).upper(),
                 rate_at_operation=to_rate_float(transfer.rate_at_operation),
-                amount_kzt=to_money_float(transfer.amount_kzt),
+                amount_base=to_money_float(transfer.amount_base),
                 category="Transfer",
             )
         )
@@ -182,7 +182,7 @@ def normalize_mandatory_templates(
                 amount_original=to_money_float(template.amount_original or 0.0),
                 currency=str(template.currency).upper(),
                 rate_at_operation=to_rate_float(template.rate_at_operation),
-                amount_kzt=to_money_float(template.amount_kzt or 0.0),
+                amount_base=to_money_float(template.amount_base or 0.0),
                 category=str(template.category),
                 description=description,
                 period=str(template.period),  # type: ignore[arg-type]
@@ -196,7 +196,7 @@ def apply_mandatory_templates(
     finance_service: FinanceService,
     templates: list[MandatoryExpenseRecord],
     *,
-    fixed_amount_kzt_fn: FixedOptionalMoney,
+    fixed_amount_base_fn: FixedOptionalMoney,
     fixed_rate_fn: FixedOptionalRate,
     normalize_description_fn: NormalizeMandatoryDescription,
 ) -> None:
@@ -216,7 +216,7 @@ def apply_mandatory_templates(
             description=description,
             period=str(template.period),
             date=str(template.date or ""),
-            amount_kzt=fixed_amount_kzt_fn(template.amount_kzt),
+            amount_base=fixed_amount_base_fn(template.amount_base),
             rate_at_operation=fixed_rate_fn(template.rate_at_operation),
         )
 
@@ -227,7 +227,7 @@ def apply_operations_with_relaxed_wallet_limits(
     parsed_records: list[Record],
     transfer_rows: list[TransferRow],
     counters: ImportCounters,
-    fixed_amount_kzt_fn: FixedOptionalMoney,
+    fixed_amount_base_fn: FixedOptionalMoney,
     fixed_rate_fn: FixedOptionalRate,
     normalize_description_fn: NormalizeMandatoryDescription,
     split_transfer_pair_fn: SplitTransferPair,
@@ -254,7 +254,7 @@ def apply_operations_with_relaxed_wallet_limits(
             parsed_records=parsed_records,
             transfer_rows=transfer_rows,
             counters=counters,
-            fixed_amount_kzt_fn=fixed_amount_kzt_fn,
+            fixed_amount_base_fn=fixed_amount_base_fn,
             fixed_rate_fn=fixed_rate_fn,
             normalize_description_fn=normalize_description_fn,
             split_transfer_pair_fn=split_transfer_pair_fn,
@@ -270,7 +270,7 @@ def _apply_records_and_transfers(
     parsed_records: list[Record],
     transfer_rows: list[TransferRow],
     counters: ImportCounters,
-    fixed_amount_kzt_fn: FixedOptionalMoney,
+    fixed_amount_base_fn: FixedOptionalMoney,
     fixed_rate_fn: FixedOptionalRate,
     normalize_description_fn: NormalizeMandatoryDescription,
     split_transfer_pair_fn: SplitTransferPair,
@@ -298,7 +298,7 @@ def _apply_records_and_transfers(
                 amount=to_money_float(source.amount_original or 0.0),
                 currency=str(source.currency).upper(),
                 description=str(source.description or ""),
-                amount_kzt=fixed_amount_kzt_fn(source.amount_kzt),
+                amount_base=fixed_amount_base_fn(source.amount_base),
                 rate_at_operation=fixed_rate_fn(source.rate_at_operation),
             )
             created_transfer_ids.add(transfer_id)
@@ -313,7 +313,7 @@ def _apply_records_and_transfers(
             currency = str(record.currency).upper()
             category = str(record.category)
             description = str(record.description or "")
-            amount_kzt = fixed_amount_kzt_fn(record.amount_kzt)
+            amount_base = fixed_amount_base_fn(record.amount_base)
             rate_at_operation = fixed_rate_fn(record.rate_at_operation)
             related_debt_id = (
                 int(record.related_debt_id) if record.related_debt_id is not None else None
@@ -326,7 +326,7 @@ def _apply_records_and_transfers(
                     currency=currency,
                     category=category,
                     description=description,
-                    amount_kzt=amount_kzt,
+                    amount_base=amount_base,
                     rate_at_operation=rate_at_operation,
                     related_debt_id=related_debt_id,
                     tags=record_tags,
@@ -339,7 +339,7 @@ def _apply_records_and_transfers(
                     currency=currency,
                     category=category,
                     description=description,
-                    amount_kzt=amount_kzt,
+                    amount_base=amount_base,
                     rate_at_operation=rate_at_operation,
                     related_debt_id=related_debt_id,
                 )
@@ -351,7 +351,7 @@ def _apply_records_and_transfers(
                     currency=currency,
                     category=category,
                     description=description,
-                    amount_kzt=amount_kzt,
+                    amount_base=amount_base,
                     rate_at_operation=rate_at_operation,
                     tags=record_tags,
                 )
@@ -363,7 +363,7 @@ def _apply_records_and_transfers(
                     currency=currency,
                     category=category,
                     description=description,
-                    amount_kzt=amount_kzt,
+                    amount_base=amount_base,
                     rate_at_operation=rate_at_operation,
                 )
             records_count += 1
@@ -381,7 +381,7 @@ def _apply_records_and_transfers(
                 category=str(record.category),
                 description=description,
                 period=str(record.period),
-                amount_kzt=fixed_amount_kzt_fn(record.amount_kzt),
+                amount_base=fixed_amount_base_fn(record.amount_base),
                 rate_at_operation=fixed_rate_fn(record.rate_at_operation),
             )
             records_count += 1
@@ -393,7 +393,7 @@ def _apply_records_and_transfers(
         currency = str(record.currency).upper()
         category = str(record.category)
         description = str(record.description or "")
-        amount_kzt = fixed_amount_kzt_fn(record.amount_kzt)
+        amount_base = fixed_amount_base_fn(record.amount_base)
         rate_at_operation = fixed_rate_fn(record.rate_at_operation)
         related_debt_id = (
             int(record.related_debt_id) if record.related_debt_id is not None else None
@@ -406,7 +406,7 @@ def _apply_records_and_transfers(
                 currency=currency,
                 category=category,
                 description=description,
-                amount_kzt=amount_kzt,
+                amount_base=amount_base,
                 rate_at_operation=rate_at_operation,
                 related_debt_id=related_debt_id,
                 tags=record_tags,
@@ -419,7 +419,7 @@ def _apply_records_and_transfers(
                 currency=currency,
                 category=category,
                 description=description,
-                amount_kzt=amount_kzt,
+                amount_base=amount_base,
                 rate_at_operation=rate_at_operation,
                 related_debt_id=related_debt_id,
             )
@@ -431,7 +431,7 @@ def _apply_records_and_transfers(
                 currency=currency,
                 category=category,
                 description=description,
-                amount_kzt=amount_kzt,
+                amount_base=amount_base,
                 rate_at_operation=rate_at_operation,
                 tags=record_tags,
             )
@@ -443,7 +443,7 @@ def _apply_records_and_transfers(
                 currency=currency,
                 category=category,
                 description=description,
-                amount_kzt=amount_kzt,
+                amount_base=amount_base,
                 rate_at_operation=rate_at_operation,
             )
         records_count += 1
@@ -463,7 +463,7 @@ def _apply_records_and_transfers(
             amount=to_money_float(transfer["amount"]),
             currency=str(transfer["currency"]).upper(),
             description=str(transfer.get("description", "")),
-            amount_kzt=fixed_amount_kzt_fn(to_money_float(transfer["amount_kzt"])),
+            amount_base=fixed_amount_base_fn(to_money_float(transfer["amount_base"])),
             rate_at_operation=fixed_rate_fn(to_rate_float(transfer["rate_at_operation"])),
         )
         transfers_count += 1

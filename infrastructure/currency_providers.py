@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from dataclasses import dataclass
 from html.parser import HTMLParser
 
 
@@ -21,6 +23,37 @@ class BaseRateProvider(ABC):
     @abstractmethod
     def name(self) -> str:
         """Machine-readable provider name."""
+
+
+@dataclass(frozen=True)
+class ProviderBuildContext:
+    target_base: str
+    config: dict[str, object]
+    default_rates: dict[str, float]
+
+
+ProviderFactory = Callable[[ProviderBuildContext], BaseRateProvider | None]
+
+
+class CurrencyProviderRegistry:
+    def __init__(self) -> None:
+        self._factories: dict[str, ProviderFactory] = {}
+
+    def register(self, name: str, factory: ProviderFactory) -> None:
+        normalized = str(name or "").strip().lower()
+        if not normalized:
+            raise ValueError("Provider name is required")
+        self._factories[normalized] = factory
+
+    def create(self, name: str, context: ProviderBuildContext) -> BaseRateProvider | None:
+        normalized = str(name or "").strip().lower()
+        factory = self._factories.get(normalized)
+        if factory is None:
+            return None
+        return factory(context)
+
+    def names(self) -> tuple[str, ...]:
+        return tuple(sorted(self._factories))
 
 
 class NBKProvider(BaseRateProvider):
@@ -128,8 +161,8 @@ class CBRProvider(BaseRateProvider):
         return parser.extract_rates()
 
 
-class OpenExchangeProvider(BaseRateProvider):
-    URL_TEMPLATE = "https://openexchangerates.org/api/latest.json?app_id={api_key}&base=USD"
+class ExchangeRateProvider(BaseRateProvider):
+    URL_TEMPLATE = "https://v6.exchangerate-api.com/v6/{api_key}/latest/USD"
 
     def __init__(self, api_key: str, target_base: str = "KZT", timeout: int = 10):
         self._api_key = api_key.strip()
@@ -138,7 +171,7 @@ class OpenExchangeProvider(BaseRateProvider):
 
     @property
     def name(self) -> str:
-        return "open_exchange"
+        return "exchange_rate"
 
     def fetch(self) -> dict[str, float]:
         if not self._api_key:
@@ -158,13 +191,17 @@ class OpenExchangeProvider(BaseRateProvider):
             response.raise_for_status()
             payload = response.json()
         except requests.RequestException as err:
-            raise ProviderFetchError("OpenExchange request failed") from err
+            raise ProviderFetchError("ExchangeRate API request failed") from err
         except ValueError as err:
-            raise ProviderFetchError("OpenExchange JSON parsing failed") from err
+            raise ProviderFetchError("ExchangeRate JSON parsing failed") from err
 
-        raw_rates = payload.get("rates")
+        if payload.get("result") != "success":
+            error_type = str(payload.get("error-type", "unknown-error"))
+            raise ProviderFetchError(f"ExchangeRate API error: {error_type}")
+
+        raw_rates = payload.get("conversion_rates")
         if not isinstance(raw_rates, dict) or not raw_rates:
-            raise ProviderFetchError("OpenExchange response contained no rates")
+            raise ProviderFetchError("ExchangeRate response contained no conversion rates")
 
         usd_quotes: dict[str, float] = {}
         for code, value in raw_rates.items():
@@ -174,12 +211,14 @@ class OpenExchangeProvider(BaseRateProvider):
                 continue
 
         if not usd_quotes:
-            raise ProviderFetchError("OpenExchange response contained no valid numeric rates")
+            raise ProviderFetchError(
+                "ExchangeRate response contained no valid numeric conversion rates"
+            )
 
         target_quote = 1.0 if self._target_base == "USD" else usd_quotes.get(self._target_base)
         if target_quote is None:
             raise ProviderFetchError(
-                f"Missing target base in OpenExchange rates: {self._target_base}"
+                f"Missing target base in ExchangeRate rates: {self._target_base}"
             )
 
         normalized: dict[str, float] = {}
@@ -255,3 +294,33 @@ class _RamblerCurrencyParser(HTMLParser):
             if tuple(self._tokens[index : index + width]) == self.HEADER_TOKENS:
                 return index + width
         return None
+
+
+def build_default_provider_registry() -> CurrencyProviderRegistry:
+    registry = CurrencyProviderRegistry()
+
+    def _build_nbk(context: ProviderBuildContext) -> BaseRateProvider | None:
+        if context.target_base != "KZT":
+            return None
+        return NBKProvider()
+
+    def _build_cbr(context: ProviderBuildContext) -> BaseRateProvider | None:
+        return CBRProvider(target_base=context.target_base)
+
+    def _build_exchange_rate(context: ProviderBuildContext) -> BaseRateProvider | None:
+        return ExchangeRateProvider(
+            api_key=str(context.config.get("exchange_rate_api_key", "") or ""),
+            target_base=context.target_base,
+        )
+
+    def _build_static(context: ProviderBuildContext) -> BaseRateProvider | None:
+        return StaticProvider(context.default_rates)
+
+    registry.register("nbk", _build_nbk)
+    registry.register("cbr", _build_cbr)
+    registry.register("exchange_rate", _build_exchange_rate)
+    registry.register("static", _build_static)
+    return registry
+
+
+DEFAULT_PROVIDER_REGISTRY = build_default_provider_registry()

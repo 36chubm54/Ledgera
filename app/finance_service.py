@@ -39,7 +39,7 @@ class FinanceService(Protocol):
         currency: str,
         category: str,
         description: str = "",
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
         tags: tuple[str, ...] = (),
@@ -54,7 +54,7 @@ class FinanceService(Protocol):
         currency: str,
         category: str,
         description: str = "",
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
         tags: tuple[str, ...] = (),
@@ -71,7 +71,7 @@ class FinanceService(Protocol):
         description: str = "",
         commission_amount: float = 0.0,
         commission_currency: str | None = None,
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
     ) -> int: ...
 
@@ -85,7 +85,7 @@ class FinanceService(Protocol):
         description: str,
         period: str,
         date: str = "",
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
     ) -> None: ...
 
@@ -99,7 +99,7 @@ class FinanceService(Protocol):
         category: str,
         description: str,
         period: str,
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
     ) -> None: ...
 

@@ -8,7 +8,7 @@ from tkinter import ttk
 from typing import Any
 
 from gui.i18n import tr
-from gui.ui_helpers import center_dialog
+from gui.ui_helpers import center_dialog, enable_treeview_column_autosize
 
 _CONTROL_MASK = 0x0004
 _SHIFT_MASK = 0x0001
@@ -170,6 +170,7 @@ def _show_hotkey_help(app: Any) -> None:
     tree.column("key", width=140, minwidth=140, stretch=False, anchor="w")
     tree.column("scope", width=120, minwidth=120, stretch=False, anchor="w")
     tree.column("action", width=240, minwidth=240, stretch=True, anchor="w")
+    enable_treeview_column_autosize(tree, columns=("action",), max_width=420)
     tree.grid(row=0, column=0, sticky="nsew")
 
     scrollbar = ttk.Scrollbar(content, orient=tk.VERTICAL, command=tree.yview)

@@ -15,10 +15,43 @@ from domain.distribution import DistributionItem, FrozenDistributionRow, Monthly
 from gui.i18n import tr
 from gui.tooltip import Tooltip
 from gui.ui_dialogs import messagebox_compat as messagebox
-from gui.ui_helpers import ask_text
+from gui.ui_helpers import ask_numeric_text, ask_text
 from gui.ui_theme import get_palette
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_snapshot_amount(value_text: str) -> float | None:
+    text = str(value_text or "").strip()
+    if not text or text == "-":
+        return None
+    normalized = text.replace(" ", "").replace(",", "")
+    try:
+        return float(normalized)
+    except ValueError:
+        return None
+
+
+def _snapshot_values_to_display(
+    values_by_column: dict[str, str],
+    *,
+    format_display_amount: Callable[[float, int], str],
+) -> dict[str, str]:
+    display_values = dict(values_by_column)
+    for column_id, value_text in tuple(display_values.items()):
+        if column_id in {"month", "fixed"}:
+            continue
+        if not (
+            column_id == "net_income"
+            or column_id.startswith("item_")
+            or column_id.startswith("sub_")
+        ):
+            continue
+        amount_base = _parse_snapshot_amount(value_text)
+        if amount_base is None:
+            continue
+        display_values[column_id] = format_display_amount(amount_base, 2)
+    return display_values
 
 
 class DistributionTabContext(Protocol):
@@ -42,6 +75,10 @@ def build_distribution_tab(
     context: DistributionTabContext,
 ) -> DistributionTabBindings:
     palette = get_palette()
+
+    def format_display_amount(amount: float, precision: int = 2) -> str:
+        return context.controller.format_display_amount(amount, precision=precision)
+
     parent.grid_columnconfigure(0, weight=1)
     parent.grid_rowconfigure(0, weight=1)
 
@@ -275,7 +312,10 @@ def build_distribution_tab(
         headings = {
             "month": tr("common.month", "Месяц"),
             "fixed": tr("distribution.fixed", "Фиксация"),
-            "net_income": tr("distribution.net_income", "Чистый доход"),
+            "net_income": (
+                f"{tr('distribution.net_income', 'Чистый доход')} "
+                f"({context.controller.get_display_currency_code()})"
+            ),
         }
         for item in items:
             item_key = f"item_{item.id}"
@@ -396,7 +436,7 @@ def build_distribution_tab(
         values = {
             "month": distribution.month,
             "fixed": "",
-            "net_income": _fmt_amount(distribution.net_income_kzt),
+            "net_income": format_display_amount(distribution.net_income_base),
         }
         for item in items:
             result = item_results.get(item.id)
@@ -404,12 +444,14 @@ def build_distribution_tab(
             if result is None:
                 values[item_key] = "-"
                 continue
-            values[item_key] = _fmt_amount(result.amount_kzt)
+            values[item_key] = format_display_amount(result.amount_base)
             sub_results = {sub.subitem.id: sub for sub in result.subitem_results}
             for subitem in context.controller.get_distribution_subitems(item.id):
                 sub_key = f"sub_{subitem.id}"
                 sub_result = sub_results.get(subitem.id)
-                values[sub_key] = "-" if sub_result is None else _fmt_amount(sub_result.amount_kzt)
+                values[sub_key] = (
+                    "-" if sub_result is None else format_display_amount(sub_result.amount_base)
+                )
         return values
 
     def _row_values_for_columns(
@@ -472,7 +514,10 @@ def build_distribution_tab(
             live_distribution = live_history_by_month.get(month)
             if frozen_row is not None:
                 is_negative = frozen_row.is_negative
-                values_by_column = dict(frozen_row.values_by_column)
+                values_by_column = _snapshot_values_to_display(
+                    frozen_row.values_by_column,
+                    format_display_amount=format_display_amount,
+                )
             elif live_distribution is not None:
                 is_negative = live_distribution.is_negative
                 values_by_column = _distribution_row_values_map(live_distribution, items)
@@ -553,22 +598,14 @@ def build_distribution_tab(
         _refresh_results()
 
     def _ask_pct(title: str, prompt: str, *, initialvalue: str = "0.00") -> float | None:
-        def _normalize(value: str) -> str:
-            return value.replace(" ", "").replace(",", ".")
-
         def _validate(value: str) -> str | None:
-            try:
-                float(value)
-            except ValueError:
-                return tr("distribution.error.percent_number", "Процент должен быть числом.")
             return None
 
-        raw_value = ask_text(
+        raw_value = ask_numeric_text(
             title,
             prompt,
             parent=parent,
             initialvalue=initialvalue,
-            normalize=_normalize,
             validator=_validate,
         )
         if raw_value is None:

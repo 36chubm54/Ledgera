@@ -8,6 +8,7 @@ import logging
 import os
 import tkinter as tk
 from collections.abc import Callable
+from dataclasses import dataclass
 from tkinter import filedialog, ttk
 from typing import Any, Protocol
 
@@ -19,7 +20,11 @@ from gui.i18n import tr
 from gui.logging_utils import log_ui_error
 from gui.tabs.settings_support import safe_destroy, show_audit_report_dialog
 from gui.ui_dialogs import messagebox_compat as messagebox
-from gui.ui_helpers import attach_treeview_scrollbars
+from gui.ui_helpers import (
+    attach_treeview_scrollbars,
+    enable_treeview_column_autosize,
+    parse_numeric_input,
+)
 from gui.ui_theme import (
     PAD_LG,
     PAD_SM,
@@ -57,11 +62,22 @@ class SettingsTabContext(Protocol):
     ) -> None: ...
 
 
+@dataclass(slots=True)
+class SettingsTabBindings:
+    refresh: Callable[[], None]
+
+
 def build_settings_tab(
     parent: tk.Frame | ttk.Frame,
     context: SettingsTabContext,
     import_formats: dict[str, dict[str, str]],
-) -> None:
+) -> SettingsTabBindings:
+    def _base_currency_code() -> str:
+        getter = getattr(context.controller, "get_base_currency_code", None)
+        if callable(getter):
+            return str(getter() or "").strip().upper() or "KZT"
+        return "KZT"
+
     pad_x = PAD_SM
     pad_y = PAD_XS
 
@@ -96,7 +112,7 @@ def build_settings_tab(
         row=1, column=0, sticky="w"
     )
     wallet_currency_entry = ttk.Entry(form, width=8)
-    wallet_currency_entry.insert(0, "KZT")
+    wallet_currency_entry.insert(0, _base_currency_code())
     wallet_currency_entry.grid(row=1, column=1, sticky="ew", pady=2)
 
     ttk.Label(form, text=tr("settings.wallets.initial_balance", "Начальный баланс:")).grid(
@@ -166,6 +182,7 @@ def build_settings_tab(
     ):
         wallet_tree.heading(col, text=text)
         wallet_tree.column(col, width=width, minwidth=minwidth, stretch=stretch, anchor=anchor)  # type: ignore
+    enable_treeview_column_autosize(wallet_tree, columns=("name",), max_width=320)
     wallet_tree.grid(row=0, column=0, sticky="nsew")
 
     wallet_scroll, wallet_xscroll = attach_treeview_scrollbars(
@@ -277,7 +294,7 @@ def build_settings_tab(
             name = wallet_name_entry.get().strip()
             wallet = context.controller.create_wallet(
                 name=name,
-                currency=(wallet_currency_entry.get() or "KZT").strip(),
+                currency=(wallet_currency_entry.get() or _base_currency_code()).strip(),
                 initial_balance=initial_balance,
                 allow_negative=wallet_allow_negative_var.get(),
             )
@@ -420,6 +437,11 @@ def build_settings_tab(
     ):
         mand_tree.heading(col, text=text)
         mand_tree.column(col, width=width, minwidth=minwidth, stretch=stretch, anchor=anchor)  # type: ignore[arg-type]
+    enable_treeview_column_autosize(
+        mand_tree,
+        columns=("category", "description"),
+        max_width=360,
+    )
     mand_tree.grid(row=0, column=0, sticky="nsew")
 
     mand_scroll, mand_xscroll = attach_treeview_scrollbars(
@@ -457,6 +479,7 @@ def build_settings_tab(
             widget.bind("<Shift-Button-5>", _on_mandatory_shift_button5, add="+")
 
     def refresh_mandatory() -> None:
+        mand_tree.heading("kzt", text=context.controller.get_display_currency_code())
         for iid in mand_tree.get_children():
             mand_tree.delete(iid)
         expenses = context.controller.load_mandatory_expenses()
@@ -468,9 +491,9 @@ def build_settings_tab(
             )
             values = (
                 str(idx),
-                f"{float(expense.amount_original or 0.0):.2f}",
-                str(expense.currency or "KZT").upper(),
-                f"{float(expense.amount_kzt or 0.0):.2f}",
+                f"{float(expense.amount_original or 0.0):,.2f}",
+                str(expense.currency or _base_currency_code()).upper(),
+                context.controller.format_display_amount(float(expense.amount_base or 0.0)),
                 str(expense.category or ""),
                 str(expense.description or ""),
                 str(expense.period or ""),
@@ -512,10 +535,13 @@ def build_settings_tab(
 
         ttk.Label(
             add_panel,
-            text=tr("settings.mandatory.field.currency_default", "Валюта (по умолчанию KZT):"),
+            text=tr(
+                "settings.mandatory.field.currency_default",
+                "Валюта (по умолчанию валюта базы):",
+            ),
         ).grid(row=1, column=0, sticky="w")
         currency_entry = ttk.Entry(add_panel)
-        currency_entry.insert(0, "KZT")
+        currency_entry.insert(0, _base_currency_code())
         currency_entry.grid(row=1, column=1, sticky="ew", pady=2)
 
         ttk.Label(add_panel, text=tr("common.wallet", "Кошелек:")).grid(row=2, column=0, sticky="w")
@@ -605,7 +631,7 @@ def build_settings_tab(
                     return
                 context.controller.create_mandatory_expense(
                     amount=amount,
-                    currency=(currency_entry.get() or "KZT").strip(),
+                    currency=(currency_entry.get() or _base_currency_code()).strip(),
                     wallet_id=wallet_id,
                     category=(category_entry.get() or "Mandatory").strip(),
                     description=description,
@@ -684,12 +710,13 @@ def build_settings_tab(
         current_panel["edit"] = edit_panel
         _configure_inline_panel_grid(edit_panel)
 
-        ttk.Label(edit_panel, text=tr("settings.mandatory.field.amount_kzt", "Сумма KZT:")).grid(
-            row=0, column=0, sticky="w"
-        )
-        amount_kzt_entry = ttk.Entry(edit_panel)
-        amount_kzt_entry.insert(0, str(expense.amount_kzt))
-        amount_kzt_entry.grid(row=0, column=1, sticky="ew", pady=2)
+        ttk.Label(
+            edit_panel,
+            text=tr("settings.mandatory.field.amount_base", "Сумма в валюте базы:"),
+        ).grid(row=0, column=0, sticky="w")
+        amount_base_entry = ttk.Entry(edit_panel)
+        amount_base_entry.insert(0, str(expense.amount_base))
+        amount_base_entry.grid(row=0, column=1, sticky="ew", pady=2)
 
         ttk.Label(edit_panel, text=tr("common.wallet", "Кошелек:")).grid(
             row=1, column=0, sticky="w"
@@ -739,12 +766,12 @@ def build_settings_tab(
 
         def save_edit() -> None:
             expense_id = int(expense.id)
-            raw_amount = amount_kzt_entry.get().strip()
-            current_amount = str(expense.amount_kzt)
+            raw_amount = amount_base_entry.get().strip()
+            current_amount = str(expense.amount_base)
             if raw_amount != current_amount:
                 try:
-                    context.controller.update_mandatory_expense_amount_kzt(
-                        expense_id, float(raw_amount)
+                    context.controller.update_mandatory_expense_amount_base(
+                        expense_id, parse_numeric_input(raw_amount)
                     )
                 except ValueError as error:
                     messagebox.showerror(
@@ -1373,3 +1400,4 @@ def build_settings_tab(
     )
 
     refresh_mandatory()
+    return SettingsTabBindings(refresh=refresh_mandatory)

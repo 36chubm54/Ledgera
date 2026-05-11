@@ -15,7 +15,11 @@ from domain.errors import DomainError
 from gui.i18n import tr
 from gui.logging_utils import log_ui_error
 from gui.ui_dialogs import messagebox_compat as messagebox
-from gui.ui_helpers import attach_treeview_scrollbars
+from gui.ui_helpers import (
+    attach_treeview_scrollbars,
+    enable_treeview_column_autosize,
+    parse_numeric_input,
+)
 from gui.ui_theme import (
     PAD_LG,
     PAD_SM,
@@ -96,7 +100,13 @@ def _segment_widths(*, total: int, bar_w: int, paid: int, forgiven: int) -> tupl
     return paid_w, forgiven_w, open_w
 
 
-def _draw_debt_progress(canvas: tk.Canvas, debt: Debt | None, payments: list[DebtPayment]) -> None:
+def _draw_debt_progress(
+    canvas: tk.Canvas,
+    debt: Debt | None,
+    payments: list[DebtPayment],
+    *,
+    format_amount: Callable[[float], str] | None = None,
+) -> None:
     palette = get_palette()
     canvas.delete("all")
     width = max(canvas.winfo_width(), 420)
@@ -179,9 +189,9 @@ def _draw_debt_progress(canvas: tk.Canvas, debt: Debt | None, payments: list[Deb
         text=tr(
             "debts.progress.summary",
             "Погашено: {paid}   Списано: {forgiven}   Осталось: {remaining}",
-            paid=f"{paid / 100:.2f}",
-            forgiven=f"{forgiven / 100:.2f}",
-            remaining=f"{remaining / 100:.2f}",
+            paid=(format_amount or (lambda value: f"{value:.2f}"))(paid / 100),
+            forgiven=(format_amount or (lambda value: f"{value:.2f}"))(forgiven / 100),
+            remaining=(format_amount or (lambda value: f"{value:.2f}"))(remaining / 100),
         ),
         fill=palette.chart_text,
         font=("Segoe UI", 9),
@@ -193,6 +203,15 @@ def build_debts_tab(
     *,
     context: DebtsTabContext,
 ) -> DebtsTabBindings:
+    def format_display_amount(amount: float, precision: int = 2) -> str:
+        return context.controller.format_display_amount(amount, precision=precision)
+
+    def _base_currency_code() -> str:
+        getter = getattr(context.controller, "get_base_currency_code", None)
+        if callable(getter):
+            return str(getter() or "").strip().upper() or "KZT"
+        return "KZT"
+
     def _bind_control_shortcuts(widget: tk.Misc, handlers: dict[str, Callable[[], None]]) -> None:
         def _dispatch(event: tk.Event) -> str | None:
             state = int(getattr(event, "state", 0))
@@ -301,7 +320,7 @@ def build_debts_tab(
     contact_entry = ttk.Entry(create_frame)
     contact_entry.grid(row=1, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(create_frame, text=tr("debts.amount", "Сумма (KZT):")).grid(
+    ttk.Label(create_frame, text=tr("debts.amount", "Сумма (валюта базы):")).grid(
         row=2, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
     )
     amount_entry = ttk.Entry(create_frame)
@@ -340,7 +359,7 @@ def build_debts_tab(
     actions_frame = actions_card.winfo_children()[-1]
     actions_frame.grid_columnconfigure(1, weight=1)
 
-    ttk.Label(actions_frame, text=tr("debts.amount", "Сумма (KZT):")).grid(
+    ttk.Label(actions_frame, text=tr("debts.amount", "Сумма (валюта базы):")).grid(
         row=0, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
     )
     action_amount_entry = ttk.Entry(actions_frame)
@@ -376,13 +395,14 @@ def build_debts_tab(
         ("id", "#", 45, "e"),
         ("contact", tr("debts.contact_short", "Контакт"), 140, "w"),
         ("kind", tr("common.type_short", "Тип"), 80, "center"),
-        ("total", tr("debts.total", "Сумма"), 95, "e"),
-        ("remaining", tr("debts.remaining", "Остаток"), 110, "e"),
+        ("total", tr("debts.total", "Сумма"), 125, "e"),
+        ("remaining", tr("debts.remaining", "Остаток"), 140, "e"),
         ("status", tr("common.status", "Статус"), 85, "center"),
         ("created", tr("debts.created", "Создан"), 95, "center"),
     ):
         debt_tree.heading(col, text=label)
         debt_tree.column(col, width=width, minwidth=width, anchor=anchor, stretch=col == "contact")  # type: ignore[arg-type]
+    enable_treeview_column_autosize(debt_tree, columns=("contact",), max_width=320)
     debt_tree.grid(row=0, column=0, sticky="nsew")
     attach_treeview_scrollbars(right, debt_tree, row=0, column=0, horizontal=True)
 
@@ -401,9 +421,14 @@ def build_debts_tab(
     def _redraw_progress_on_resize(event=None):
         """Перерисовать прогрессбар при изменении размера canvas."""
         if current_debt is not None:
-            _draw_debt_progress(progress_canvas, current_debt, current_payments)
+            _draw_debt_progress(
+                progress_canvas,
+                current_debt,
+                current_payments,
+                format_amount=lambda value: format_display_amount(value, precision=2),
+            )
         else:
-            _draw_debt_progress(progress_canvas, None, [])
+            _draw_debt_progress(progress_canvas, None, [], format_amount=None)
 
     progress_canvas.bind("<Configure>", _redraw_progress_on_resize)
 
@@ -423,7 +448,7 @@ def build_debts_tab(
     for col, label, width, anchor in (
         ("date", tr("common.date", "Дата"), 95, "center"),
         ("operation", tr("common.operation", "Операция"), 100, "w"),
-        ("amount", tr("common.amount", "Сумма"), 90, "e"),
+        ("amount", tr("common.amount", "Сумма"), 125, "e"),
         ("write_off", tr("debts.write_off_short", "Списание"), 100, "center"),
         ("record", tr("debts.record_id", "ID записи"), 100, "center"),
     ):
@@ -435,6 +460,7 @@ def build_debts_tab(
             anchor=anchor,  # type: ignore[arg-type]
             stretch=col == "operation",
         )
+    enable_treeview_column_autosize(history_tree, columns=("operation",), max_width=320)
     history_tree.grid(row=0, column=0, sticky="nsew")
     attach_treeview_scrollbars(history_frame, history_tree, row=0, column=0, horizontal=True)
     history_tree.tag_configure("writeoff", foreground=palette.text_muted)
@@ -473,7 +499,7 @@ def build_debts_tab(
         if debt is None:
             current_debt = None
             current_payments = []
-            _draw_debt_progress(progress_canvas, None, [])
+            _draw_debt_progress(progress_canvas, None, [], format_amount=None)
             return
         history = context.controller.get_debt_history(debt.id)
         current_debt = debt
@@ -486,19 +512,44 @@ def build_debts_tab(
                 values=(
                     payment.payment_date,
                     payment.operation_type.value,
-                    f"{payment.principal_paid_minor / 100:.2f}",
+                    format_display_amount(payment.principal_paid_minor / 100, precision=2),
                     tr("common.yes", "Да") if payment.is_write_off else tr("common.no", "Нет"),
                     "" if payment.record_id is None else str(payment.record_id),
                 ),
                 tags=tag,
             )
-        progress_canvas.after(20, lambda: _draw_debt_progress(progress_canvas, debt, history))
+        progress_canvas.after(
+            20,
+            lambda: _draw_debt_progress(
+                progress_canvas,
+                debt,
+                history,
+                format_amount=lambda value: format_display_amount(value, precision=2),
+            ),
+        )
 
     def _refresh() -> None:
         _refresh_wallets()
         debts = context.controller.get_debts()
         current_selection = debt_tree.selection()
         debt_tree.delete(*debt_tree.get_children())
+        debt_tree.heading(
+            "total",
+            text=f"{tr('debts.total', 'Сумма')} ({context.controller.get_display_currency_code()})",
+        )
+        debt_tree.heading(
+            "remaining",
+            text=(
+                f"{tr('debts.remaining', 'Остаток')} "
+                f"({context.controller.get_display_currency_code()})"
+            ),
+        )
+        history_tree.heading(
+            "amount",
+            text=(
+                f"{tr('common.amount', 'Сумма')} ({context.controller.get_display_currency_code()})"
+            ),
+        )
 
         def _display_kind(kind: DebtKind) -> str:
             return {
@@ -522,8 +573,8 @@ def build_debts_tab(
                     debt.id,
                     debt.contact_name,
                     _display_kind(debt.kind),
-                    f"{debt.total_amount_minor / 100:.2f}",
-                    f"{debt.remaining_amount_minor / 100:.2f}",
+                    format_display_amount(debt.total_amount_minor / 100, precision=2),
+                    format_display_amount(debt.remaining_amount_minor / 100, precision=2),
                     _display_status(debt.status),
                     debt.created_at,
                 ),
@@ -548,7 +599,7 @@ def build_debts_tab(
         description = description_entry.get().strip()
         wallet_id = wallet_map.get(wallet_var.get())
         try:
-            amount_kzt = float(amount_entry.get().strip().replace(",", "."))
+            amount_base = parse_numeric_input(amount_entry.get().strip())
         except ValueError:
             messagebox.showerror(
                 tr("common.error", "Ошибка"),
@@ -574,16 +625,18 @@ def build_debts_tab(
                 context.controller.create_debt(
                     contact_name=contact,
                     wallet_id=wallet_id,
-                    amount_kzt=amount_kzt,
+                    amount_base=amount_base,
                     created_at=date_text,
+                    currency=_base_currency_code(),
                     description=description,
                 )
             else:
                 context.controller.create_loan(
                     contact_name=contact,
                     wallet_id=wallet_id,
-                    amount_kzt=amount_kzt,
+                    amount_base=amount_base,
                     created_at=date_text,
+                    currency=_base_currency_code(),
                     description=description,
                 )
             contact_entry.delete(0, tk.END)
@@ -625,7 +678,7 @@ def build_debts_tab(
             return
         date_text = action_date_entry.get().strip()
         try:
-            amount_kzt = float(action_amount_entry.get().strip().replace(",", "."))
+            amount_base = parse_numeric_input(action_amount_entry.get().strip())
         except ValueError:
             messagebox.showerror(
                 tr("common.error", "Ошибка"),
@@ -643,7 +696,7 @@ def build_debts_tab(
         if not wallet_optional and wallet_id_arg is not None:
             wallet_id_arg = int(wallet_id_arg)
         try:
-            action(debt, amount_kzt, date_text, wallet_id_arg)
+            action(debt, amount_base, date_text, wallet_id_arg)
             _refresh()
         except (DomainError, ValueError, TypeError, RuntimeError) as error:
             log_ui_error(
@@ -661,7 +714,7 @@ def build_debts_tab(
             lambda debt, amount, date_text, wallet_id: context.controller.register_debt_payment(
                 debt_id=debt.id,
                 wallet_id=int(wallet_id),  # type: ignore[arg-type]
-                amount_kzt=amount,
+                amount_base=amount,
                 payment_date=date_text,
             ),
         )
@@ -672,7 +725,7 @@ def build_debts_tab(
             tr("debts.error.writeoff_title", "Ошибка списания"),
             lambda debt, amount, date_text, _wallet_id: context.controller.register_debt_write_off(
                 debt_id=debt.id,
-                amount_kzt=amount,
+                amount_base=amount,
                 payment_date=date_text,
             ),
             wallet_optional=True,

@@ -59,7 +59,7 @@ def test_export_to_json_from_sqlite(tmp_path) -> None:
             amount_original=100.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=100.0,
+            amount_base=100.0,
             category="Salary",
         )
     )
@@ -71,7 +71,7 @@ def test_export_to_json_from_sqlite(tmp_path) -> None:
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             category="Mandatory",
             description="Gym",
             period="monthly",
@@ -88,7 +88,7 @@ def test_export_to_json_from_sqlite(tmp_path) -> None:
         """
         INSERT INTO budgets (
             id, category, start_date, end_date,
-            limit_kzt, limit_kzt_minor, include_mandatory
+            limit_base, limit_base_minor, include_mandatory
         )
         VALUES (1, 'Food', '2020-03-01', '2020-03-31', 300.0, 30000, 1)
         """
@@ -172,7 +172,7 @@ def test_export_to_json_preserves_custom_tag_colors(tmp_path) -> None:
             amount_original=100.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=100.0,
+            amount_base=100.0,
             category="Salary",
             tags=("coursework",),
         )
@@ -220,7 +220,7 @@ def test_export_to_json_can_skip_autofreeze_for_background_export(tmp_path) -> N
             amount_original=100.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=100.0,
+            amount_base=100.0,
             category="Salary",
         )
     )

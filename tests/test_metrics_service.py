@@ -36,20 +36,20 @@ def _insert_transfer(
     from_wallet_id: int,
     to_wallet_id: int,
     date: str,
-    amount_kzt: float,
+    amount_base: float,
 ) -> None:
     conn.execute(
         "INSERT INTO transfers "
         "(id, from_wallet_id, to_wallet_id, date, amount_original, currency, "
-        "rate_at_operation, amount_kzt, description) "
+        "rate_at_operation, amount_base, description) "
         "VALUES (?, ?, ?, ?, ?, 'KZT', 1.0, ?, 'Transfer')",
         (
             int(transfer_id),
             int(from_wallet_id),
             int(to_wallet_id),
             str(date),
-            float(amount_kzt),
-            float(amount_kzt),
+            float(amount_base),
+            float(amount_base),
         ),
     )
     conn.commit()
@@ -61,22 +61,22 @@ def _insert_record(
     record_type: str,
     date: str,
     wallet_id: int,
-    amount_kzt: float,
+    amount_base: float,
     transfer_id=None,
     category: str = "General",
 ) -> None:
     conn.execute(
         "INSERT INTO records "
         "(type, date, wallet_id, transfer_id, amount_original, currency, "
-        "rate_at_operation, amount_kzt, category) "
+        "rate_at_operation, amount_base, category) "
         "VALUES (?, ?, ?, ?, ?, 'KZT', 1.0, ?, ?)",
         (
             str(record_type),
             str(date),
             int(wallet_id),
             transfer_id,
-            float(amount_kzt),
-            float(amount_kzt),
+            float(amount_base),
+            float(amount_base),
             str(category),
         ),
     )
@@ -120,10 +120,10 @@ def test_get_savings_rate_income_and_expense(tmp_path: Path) -> None:
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=100000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=100000.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=60000.0
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=60000.0
         )
     finally:
         conn.close()
@@ -143,7 +143,7 @@ def test_get_savings_rate_income_zero_returns_zero(tmp_path: Path) -> None:
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=1000.0
         )
     finally:
         conn.close()
@@ -164,10 +164,10 @@ def test_get_savings_rate_excludes_transfers(tmp_path: Path) -> None:
         _insert_wallet(conn, 1)
         _insert_wallet(conn, 2)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=1000.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=200.0
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=200.0
         )
 
         _insert_transfer(
@@ -176,14 +176,14 @@ def test_get_savings_rate_excludes_transfers(tmp_path: Path) -> None:
             from_wallet_id=1,
             to_wallet_id=2,
             date="2026-01-10",
-            amount_kzt=500.0,
+            amount_base=500.0,
         )
         _insert_record(
             conn,
             record_type="expense",
             date="2026-01-10",
             wallet_id=1,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )
@@ -192,7 +192,7 @@ def test_get_savings_rate_excludes_transfers(tmp_path: Path) -> None:
             record_type="income",
             date="2026-01-10",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )
@@ -223,7 +223,7 @@ def test_get_burn_rate_total_expense_over_days(tmp_path: Path) -> None:
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="expense", date="2026-01-15", wallet_id=1, amount_kzt=30000.0
+            conn, record_type="expense", date="2026-01-15", wallet_id=1, amount_base=30000.0
         )
     finally:
         conn.close()
@@ -247,7 +247,7 @@ def test_get_spending_by_category_is_sorted_desc(tmp_path: Path) -> None:
             record_type="expense",
             date="2026-01-01",
             wallet_id=1,
-            amount_kzt=2000.0,
+            amount_base=2000.0,
             category="Food",
         )
         _insert_record(
@@ -255,7 +255,7 @@ def test_get_spending_by_category_is_sorted_desc(tmp_path: Path) -> None:
             record_type="expense",
             date="2026-01-02",
             wallet_id=1,
-            amount_kzt=5000.0,
+            amount_base=5000.0,
             category="Rent",
         )
         _insert_record(
@@ -263,7 +263,7 @@ def test_get_spending_by_category_is_sorted_desc(tmp_path: Path) -> None:
             record_type="mandatory_expense",
             date="2026-01-03",
             wallet_id=1,
-            amount_kzt=3000.0,
+            amount_base=3000.0,
             category="Fun",
         )
     finally:
@@ -273,9 +273,9 @@ def test_get_spending_by_category_is_sorted_desc(tmp_path: Path) -> None:
     try:
         svc = MetricsService(repo)
         assert svc.get_spending_by_category("2026-01-01", "2026-01-31") == [
-            CategorySpend(category="Rent", total_kzt=5000.0, record_count=1),
-            CategorySpend(category="Fun", total_kzt=3000.0, record_count=1),
-            CategorySpend(category="Food", total_kzt=2000.0, record_count=1),
+            CategorySpend(category="Rent", total_base=5000.0, record_count=1),
+            CategorySpend(category="Fun", total_base=3000.0, record_count=1),
+            CategorySpend(category="Food", total_base=2000.0, record_count=1),
         ]
     finally:
         repo.close()
@@ -296,7 +296,7 @@ def test_get_spending_by_category_limit_truncates(tmp_path: Path) -> None:
                 record_type="expense",
                 date=f"2026-01-{index:02d}",
                 wallet_id=1,
-                amount_kzt=amount,
+                amount_base=amount,
                 category=category,
             )
     finally:
@@ -324,7 +324,7 @@ def test_get_income_by_category_sums_and_sorts(tmp_path: Path) -> None:
             record_type="income",
             date="2026-01-01",
             wallet_id=1,
-            amount_kzt=6000.0,
+            amount_base=6000.0,
             category="Salary",
         )
         _insert_record(
@@ -332,7 +332,7 @@ def test_get_income_by_category_sums_and_sorts(tmp_path: Path) -> None:
             record_type="income",
             date="2026-01-02",
             wallet_id=1,
-            amount_kzt=4000.0,
+            amount_base=4000.0,
             category="Salary",
         )
         _insert_record(
@@ -340,7 +340,7 @@ def test_get_income_by_category_sums_and_sorts(tmp_path: Path) -> None:
             record_type="income",
             date="2026-01-03",
             wallet_id=1,
-            amount_kzt=5000.0,
+            amount_base=5000.0,
             category="Gift",
         )
     finally:
@@ -350,8 +350,8 @@ def test_get_income_by_category_sums_and_sorts(tmp_path: Path) -> None:
     try:
         svc = MetricsService(repo)
         assert svc.get_income_by_category("2026-01-01", "2026-01-31") == [
-            CategorySpend(category="Salary", total_kzt=10000.0, record_count=2),
-            CategorySpend(category="Gift", total_kzt=5000.0, record_count=1),
+            CategorySpend(category="Salary", total_base=10000.0, record_count=2),
+            CategorySpend(category="Gift", total_base=5000.0, record_count=1),
         ]
     finally:
         repo.close()
@@ -372,7 +372,7 @@ def test_get_top_expense_categories_is_wrapper(tmp_path: Path) -> None:
                 record_type="expense",
                 date=f"2026-01-{index:02d}",
                 wallet_id=1,
-                amount_kzt=amount,
+                amount_base=amount,
                 category=category,
             )
     finally:
@@ -403,7 +403,7 @@ def test_get_spending_by_tag_counts_full_amount_for_each_tag(tmp_path: Path) -> 
             record_type="expense",
             date="2026-01-01",
             wallet_id=1,
-            amount_kzt=900.0,
+            amount_base=900.0,
             category="Food",
         )
         first_record_id = int(conn.execute("SELECT MAX(id) FROM records").fetchone()[0])
@@ -412,7 +412,7 @@ def test_get_spending_by_tag_counts_full_amount_for_each_tag(tmp_path: Path) -> 
             record_type="expense",
             date="2026-01-02",
             wallet_id=1,
-            amount_kzt=600.0,
+            amount_base=600.0,
             category="Leisure",
         )
         second_record_id = int(conn.execute("SELECT MAX(id) FROM records").fetchone()[0])
@@ -428,8 +428,8 @@ def test_get_spending_by_tag_counts_full_amount_for_each_tag(tmp_path: Path) -> 
     try:
         svc = MetricsService(repo)
         assert svc.get_spending_by_tag("2026-01-01", "2026-01-31") == [
-            TagSpend(tag="fun", total_kzt=1500.0, record_count=2, color="#5B8DEF"),
-            TagSpend(tag="food", total_kzt=900.0, record_count=1, color="#F2994A"),
+            TagSpend(tag="fun", total_base=1500.0, record_count=2, color="#5B8DEF"),
+            TagSpend(tag="food", total_base=900.0, record_count=1, color="#F2994A"),
         ]
     finally:
         repo.close()
@@ -451,14 +451,16 @@ def test_get_monthly_summary_two_months(tmp_path: Path) -> None:
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="income", date="2026-01-01", wallet_id=1, amount_base=1000.0
         )
         _insert_record(
-            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_kzt=200.0
+            conn, record_type="expense", date="2026-01-02", wallet_id=1, amount_base=200.0
         )
-        _insert_record(conn, record_type="income", date="2026-02-01", wallet_id=1, amount_kzt=500.0)
         _insert_record(
-            conn, record_type="expense", date="2026-02-02", wallet_id=1, amount_kzt=700.0
+            conn, record_type="income", date="2026-02-01", wallet_id=1, amount_base=500.0
+        )
+        _insert_record(
+            conn, record_type="expense", date="2026-02-02", wallet_id=1, amount_base=700.0
         )
     finally:
         conn.close()
@@ -485,7 +487,7 @@ def test_get_monthly_summary_savings_rate_is_zero_when_income_is_zero(tmp_path: 
     try:
         _insert_wallet(conn, 1)
         _insert_record(
-            conn, record_type="expense", date="2026-03-05", wallet_id=1, amount_kzt=1000.0
+            conn, record_type="expense", date="2026-03-05", wallet_id=1, amount_base=1000.0
         )
     finally:
         conn.close()
@@ -514,7 +516,7 @@ def test_metrics_service_is_read_only(tmp_path: Path) -> None:
             record_type="income",
             date="2026-01-01",
             wallet_id=1,
-            amount_kzt=1000.0,
+            amount_base=1000.0,
             category="Salary",
         )
         _insert_record(
@@ -522,7 +524,7 @@ def test_metrics_service_is_read_only(tmp_path: Path) -> None:
             record_type="expense",
             date="2026-01-02",
             wallet_id=1,
-            amount_kzt=200.0,
+            amount_base=200.0,
             category="Food",
         )
 
@@ -532,14 +534,14 @@ def test_metrics_service_is_read_only(tmp_path: Path) -> None:
             from_wallet_id=1,
             to_wallet_id=2,
             date="2026-01-10",
-            amount_kzt=500.0,
+            amount_base=500.0,
         )
         _insert_record(
             conn,
             record_type="expense",
             date="2026-01-10",
             wallet_id=1,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )
@@ -548,7 +550,7 @@ def test_metrics_service_is_read_only(tmp_path: Path) -> None:
             record_type="income",
             date="2026-01-10",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             transfer_id=1,
             category="Transfer",
         )

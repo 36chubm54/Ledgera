@@ -153,7 +153,7 @@ def _build_opening_balance_test_report() -> Report:
 
 def test_unfiltered_report_uses_initial_balance():
     report = _build_opening_balance_test_report()
-    records_total = sum(r.signed_amount_kzt() for r in report.records())
+    records_total = sum(r.signed_amount_base() for r in report.records())
     assert report.initial_balance == 100.0
     assert report.total_fixed() == 100.0 + records_total
 
@@ -182,7 +182,7 @@ def test_filter_day_uses_opening_balance():
 def test_opening_balance_invariant_for_filtered_report():
     report = _build_opening_balance_test_report()
     filtered = report.filter_by_period("2024-03")
-    period_sum = sum(r.signed_amount_kzt() for r in filtered.records())
+    period_sum = sum(r.signed_amount_base() for r in filtered.records())
     assert filtered.initial_balance + period_sum == filtered.total_fixed()
 
 

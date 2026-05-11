@@ -59,7 +59,7 @@ def test_asset_service_calculates_total_and_allocation_in_base_currency(tmp_path
         service.add_snapshot(asset_id=bank.id, snapshot_date="2026-04-03", value=1500.0)
         service.add_snapshot(asset_id=crypto.id, snapshot_date="2026-04-03", value=10.0)
 
-        assert service.get_total_assets_kzt() == 6500.0
+        assert service.get_total_assets_base() == 6500.0
         assert service.get_allocation_by_category() == [
             ("bank", 1500.0, 23.1),
             ("crypto", 5000.0, 76.9),

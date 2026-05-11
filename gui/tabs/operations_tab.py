@@ -25,6 +25,7 @@ from gui.tabs.operations_support import (
 from gui.tooltip import Tooltip, show_popup_tooltip
 from gui.ui_helpers import (
     ask_confirm,
+    enable_treeview_column_autosize,
     show_error,
     show_info,
     show_warning,
@@ -128,18 +129,24 @@ def build_operations_tab(
 
     palette = get_palette()
 
+    def _base_currency_code() -> str:
+        getter = getattr(context.controller, "get_base_currency_code", None)
+        if callable(getter):
+            return str(getter() or "").strip().upper() or "KZT"
+        return "KZT"
+
     def _is_kzt_currency(value: object) -> bool:
-        return str(value or "KZT").strip().upper() == "KZT"
+        return str(value or _base_currency_code()).strip().upper() == _base_currency_code()
 
     def _amount_edit_label_text(currency: object) -> str:
         if _is_kzt_currency(currency):
             return tr("common.amount", "Сумма:")
-        return tr("operations.edit.amount_equivalent", "Эквивалент в KZT:")
+        return tr("operations.edit.amount_equivalent", "Эквивалент в валюте базы:")
 
     amount_edit_tooltip_text = tr(
         "operations.edit.amount_tooltip",
-        "Для операций в KZT это основная сумма операции."
-        "\nДля других валют это эквивалент в KZT и он влияет на курс операции.",
+        "Для операций в валюте базы это основная сумма операции."
+        "\nДля других валют это эквивалент в валюте базы и он влияет на курс операции.",
     )
 
     income_label = tr("operations.type.income", "Доход")
@@ -161,7 +168,7 @@ def build_operations_tab(
 
     _form_label(3, tr("common.currency", "Валюта:"))
     currency_entry = ttk.Entry(form_frame)
-    currency_entry.insert(0, "KZT")
+    currency_entry.insert(0, _base_currency_code())
     currency_entry.grid(row=3, column=1, columnspan=3, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
     _form_label(4, tr("common.category", "Категория:"))
@@ -554,6 +561,7 @@ def build_operations_tab(
     ):
         records_tree.heading(col, text=text)
         records_tree.column(col, width=width, minwidth=minwidth, stretch=stretch, anchor=anchor)  # type: ignore[arg-type]
+    enable_treeview_column_autosize(records_tree, columns=("category",), max_width=360)
     records_tree.grid(row=0, column=0, sticky="nsew")
 
     tags_tree = ttk.Treeview(
@@ -565,6 +573,7 @@ def build_operations_tab(
     enable_treeview_zebra(tags_tree)
     tags_tree.heading("tags", text=tr("common.tags", "Теги"))
     tags_tree.column("tags", width=180, minwidth=140, stretch=True, anchor="w")
+    enable_treeview_column_autosize(tags_tree, columns=("tags",), max_width=420)
     tags_tree.grid(row=0, column=1, sticky="nsew", padx=(PAD_SM, 0))
     tags_tooltip_window: tk.Toplevel | None = None
     tags_tooltip_text = {"value": ""}
@@ -679,7 +688,7 @@ def build_operations_tab(
             show_error(tr("operations.error.amount_number", "Сумма должна быть числом."))
             return
 
-        currency = (currency_entry.get() or "KZT").strip()
+        currency = (currency_entry.get() or _base_currency_code()).strip()
         category = (category_combo.get() or "General").strip()
         description = description_entry.get().strip()
         raw_tags = tags_combo.get().strip()
@@ -895,13 +904,13 @@ def build_operations_tab(
         date_edit_entry.grid(row=0, column=1, sticky="ew")
         amount_edit_label = ttk.Label(
             edit_panel,
-            text=_amount_edit_label_text(getattr(transfer, "currency", "KZT")),
+            text=_amount_edit_label_text(getattr(transfer, "currency", _base_currency_code())),
         )
         amount_edit_label.grid(row=1, column=0, sticky="w")
-        amount_kzt_edit_entry = ttk.Entry(edit_panel)
-        amount_kzt_edit_entry.grid(row=1, column=1, sticky="ew")
+        amount_base_edit_entry = ttk.Entry(edit_panel)
+        amount_base_edit_entry.grid(row=1, column=1, sticky="ew")
         Tooltip(amount_edit_label, amount_edit_tooltip_text)
-        Tooltip(amount_kzt_edit_entry, amount_edit_tooltip_text)
+        Tooltip(amount_base_edit_entry, amount_edit_tooltip_text)
         ttk.Label(edit_panel, text=tr("operations.transfer.from", "Из кошелька:")).grid(
             row=2, column=0, sticky="w"
         )
@@ -935,11 +944,11 @@ def build_operations_tab(
             transfer.date.isoformat() if hasattr(transfer.date, "isoformat") else str(transfer.date)
         )
         date_edit_entry.insert(0, date_value)
-        if _is_kzt_currency(getattr(transfer, "currency", "KZT")):
-            amount_value = float(transfer.amount_original or transfer.amount_kzt or 0.0)
+        if _is_kzt_currency(getattr(transfer, "currency", _base_currency_code())):
+            amount_value = float(transfer.amount_original or transfer.amount_base or 0.0)
         else:
-            amount_value = float(transfer.amount_kzt or 0.0)
-        amount_kzt_edit_entry.insert(0, f"{amount_value:.2f}")
+            amount_value = float(transfer.amount_base or 0.0)
+        amount_base_edit_entry.insert(0, f"{amount_value:.2f}")
         description_edit_entry.insert(0, transfer.description)
 
         wallet_edit_map: dict[str, int] = {
@@ -981,7 +990,7 @@ def build_operations_tab(
                 show_error(tr("operations.transfer.error.date_required", "Укажите дату перевода."))
                 return
             try:
-                new_amount_kzt = float(amount_kzt_edit_entry.get().strip())
+                new_amount_base = float(amount_base_edit_entry.get().strip())
             except ValueError:
                 show_error(tr("operations.error.amount_number", "Сумма должна быть числом."))
                 return
@@ -1002,7 +1011,7 @@ def build_operations_tab(
                     new_from_wallet_id=new_from_wallet_id,
                     new_to_wallet_id=new_to_wallet_id,
                     new_description=description_edit_entry.get().strip(),
-                    new_amount_kzt=new_amount_kzt,
+                    new_amount_base=new_amount_base,
                 )
                 show_info(tr("operations.transfer.updated", "Перевод обновлен."))
                 refresh_operation_views(context)
@@ -1016,7 +1025,7 @@ def build_operations_tab(
                     transfer_id=transfer_id,
                     new_from_wallet_id=new_from_wallet_id,
                     new_to_wallet_id=new_to_wallet_id,
-                    new_amount_kzt=new_amount_kzt,
+                    new_amount_base=new_amount_base,
                 )
                 show_error(
                     tr(
@@ -1045,7 +1054,7 @@ def build_operations_tab(
         cancel_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
         for widget in (
             date_edit_entry,
-            amount_kzt_edit_entry,
+            amount_base_edit_entry,
             from_wallet_menu,
             to_wallet_menu,
             description_edit_entry,
@@ -1054,7 +1063,7 @@ def build_operations_tab(
         ):
             widget.bind("<Escape>", lambda _event: (cancel_edit(), "break")[1], add="+")
         date_edit_entry.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
-        amount_kzt_edit_entry.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
+        amount_base_edit_entry.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
         to_wallet_menu.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
         description_edit_entry.bind("<Return>", lambda _event: (save_edit(), "break")[1], add="+")
         date_edit_entry.focus_set()
@@ -1108,7 +1117,7 @@ def build_operations_tab(
 
         amount_edit_label = ttk.Label(
             edit_panel,
-            text=_amount_edit_label_text(getattr(record, "currency", "KZT")),
+            text=_amount_edit_label_text(getattr(record, "currency", _base_currency_code())),
         )
         amount_edit_label.grid(row=0, column=0, sticky="w")
         amount_entry = ttk.Entry(edit_panel)
@@ -1314,10 +1323,10 @@ def build_operations_tab(
         )
 
         # Fill the fields with post data
-        if _is_kzt_currency(getattr(record, "currency", "KZT")):
-            amount_value = float(record.amount_original or record.amount_kzt or 0.0)
+        if _is_kzt_currency(getattr(record, "currency", _base_currency_code())):
+            amount_value = float(record.amount_original or record.amount_base or 0.0)
         else:
-            amount_value = float(record.amount_kzt or 0.0)
+            amount_value = float(record.amount_base or 0.0)
         amount_entry.insert(0, f"{amount_value:.2f}")
         date_value = (
             record.date.isoformat() if hasattr(record.date, "isoformat") else str(record.date)
@@ -1353,7 +1362,7 @@ def build_operations_tab(
 
         def save_edit() -> None:
             try:
-                new_amount_kzt = float(amount_entry.get().strip())
+                new_amount_base = float(amount_entry.get().strip())
             except ValueError:
                 show_error(tr("operations.error.amount_number", "Сумма должна быть числом."))
                 return
@@ -1382,7 +1391,7 @@ def build_operations_tab(
             try:
                 context.controller.update_record_inline(
                     domain_record_id,
-                    new_amount_kzt=new_amount_kzt,
+                    new_amount_base=new_amount_base,
                     new_category=new_category,
                     new_description=description_edit_entry.get().strip(),
                     new_date=new_date,
@@ -1533,7 +1542,7 @@ def build_operations_tab(
         row=4, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
     )
     transfer_currency_entry = ttk.Entry(transfer_frame)
-    transfer_currency_entry.insert(0, "KZT")
+    transfer_currency_entry.insert(0, _base_currency_code())
     transfer_currency_entry.grid(row=4, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
     ttk.Label(transfer_frame, text=tr("operations.transfer.commission", "Комиссия:")).grid(
@@ -1547,7 +1556,7 @@ def build_operations_tab(
         transfer_frame, text=tr("operations.transfer.commission_currency", "Валюта комиссии:")
     ).grid(row=6, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     transfer_commission_currency_entry = ttk.Entry(transfer_frame)
-    transfer_commission_currency_entry.insert(0, "KZT")
+    transfer_commission_currency_entry.insert(0, _base_currency_code())
     transfer_commission_currency_entry.grid(row=6, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
     ttk.Label(transfer_frame, text=tr("common.description", "Описание:")).grid(
@@ -1629,7 +1638,7 @@ def build_operations_tab(
                 to_wallet_id=to_wallet_id,
                 transfer_date=date_str,
                 amount=transfer_amount,
-                currency=(transfer_currency_entry.get() or "KZT").strip(),
+                currency=(transfer_currency_entry.get() or _base_currency_code()).strip(),
                 description=transfer_description_entry.get().strip(),
                 commission_amount=commission_amount,
                 commission_currency=(transfer_commission_currency_entry.get() or "").strip(),

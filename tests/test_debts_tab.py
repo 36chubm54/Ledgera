@@ -92,7 +92,7 @@ def test_debts_tab_local_shortcuts_are_bound_and_flow_works(tmp_path: Path) -> N
         action_date_entry = _find_entry_by_order(parent, 5)
 
         contact_entry.insert(0, "Alice")
-        amount_entry.insert(0, "300")
+        amount_entry.insert(0, "15,000")
         date_entry.delete(0, tk.END)
         date_entry.insert(0, "2026-03-01")
 
@@ -123,7 +123,7 @@ def test_debts_tab_local_shortcuts_are_bound_and_flow_works(tmp_path: Path) -> N
             root.update_idletasks()
 
             action_amount_entry.delete(0, tk.END)
-            action_amount_entry.insert(0, "100")
+            action_amount_entry.insert(0, "15,5")
             action_date_entry.delete(0, tk.END)
             action_date_entry.insert(0, "2026-03-02")
             pay_button = _find_button(parent, "Погасить")
@@ -143,10 +143,10 @@ def test_debts_tab_local_shortcuts_are_bound_and_flow_works(tmp_path: Path) -> N
             assert len(history_rows) == 1
             debts = controller.get_debts()
             assert len(debts) == 1
-            assert debts[0].remaining_amount_minor == 20000
+            assert debts[0].remaining_amount_minor == 1_498_450
 
             action_amount_entry.delete(0, tk.END)
-            action_amount_entry.insert(0, "50")
+            action_amount_entry.insert(0, "10")
             action_date_entry.delete(0, tk.END)
             action_date_entry.insert(0, "2026-03-03")
             bindings.write_off_debt()
@@ -157,7 +157,7 @@ def test_debts_tab_local_shortcuts_are_bound_and_flow_works(tmp_path: Path) -> N
             latest_values = bindings.history_tree.item(history_rows[-1], "values")
             assert latest_values[3] == "Да"
             debts = controller.get_debts()
-            assert debts[0].remaining_amount_minor == 15000
+            assert debts[0].remaining_amount_minor == 1_497_450
     finally:
         repo.close()
         root.destroy()
@@ -172,7 +172,7 @@ def test_debts_tab_delete_confirmation_explains_records_are_kept(tmp_path: Path)
         debt = controller.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=300.0,
+            amount_base=300.0,
             created_at="2026-03-01",
         )
         parent = tk.Frame(root)

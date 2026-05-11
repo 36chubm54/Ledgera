@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import threading
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from app.repository import RecordRepository
 from backup import create_backup, export_to_json
 from config import JSON_BACKUP_KEEP_LAST, JSON_PATH, LAZY_EXPORT_SIZE_THRESHOLD, SQLITE_PATH
 from infrastructure.sqlite_repository import SQLiteRecordRepository
+from migrations.migration_002_rename_amount_kzt_to_base import up as migrate_002
 
 
 def _resolve_schema_path(schema_path: str) -> str:
@@ -37,6 +39,34 @@ def _is_migration_verified(sqlite_repo: SQLiteRecordRepository) -> bool:
 def _mark_migration_verified(sqlite_repo: SQLiteRecordRepository) -> None:
     _ensure_schema_meta(sqlite_repo)
     sqlite_repo.set_schema_meta("migration_verified", "true")
+
+
+def _run_startup_migrations(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name IN (
+                'records',
+                'transfers',
+                'mandatory_expenses',
+                'budgets'
+            )
+            LIMIT 1
+            """
+        ).fetchone()
+        if row is not None:
+            migrate_002(conn)
 
 
 def _ensure_system_wallet(sqlite_repo: SQLiteRecordRepository) -> None:
@@ -119,8 +149,8 @@ def _validate_sqlite_integrity_only(sqlite_repo: SQLiteRecordRepository) -> None
             SELECT 'record.amount_original < 0'
             AS reason FROM records WHERE amount_original < 0
             UNION ALL
-            SELECT 'record.amount_kzt < 0'
-            AS reason FROM records WHERE amount_kzt < 0
+            SELECT 'record.amount_base < 0'
+            AS reason FROM records WHERE amount_base < 0
             UNION ALL
             SELECT 'record.rate_at_operation <= 0'
             AS reason FROM records WHERE rate_at_operation <= 0
@@ -128,8 +158,8 @@ def _validate_sqlite_integrity_only(sqlite_repo: SQLiteRecordRepository) -> None
             SELECT 'transfer.amount_original <= 0'
             AS reason FROM transfers WHERE amount_original <= 0
             UNION ALL
-            SELECT 'transfer.amount_kzt <= 0'
-            AS reason FROM transfers WHERE amount_kzt <= 0
+            SELECT 'transfer.amount_base <= 0'
+            AS reason FROM transfers WHERE amount_base <= 0
             UNION ALL
             SELECT 'transfer.rate_at_operation <= 0'
             AS reason FROM transfers WHERE rate_at_operation <= 0
@@ -137,8 +167,8 @@ def _validate_sqlite_integrity_only(sqlite_repo: SQLiteRecordRepository) -> None
             SELECT 'mandatory.amount_original < 0'
             AS reason FROM mandatory_expenses WHERE amount_original < 0
             UNION ALL
-            SELECT 'mandatory.amount_kzt < 0'
-            AS reason FROM mandatory_expenses WHERE amount_kzt < 0
+            SELECT 'mandatory.amount_base < 0'
+            AS reason FROM mandatory_expenses WHERE amount_base < 0
             UNION ALL
             SELECT 'mandatory.rate_at_operation <= 0'
             AS reason FROM mandatory_expenses WHERE rate_at_operation <= 0
@@ -254,6 +284,7 @@ def run_post_startup_maintenance() -> None:
 def bootstrap_repository(*, run_maintenance: bool = True) -> RecordRepository:
     db_path = Path(SQLITE_PATH)
     db_existed = db_path.exists()
+    _run_startup_migrations(db_path)
 
     repository = SQLiteRecordRepository(
         SQLITE_PATH,

@@ -15,7 +15,7 @@ class Transfer:
     amount_original: float
     currency: str
     rate_at_operation: float
-    amount_kzt: float
+    amount_base: float
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -32,9 +32,9 @@ class Transfer:
         if int(self.from_wallet_id) == int(self.to_wallet_id):
             raise ValueError("Transfer source and destination wallets must be different")
         object.__setattr__(self, "amount_original", to_money_float(self.amount_original))
-        object.__setattr__(self, "amount_kzt", to_money_float(self.amount_kzt))
+        object.__setattr__(self, "amount_base", to_money_float(self.amount_base))
         object.__setattr__(self, "rate_at_operation", to_rate_float(self.rate_at_operation))
         if float(self.amount_original) <= 0:
             raise ValueError("Transfer amount must be positive")
-        if float(self.amount_kzt) <= 0:
-            raise ValueError("Transfer amount_kzt must be positive")
+        if float(self.amount_base) <= 0:
+            raise ValueError("Transfer amount_base must be positive")

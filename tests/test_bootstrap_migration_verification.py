@@ -46,7 +46,7 @@ def test_validate_sqlite_integrity_only_detects_broken_transfer(tmp_path) -> Non
             """
             INSERT INTO transfers (
                 from_wallet_id, to_wallet_id, date, amount_original, currency,
-                rate_at_operation, amount_kzt, description
+                rate_at_operation, amount_base, description
             )
             VALUES (1, 2, '2026-03-01', 100, 'KZT', 1, 100, '')
             """
@@ -55,7 +55,7 @@ def test_validate_sqlite_integrity_only_detects_broken_transfer(tmp_path) -> Non
             """
             INSERT INTO records (
                 type, date, wallet_id, transfer_id, amount_original, currency,
-                rate_at_operation, amount_kzt, category, description, period
+                rate_at_operation, amount_base, category, description, period
             )
             VALUES ('expense', '2026-03-01', 1, 1, 100, 'KZT', 1, 100, 'Transfer', '', NULL)
             """
@@ -137,7 +137,7 @@ def test_validate_sqlite_integrity_only_detects_wrong_transfer_types(tmp_path) -
             """
             INSERT INTO transfers (
                 from_wallet_id, to_wallet_id, date, amount_original, currency,
-                rate_at_operation, amount_kzt, description
+                rate_at_operation, amount_base, description
             )
             VALUES (1, 2, '2026-03-01', 100, 'KZT', 1, 100, '')
             """
@@ -146,7 +146,7 @@ def test_validate_sqlite_integrity_only_detects_wrong_transfer_types(tmp_path) -
             """
             INSERT INTO records (
                 type, date, wallet_id, transfer_id, amount_original, currency,
-                rate_at_operation, amount_kzt, category, description, period
+                rate_at_operation, amount_base, category, description, period
             )
             VALUES ('expense', '2026-03-01', 1, 1, 100, 'KZT', 1, 100, 'Transfer', '', NULL)
             """
@@ -155,7 +155,7 @@ def test_validate_sqlite_integrity_only_detects_wrong_transfer_types(tmp_path) -
             """
             INSERT INTO records (
                 type, date, wallet_id, transfer_id, amount_original, currency,
-                rate_at_operation, amount_kzt, category, description, period
+                rate_at_operation, amount_base, category, description, period
             )
             VALUES ('expense', '2026-03-01', 2, 1, 100, 'KZT', 1, 100, 'Transfer', '', NULL)
             """
@@ -226,7 +226,7 @@ def test_initialize_schema_adds_related_debt_id_for_pre_19_records_table(tmp_pat
                 amount_original REAL NOT NULL,
                 currency TEXT NOT NULL,
                 rate_at_operation REAL NOT NULL,
-                amount_kzt REAL NOT NULL,
+                amount_base REAL NOT NULL,
                 category TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
                 period TEXT

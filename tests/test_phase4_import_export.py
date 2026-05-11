@@ -47,7 +47,7 @@ def test_json_import_new_structure():
                 "amount_original": 50,
                 "currency": "KZT",
                 "rate_at_operation": 1,
-                "amount_kzt": 50,
+                "amount_base": 50,
                 "description": "move",
             },
             {
@@ -59,7 +59,7 @@ def test_json_import_new_structure():
                 "amount_original": 50,
                 "currency": "KZT",
                 "rate_at_operation": 1,
-                "amount_kzt": 50,
+                "amount_base": 50,
                 "description": "move",
             },
         ],
@@ -73,7 +73,7 @@ def test_json_import_new_structure():
                 "amount_original": 50,
                 "currency": "KZT",
                 "rate_at_operation": 1,
-                "amount_kzt": 50,
+                "amount_base": 50,
                 "description": "move",
             }
         ],
@@ -115,7 +115,7 @@ def test_csv_import_transfer_one_row_restores_two_records():
                 "amount_original": 25,
                 "currency": "KZT",
                 "rate_at_operation": 1,
-                "amount_kzt": 25,
+                "amount_base": 25,
                 "description": "move",
                 "period": "",
                 "transfer_id": 77,
@@ -193,7 +193,7 @@ def test_export_csv_xlsx_transfer_one_row():
             amount_original=10,
             currency="KZT",
             rate_at_operation=1,
-            amount_kzt=10,
+            amount_base=10,
             category="Salary",
         ),
         ExpenseRecord(
@@ -203,7 +203,7 @@ def test_export_csv_xlsx_transfer_one_row():
             amount_original=30,
             currency="KZT",
             rate_at_operation=1,
-            amount_kzt=30,
+            amount_base=30,
             category="Transfer",
         ),
         IncomeRecord(
@@ -213,7 +213,7 @@ def test_export_csv_xlsx_transfer_one_row():
             amount_original=30,
             currency="KZT",
             rate_at_operation=1,
-            amount_kzt=30,
+            amount_base=30,
             category="Transfer",
         ),
         MandatoryExpenseRecord(
@@ -222,7 +222,7 @@ def test_export_csv_xlsx_transfer_one_row():
             amount_original=5,
             currency="KZT",
             rate_at_operation=1,
-            amount_kzt=5,
+            amount_base=5,
             category="Rent",
             description="monthly",
             period="monthly",
@@ -237,7 +237,7 @@ def test_export_csv_xlsx_transfer_one_row():
             amount_original=30,
             currency="KZT",
             rate_at_operation=1,
-            amount_kzt=30,
+            amount_base=30,
             description="move",
         )
     ]
@@ -299,7 +299,7 @@ def test_json_import_old_format_migrates_global_balance_to_main_wallet():
                 "amount_original": 10,
                 "currency": "KZT",
                 "rate_at_operation": 1,
-                "amount_kzt": 10,
+                "amount_base": 10,
             }
         ],
         "mandatory_expenses": [],

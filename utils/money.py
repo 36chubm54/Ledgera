@@ -47,14 +47,16 @@ def minor_to_money(value: object) -> float:
     return float((to_decimal(value) / MINOR_FACTOR).quantize(MONEY_QUANT, rounding=ROUND_HALF_UP))
 
 
-def build_rate(amount_original: object, amount_kzt: object, currency: str) -> float:
+def build_rate(amount_original: object, amount_base: object, currency: str) -> float:
     if str(currency or "").strip().upper() == "KZT":
         return 1.0
     amount_decimal = quantize_money(amount_original)
     if amount_decimal == 0:
         return 1.0
-    amount_kzt_decimal = quantize_money(amount_kzt)
-    return float((amount_kzt_decimal / amount_decimal).quantize(RATE_QUANT, rounding=ROUND_HALF_UP))
+    amount_base_decimal = quantize_money(amount_base)
+    return float(
+        (amount_base_decimal / amount_decimal).quantize(RATE_QUANT, rounding=ROUND_HALF_UP)
+    )
 
 
 def money_diff(left: object, right: object) -> Decimal:

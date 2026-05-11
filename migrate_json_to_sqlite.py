@@ -181,8 +181,8 @@ def _validate_source_integrity(
             raise ValueError(
                 f"Budget #{budget_id} has invalid period: {budget.start_date} > {budget.end_date}"
             )
-        if int(budget.limit_kzt_minor) <= 0:
-            raise ValueError(f"Budget #{budget_id} must have positive limit_kzt_minor")
+        if int(budget.limit_base_minor) <= 0:
+            raise ValueError(f"Budget #{budget_id} must have positive limit_base_minor")
         seen_budget_ids.add(budget_id)
 
     item_ids = {int(item.id) for item in distribution_items}
@@ -320,15 +320,15 @@ def _wallet_balance_payload(balance: object) -> tuple[float, int]:
 def _money_payload(
     amount_original: object,
     rate_at_operation: object,
-    amount_kzt: object,
+    amount_base: object,
 ) -> tuple[float, int, float, str, float, int]:
     return (
         to_money_float(amount_original),
         to_minor_units(amount_original),
         to_rate_float(rate_at_operation),
         rate_to_text(rate_at_operation),
-        to_money_float(amount_kzt),
-        to_minor_units(amount_kzt),
+        to_money_float(amount_base),
+        to_minor_units(amount_base),
     )
 
 
@@ -397,12 +397,12 @@ def _insert_transfers(
             amount_original_minor,
             rate_at_operation,
             rate_at_operation_text,
-            amount_kzt,
-            amount_kzt_minor,
+            amount_base,
+            amount_base_minor,
         ) = _money_payload(
             transfer.amount_original,
             transfer.rate_at_operation,
-            transfer.amount_kzt,
+            transfer.amount_base,
         )
         if preserve_ids:
             cursor = sqlite_storage.execute(
@@ -411,7 +411,7 @@ def _insert_transfers(
                     id, from_wallet_id, to_wallet_id, date,
                     amount_original, amount_original_minor, currency,
                     rate_at_operation, rate_at_operation_text,
-                    amount_kzt, amount_kzt_minor, description
+                    amount_base, amount_base_minor, description
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -429,8 +429,8 @@ def _insert_transfers(
                     transfer.currency.upper(),
                     rate_at_operation,
                     rate_at_operation_text,
-                    amount_kzt,
-                    amount_kzt_minor,
+                    amount_base,
+                    amount_base_minor,
                     transfer.description or "",
                 ),
             )
@@ -442,7 +442,7 @@ def _insert_transfers(
                     from_wallet_id, to_wallet_id, date,
                     amount_original, amount_original_minor, currency,
                     rate_at_operation, rate_at_operation_text,
-                    amount_kzt, amount_kzt_minor, description
+                    amount_base, amount_base_minor, description
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -459,8 +459,8 @@ def _insert_transfers(
                     transfer.currency.upper(),
                     rate_at_operation,
                     rate_at_operation_text,
-                    amount_kzt,
-                    amount_kzt_minor,
+                    amount_base,
+                    amount_base_minor,
                     transfer.description or "",
                 ),
             )
@@ -485,12 +485,12 @@ def _record_row_payload(
         amount_original_minor,
         rate_at_operation,
         rate_at_operation_text,
-        amount_kzt,
-        amount_kzt_minor,
+        amount_base,
+        amount_base_minor,
     ) = _money_payload(
         record.amount_original or 0.0,
         record.rate_at_operation,
-        record.amount_kzt or 0.0,
+        record.amount_base or 0.0,
     )
     return (
         (
@@ -506,8 +506,8 @@ def _record_row_payload(
         str(record.currency).upper(),
         rate_at_operation,
         rate_at_operation_text,
-        amount_kzt,
-        amount_kzt_minor,
+        amount_base,
+        amount_base_minor,
         str(record.category),
         str(record.description or ""),
         str(period) if period is not None else None,
@@ -532,7 +532,7 @@ def _insert_records(
                     id, type, date, wallet_id, transfer_id, related_debt_id,
                     amount_original, amount_original_minor, currency,
                     rate_at_operation, rate_at_operation_text,
-                    amount_kzt, amount_kzt_minor,
+                    amount_base, amount_base_minor,
                     category, description, period
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -564,7 +564,7 @@ def _insert_records(
                     type, date, wallet_id, transfer_id, related_debt_id,
                     amount_original, amount_original_minor, currency,
                     rate_at_operation, rate_at_operation_text,
-                    amount_kzt, amount_kzt_minor,
+                    amount_base, amount_base_minor,
                     category, description, period
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -663,12 +663,12 @@ def _insert_mandatory_expenses(
             amount_original_minor,
             rate_at_operation,
             rate_at_operation_text,
-            amount_kzt,
-            amount_kzt_minor,
+            amount_base,
+            amount_base_minor,
         ) = _money_payload(
             expense.amount_original or 0.0,
             expense.rate_at_operation,
-            expense.amount_kzt or 0.0,
+            expense.amount_base or 0.0,
         )
         if preserve_ids:
             cursor = sqlite_storage.execute(
@@ -677,7 +677,7 @@ def _insert_mandatory_expenses(
                     id, wallet_id,
                     amount_original, amount_original_minor, currency,
                     rate_at_operation, rate_at_operation_text,
-                    amount_kzt, amount_kzt_minor,
+                    amount_base, amount_base_minor,
                     category, description, period, date, auto_pay
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -690,8 +690,8 @@ def _insert_mandatory_expenses(
                     str(expense.currency).upper(),
                     rate_at_operation,
                     rate_at_operation_text,
-                    amount_kzt,
-                    amount_kzt_minor,
+                    amount_base,
+                    amount_base_minor,
                     str(expense.category),
                     str(expense.description or ""),
                     str(expense.period),
@@ -707,7 +707,7 @@ def _insert_mandatory_expenses(
                     wallet_id,
                     amount_original, amount_original_minor, currency,
                     rate_at_operation, rate_at_operation_text,
-                    amount_kzt, amount_kzt_minor,
+                    amount_base, amount_base_minor,
                     category, description, period, date, auto_pay
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -719,8 +719,8 @@ def _insert_mandatory_expenses(
                     str(expense.currency).upper(),
                     rate_at_operation,
                     rate_at_operation_text,
-                    amount_kzt,
-                    amount_kzt_minor,
+                    amount_base,
+                    amount_base_minor,
                     str(expense.category),
                     str(expense.description or ""),
                     str(expense.period),
@@ -746,8 +746,8 @@ def _insert_budgets(sqlite_storage: SQLiteStorage, budgets: list[Budget]) -> Non
             str(budget.scope_value),
             str(budget.start_date),
             str(budget.end_date),
-            to_money_float(budget.limit_kzt),
-            int(budget.limit_kzt_minor),
+            to_money_float(budget.limit_base),
+            int(budget.limit_base_minor),
             int(bool(budget.include_mandatory)),
         )
         if preserve_ids:
@@ -755,7 +755,7 @@ def _insert_budgets(sqlite_storage: SQLiteStorage, budgets: list[Budget]) -> Non
                 """
                 INSERT INTO budgets (
                     id, category, scope_type, scope_value, start_date, end_date,
-                    limit_kzt, limit_kzt_minor, include_mandatory
+                    limit_base, limit_base_minor, include_mandatory
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -766,7 +766,7 @@ def _insert_budgets(sqlite_storage: SQLiteStorage, budgets: list[Budget]) -> Non
                 """
                 INSERT INTO budgets (
                     category, scope_type, scope_value, start_date, end_date,
-                    limit_kzt, limit_kzt_minor, include_mandatory
+                    limit_base, limit_base_minor, include_mandatory
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -1034,7 +1034,7 @@ def _wallet_balances_minor_from_json(
     result = {wallet.id: to_minor_units(wallet.initial_balance) for wallet in wallets}
     for record in records:
         result[int(record.wallet_id)] = result.get(int(record.wallet_id), 0) + to_minor_units(
-            record.signed_amount_kzt()
+            record.signed_amount_base()
         )
     return result
 
@@ -1054,14 +1054,14 @@ def _wallet_balances_minor_from_sqlite(sqlite_storage: SQLiteStorage) -> dict[in
                     CASE
                         WHEN r.type = 'income' THEN
                             COALESCE(
-                                r.amount_kzt_minor,
-                                CAST(ROUND(r.amount_kzt * 100.0) AS INTEGER),
+                                r.amount_base_minor,
+                                CAST(ROUND(r.amount_base * 100.0) AS INTEGER),
                                 0
                             )
                         ELSE -ABS(
                             COALESCE(
-                                r.amount_kzt_minor,
-                                CAST(ROUND(r.amount_kzt * 100.0) AS INTEGER),
+                                r.amount_base_minor,
+                                CAST(ROUND(r.amount_base * 100.0) AS INTEGER),
                                 0
                             )
                         )
@@ -1134,7 +1134,7 @@ def _transfer_signatures_from_json(
             int(to_minor_units(transfer.amount_original or 0.0)),
             str(transfer.currency).upper(),
             rate_to_text(transfer.rate_at_operation),
-            int(to_minor_units(transfer.amount_kzt or 0.0)),
+            int(to_minor_units(transfer.amount_base or 0.0)),
             str(transfer.description or ""),
         )
         for transfer in transfers
@@ -1146,7 +1146,7 @@ def _transfer_signatures_from_sqlite(sqlite_storage: SQLiteStorage) -> list[tupl
         """
         SELECT id, from_wallet_id, to_wallet_id, date,
                amount_original_minor, currency, rate_at_operation_text,
-               amount_kzt_minor, description
+               amount_base_minor, description
         FROM transfers
         ORDER BY id
         """
@@ -1186,7 +1186,7 @@ def _record_signatures_from_json(
             int(to_minor_units(record.amount_original or 0.0)),
             str(record.currency).upper(),
             rate_to_text(record.rate_at_operation),
-            int(to_minor_units(record.amount_kzt or 0.0)),
+            int(to_minor_units(record.amount_base or 0.0)),
             str(record.category),
             str(record.description or ""),
             (
@@ -1204,7 +1204,7 @@ def _record_signatures_from_sqlite(sqlite_storage: SQLiteStorage) -> list[tuple]
         """
         SELECT id, type, date, wallet_id, transfer_id, related_debt_id,
                amount_original_minor, currency, rate_at_operation_text,
-               amount_kzt_minor, category, description, period
+               amount_base_minor, category, description, period
         FROM records
         ORDER BY id
         """
@@ -1290,7 +1290,7 @@ def _mandatory_signatures_from_json(
             int(to_minor_units(expense.amount_original or 0.0)),
             str(expense.currency).upper(),
             rate_to_text(expense.rate_at_operation),
-            int(to_minor_units(expense.amount_kzt or 0.0)),
+            int(to_minor_units(expense.amount_base or 0.0)),
             str(expense.category),
             str(expense.description or ""),
             str(expense.period),
@@ -1304,7 +1304,7 @@ def _mandatory_signatures_from_sqlite(sqlite_storage: SQLiteStorage) -> list[tup
     rows = sqlite_storage.query_all(
         """
         SELECT id, date, wallet_id, amount_original_minor, currency, rate_at_operation_text,
-               amount_kzt_minor, category, description, period, auto_pay
+               amount_base_minor, category, description, period, auto_pay
         FROM mandatory_expenses
         ORDER BY id
         """
@@ -1540,8 +1540,8 @@ def _budget_signatures_from_json(budgets: list[Budget]) -> list[tuple]:
             str(budget.scope_value),
             str(budget.start_date),
             str(budget.end_date),
-            float(budget.limit_kzt),
-            int(budget.limit_kzt_minor),
+            float(budget.limit_base),
+            int(budget.limit_base_minor),
             bool(budget.include_mandatory),
         )
         for budget in budgets
@@ -1552,7 +1552,7 @@ def _budget_signatures_from_sqlite(sqlite_storage: SQLiteStorage) -> list[tuple]
     rows = sqlite_storage.query_all(
         """
         SELECT id, category, scope_type, scope_value,
-               start_date, end_date, limit_kzt, limit_kzt_minor, include_mandatory
+               start_date, end_date, limit_base, limit_base_minor, include_mandatory
         FROM budgets
         ORDER BY id
         """
@@ -2063,16 +2063,16 @@ def _load_budgets_from_json(path: str) -> list[Budget]:
             raise ValueError(f"Budget #{budget_id} has empty scope_value")
         if not start_date or not end_date:
             raise ValueError(f"Budget #{budget_id} is missing start_date/end_date")
-        limit_kzt = to_money_float(item.get("limit_kzt", 0.0) or 0.0)
-        limit_kzt_minor = int(item.get("limit_kzt_minor", 0) or 0)
+        limit_base = to_money_float(item.get("limit_base", 0.0) or 0.0)
+        limit_base_minor = int(item.get("limit_base_minor", 0) or 0)
         budgets.append(
             Budget(
                 id=budget_id,
                 category=category,
                 start_date=start_date,
                 end_date=end_date,
-                limit_kzt=limit_kzt,
-                limit_kzt_minor=limit_kzt_minor,
+                limit_base=limit_base,
+                limit_base_minor=limit_base_minor,
                 include_mandatory=bool(item.get("include_mandatory", False)),
                 scope_type=scope_type,
                 scope_value=scope_value,

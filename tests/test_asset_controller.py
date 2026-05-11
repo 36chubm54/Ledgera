@@ -64,7 +64,7 @@ def test_controller_exposes_asset_and_goal_flow_end_to_end(tmp_path: Path) -> No
         progress = controller.get_goal_progress(goal.id)
 
         assert snapshot.asset_id == asset.id
-        assert controller.get_total_assets_kzt() == 5000.0
+        assert controller.get_total_assets_base() == 5000.0
         assert controller.net_worth_fixed() == 6000.0
         assert [item.name for item in controller.get_assets(active_only=True)] == ["Brokerage"]
         assert progress.current_amount == 5000.0
@@ -120,7 +120,7 @@ def test_controller_bulk_upsert_asset_snapshots_saves_multiple_rows(tmp_path: Pa
 
         assert len(saved) == 2
         assert len(latest) == 2
-        assert controller.get_total_assets_kzt() == 7000.0
+        assert controller.get_total_assets_base() == 7000.0
     finally:
         repo.close()
 

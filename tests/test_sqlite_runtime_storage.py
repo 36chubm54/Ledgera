@@ -149,7 +149,7 @@ def _snapshot_records(
             str(record.type),
             int(record.wallet_id),
             int(record.transfer_id) if record.transfer_id is not None else None,
-            float(record.amount_kzt or 0.0),
+            float(record.amount_base or 0.0),
         )
         for record in repo.load_all()
     ]
@@ -161,7 +161,7 @@ def _snapshot_transfers(repo: SQLiteRecordRepository) -> list[tuple[int, int, in
             int(transfer.id),
             int(transfer.from_wallet_id),
             int(transfer.to_wallet_id),
-            float(transfer.amount_kzt),
+            float(transfer.amount_base),
         )
         for transfer in repo.load_transfers()
     ]
@@ -326,7 +326,7 @@ def test_sqlite_json_full_backup_restores_budgets(tmp_path: Path) -> None:
             category="Food",
             start_date="2026-03-01",
             end_date="2026-03-31",
-            limit_kzt=1500.0,
+            limit_base=1500.0,
             include_mandatory=True,
         )
 
@@ -344,7 +344,7 @@ def test_sqlite_json_full_backup_restores_budgets(tmp_path: Path) -> None:
         assert len(restored_budgets) == 1
         assert restored_budgets[0].category == "Food"
         assert restored_budgets[0].include_mandatory is True
-        assert restored_budgets[0].limit_kzt_minor == 150000
+        assert restored_budgets[0].limit_base_minor == 150000
     finally:
         source_repo.close()
         target_repo.close()
@@ -501,7 +501,7 @@ def test_sqlite_repository_saves_and_loads_debts_and_payments(tmp_path: Path) ->
                 amount_original=1000.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=1000.0,
+                amount_base=1000.0,
                 category="Debt",
                 description="Debt take",
             )
@@ -543,7 +543,7 @@ def test_sqlite_record_delete_reindexes_ids_after_delete(tmp_path: Path) -> None
                 amount_original=100.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=100.0,
+                amount_base=100.0,
                 category="Salary",
             )
         )
@@ -554,7 +554,7 @@ def test_sqlite_record_delete_reindexes_ids_after_delete(tmp_path: Path) -> None
                 amount_original=30.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=30.0,
+                amount_base=30.0,
                 category="Food",
             )
         )
@@ -565,7 +565,7 @@ def test_sqlite_record_delete_reindexes_ids_after_delete(tmp_path: Path) -> None
                 amount_original=50.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=50.0,
+                amount_base=50.0,
                 category="Bonus",
             )
         )
@@ -603,7 +603,7 @@ def test_sqlite_replace_all_data_remaps_debt_links_and_payments(tmp_path: Path) 
             amount_original=800.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=800.0,
+            amount_base=800.0,
             category="Loan collect",
             description="Loan return",
         )
@@ -665,7 +665,7 @@ def test_sqlite_replace_all_data_restores_missing_debt_payment_record_id(tmp_pat
             amount_original=600.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=600.0,
+            amount_base=600.0,
             category="Loan collect",
             description="Loan return",
         )
@@ -710,7 +710,7 @@ def test_sqlite_replace_all_data_preserves_exported_tag_metadata(tmp_path: Path)
             amount_original=250.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=250.0,
+            amount_base=250.0,
             category="Food",
             description="Lunch",
             tags=("food",),
@@ -779,6 +779,21 @@ def test_sqlite_replace_all_data_restores_exported_tags_without_records(tmp_path
         repo.close()
 
 
+def test_sqlite_create_wallet_uses_schema_base_currency_as_default(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path / "wallet_base_currency_default.db")
+
+    try:
+        repo.set_schema_meta("base_currency", "USD")
+
+        wallet = repo.create_wallet(name="Cash", currency="", initial_balance=0.0)
+
+        assert wallet.currency == "USD"
+        stored = next(item for item in repo.load_wallets() if item.id == wallet.id)
+        assert stored.currency == "USD"
+    finally:
+        repo.close()
+
+
 def test_sqlite_replace_records_and_transfers_remaps_debt_payment_record_id(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path / "replace_records_transfers_debt_record_id.db")
 
@@ -805,7 +820,7 @@ def test_sqlite_replace_records_and_transfers_remaps_debt_payment_record_id(tmp_
                 id, type, date, wallet_id, transfer_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_kzt, amount_kzt_minor, category, description, period
+                amount_base, amount_base_minor, category, description, period
             ) VALUES (
                 10, 'expense', '2026-04-02', 4, NULL, 1,
                 300.0, 30000, 'KZT',
@@ -831,7 +846,7 @@ def test_sqlite_replace_records_and_transfers_remaps_debt_payment_record_id(tmp_
                 amount_original=100.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=100.0,
+                amount_base=100.0,
                 category="Food",
             )
         )
@@ -885,7 +900,7 @@ def test_sqlite_debt_delete_reindexes_ids_and_links(tmp_path: Path) -> None:
                 amount_original=150.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=150.0,
+                amount_base=150.0,
                 category="Loan payment",
             )
         )
@@ -927,7 +942,7 @@ def test_sqlite_tag_ids_are_compacted_and_record_links_preserved(tmp_path: Path)
                 amount_original=100.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=100.0,
+                amount_base=100.0,
                 category="Food",
             )
         )
@@ -974,7 +989,7 @@ def test_sqlite_repository_reopen_compacts_existing_tag_ids(tmp_path: Path) -> N
                 amount_original=100.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=100.0,
+                amount_base=100.0,
                 category="Food",
             )
         )
@@ -1028,7 +1043,7 @@ def test_sqlite_replace_all_data_resets_tags_sequence(tmp_path: Path) -> None:
                 amount_original=100.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=100.0,
+                amount_base=100.0,
                 category="Food",
                 tags=("fresh",),
             )
@@ -1069,7 +1084,7 @@ def test_sqlite_repository_reopen_restores_missing_debt_payment_record_id_during
                 id, type, date, wallet_id, transfer_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_kzt, amount_kzt_minor, category, description, period
+                amount_base, amount_base_minor, category, description, period
             ) VALUES (
                 9, 'income', '2026-02-10', 4, NULL, 7,
                 600.0, 60000, 'KZT',
@@ -1241,7 +1256,7 @@ def test_sqlite_storage_save_record_inserts_new_record(tmp_path: Path) -> None:
                 amount_original=100.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=100.0,
+                amount_base=100.0,
                 category="Salary",
                 description="March salary",
             )

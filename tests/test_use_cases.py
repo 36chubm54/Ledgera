@@ -61,7 +61,7 @@ class TestCreateIncome:
             amount_original=100.0,
             currency="USD",
             rate_at_operation=470.0,
-            amount_kzt=47000.0,
+            amount_base=47000.0,
             category="Salary",
         )
         mock_repo.save.assert_called_once_with(expected_record)
@@ -87,7 +87,7 @@ class TestCreateIncome:
             amount_original=100.0,
             currency="USD",
             rate_at_operation=470.0,
-            amount_kzt=47000.0,
+            amount_base=47000.0,
             category="General",
         )
         mock_repo.save.assert_called_once_with(expected_record)
@@ -150,7 +150,7 @@ class TestCreateExpense:
             amount_original=50.0,
             currency="USD",
             rate_at_operation=470.0,
-            amount_kzt=23500.0,
+            amount_base=23500.0,
             category="Food",
         )
         mock_repo.save.assert_called_once_with(expected_record)
@@ -183,7 +183,7 @@ class TestCreateExpense:
             amount_original=50.0,
             currency="USD",
             rate_at_operation=470.0,
-            amount_kzt=23500.0,
+            amount_base=23500.0,
             category="General",
         )
         mock_repo.save.assert_called_once_with(expected_record)
@@ -319,6 +319,48 @@ class TestImportFromCSV:
             mock_repo.replace_records_and_transfers.assert_called_once_with(test_records, [])
             assert result == 3
 
+    def test_execute_rebuilds_transfers_from_valid_transfer_pair(self):
+        mock_repo = Mock(spec=RecordRepository)
+        mock_repo.load_initial_balance.return_value = 0.0
+        mock_repo.get_system_wallet.return_value = Mock(currency="KZT")
+
+        expense = ExpenseRecord(
+            date="2025-01-01",
+            wallet_id=1,
+            amount_original=100.0,
+            currency="USD",
+            rate_at_operation=500.0,
+            amount_base=50000.0,
+            category="Transfer",
+            description="To savings",
+            transfer_id=7,
+        )
+        income = IncomeRecord(
+            date="2025-01-01",
+            wallet_id=2,
+            amount_original=100.0,
+            currency="USD",
+            rate_at_operation=500.0,
+            amount_base=50000.0,
+            category="Transfer",
+            description="To savings",
+            transfer_id=7,
+        )
+
+        with patch("utils.csv_utils.import_records_from_csv") as mock_import:
+            mock_import.return_value = ([expense, income], 0.0, (2, 0, []))
+
+            use_case = ImportFromCSV(repository=mock_repo)
+            result = use_case.execute("test.csv")
+
+        _, transfers = mock_repo.replace_records_and_transfers.call_args.args
+        assert len(transfers) == 1
+        assert transfers[0].id == 7
+        assert transfers[0].from_wallet_id == 1
+        assert transfers[0].to_wallet_id == 2
+        assert transfers[0].amount_base == pytest.approx(50000.0)
+        assert result == 2
+
 
 class TestDebtUseCases:
     def test_create_debt_delegates_to_service(self):
@@ -329,14 +371,14 @@ class TestDebtUseCases:
         result = CreateDebt(service).execute(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             created_at="2026-03-01",
         )
 
         service.create_debt.assert_called_once_with(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             created_at="2026-03-01",
             currency="KZT",
             interest_rate=0.0,
@@ -352,7 +394,7 @@ class TestDebtUseCases:
         result = RegisterDebtPayment(service).execute(
             debt_id=1,
             wallet_id=2,
-            amount_kzt=100.0,
+            amount_base=100.0,
             payment_date="2026-03-05",
             description="Partially paid",
         )
@@ -360,7 +402,7 @@ class TestDebtUseCases:
         service.register_payment.assert_called_once_with(
             debt_id=1,
             wallet_id=2,
-            amount_kzt=100.0,
+            amount_base=100.0,
             payment_date="2026-03-05",
             description="Partially paid",
         )
@@ -386,12 +428,12 @@ class TestDebtUseCases:
         CreateLoan(service).execute(
             contact_name="Bob",
             wallet_id=2,
-            amount_kzt=250.0,
+            amount_base=250.0,
             created_at="2026-03-01",
         )
         RegisterDebtWriteOff(service).execute(
             debt_id=8,
-            amount_kzt=50.0,
+            amount_base=50.0,
             payment_date="2026-03-11",
         )
 
@@ -412,7 +454,7 @@ class TestDebtUseCases:
         service.create_loan.assert_called_once_with(
             contact_name="Bob",
             wallet_id=2,
-            amount_kzt=250.0,
+            amount_base=250.0,
             created_at="2026-03-01",
             currency="KZT",
             interest_rate=0.0,
@@ -420,7 +462,7 @@ class TestDebtUseCases:
         )
         service.register_write_off.assert_called_once_with(
             debt_id=8,
-            amount_kzt=50.0,
+            amount_base=50.0,
             payment_date="2026-03-11",
         )
 
@@ -458,7 +500,9 @@ class TestDebtUseCases:
         repo_file = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
         repo_file.close()
         csv_file = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv")
-        csv_file.write("date,type,category,amount_original,currency,rate_at_operation,amount_kzt\n")
+        csv_file.write(
+            "date,type,category,amount_original,currency,rate_at_operation,amount_base\n"
+        )
         csv_file.write("bad-date,income,Salary,10,USD,500,5000\n")
         csv_file.close()
         try:
