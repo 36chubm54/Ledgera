@@ -319,6 +319,48 @@ class TestImportFromCSV:
             mock_repo.replace_records_and_transfers.assert_called_once_with(test_records, [])
             assert result == 3
 
+    def test_execute_rebuilds_transfers_from_valid_transfer_pair(self):
+        mock_repo = Mock(spec=RecordRepository)
+        mock_repo.load_initial_balance.return_value = 0.0
+        mock_repo.get_system_wallet.return_value = Mock(currency="KZT")
+
+        expense = ExpenseRecord(
+            date="2025-01-01",
+            wallet_id=1,
+            amount_original=100.0,
+            currency="USD",
+            rate_at_operation=500.0,
+            amount_base=50000.0,
+            category="Transfer",
+            description="To savings",
+            transfer_id=7,
+        )
+        income = IncomeRecord(
+            date="2025-01-01",
+            wallet_id=2,
+            amount_original=100.0,
+            currency="USD",
+            rate_at_operation=500.0,
+            amount_base=50000.0,
+            category="Transfer",
+            description="To savings",
+            transfer_id=7,
+        )
+
+        with patch("utils.csv_utils.import_records_from_csv") as mock_import:
+            mock_import.return_value = ([expense, income], 0.0, (2, 0, []))
+
+            use_case = ImportFromCSV(repository=mock_repo)
+            result = use_case.execute("test.csv")
+
+        _, transfers = mock_repo.replace_records_and_transfers.call_args.args
+        assert len(transfers) == 1
+        assert transfers[0].id == 7
+        assert transfers[0].from_wallet_id == 1
+        assert transfers[0].to_wallet_id == 2
+        assert transfers[0].amount_base == pytest.approx(50000.0)
+        assert result == 2
+
 
 class TestDebtUseCases:
     def test_create_debt_delegates_to_service(self):

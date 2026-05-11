@@ -748,6 +748,11 @@ class JsonFileRecordRepository(RecordRepository):
             amount_original = self._as_float(item.get("amount_original", amount_base), amount_base)
             currency = str(item.get("currency", "KZT") or "KZT").upper()
             rate_at_operation = self._as_float(item.get("rate_at_operation", 1.0), 1.0)
+        elif "amount_kzt" in item:
+            amount_base = self._as_float(item.get("amount_kzt", 0.0), 0.0)
+            amount_original = self._as_float(item.get("amount_original", amount_base), amount_base)
+            currency = str(item.get("currency", "KZT") or "KZT").upper()
+            rate_at_operation = self._as_float(item.get("rate_at_operation", 1.0), 1.0)
         else:
             legacy_amount = self._as_float(item.get("amount", 0.0), 0.0)
             amount_original = legacy_amount
@@ -1237,7 +1242,10 @@ class JsonFileRecordRepository(RecordRepository):
                         amount_original=self._as_float(item.get("amount_original"), 0.0),
                         currency=str(item.get("currency", base_currency) or base_currency).upper(),
                         rate_at_operation=self._as_float(item.get("rate_at_operation"), 1.0),
-                        amount_base=self._as_float(item.get("amount_base"), 0.0),
+                        amount_base=self._as_float(
+                            item.get("amount_base", item.get("amount_kzt")),
+                            0.0,
+                        ),
                         description=str(item.get("description", "") or ""),
                     )
                 )

@@ -684,21 +684,22 @@ class ImportFromCSV:
             target = next((item for item in linked if isinstance(item, IncomeRecord)), None)
             if source is None or target is None or len(linked) != 2:
                 raise ValueError(f"Transfer integrity violated for #{transfer_id}")
-                transfers.append(
-                    Transfer(
-                        id=transfer_id,
-                        from_wallet_id=source.wallet_id,
-                        to_wallet_id=target.wallet_id,
-                        date=source.date,
-                        amount_original=to_money_float(source.amount_original or 0.0),
-                        currency=str(
-                            source.currency or self._repository.get_system_wallet().currency
-                        ).upper(),
-                        rate_at_operation=to_rate_float(source.rate_at_operation),
-                        amount_base=to_money_float(source.amount_base or 0.0),
-                        description=str(source.description or ""),
-                    )
+
+            transfers.append(
+                Transfer(
+                    id=transfer_id,
+                    from_wallet_id=source.wallet_id,
+                    to_wallet_id=target.wallet_id,
+                    date=source.date,
+                    amount_original=to_money_float(source.amount_original or 0.0),
+                    currency=str(
+                        source.currency or self._repository.get_system_wallet().currency
+                    ).upper(),
+                    rate_at_operation=to_rate_float(source.rate_at_operation),
+                    amount_base=to_money_float(source.amount_base or 0.0),
+                    description=str(source.description or ""),
                 )
+            )
         reindexed_records = []
         for index, record in enumerate(records, start=1):
             try:
