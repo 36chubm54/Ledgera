@@ -7,9 +7,29 @@ import sqlite3
 MIGRATION_ID = "002"
 
 
+def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _ensure_legacy_minor_columns(conn: sqlite3.Connection) -> None:
+    table_specs = (
+        ("records", "amount_kzt", "amount_kzt_minor"),
+        ("transfers", "amount_kzt", "amount_kzt_minor"),
+        ("mandatory_expenses", "amount_kzt", "amount_kzt_minor"),
+        ("budgets", "limit_kzt", "limit_kzt_minor"),
+    )
+    for table, amount_column, minor_column in table_specs:
+        columns = _column_names(conn, table)
+        if amount_column not in columns or minor_column in columns:
+            continue
+        conn.execute(
+            f"ALTER TABLE {table} ADD COLUMN {minor_column} INTEGER NOT NULL DEFAULT 0"
+        )
+
+
 def up(conn: sqlite3.Connection) -> None:
     """Apply migration 002 if old column names are still present."""
-    record_columns = [str(row[1]) for row in conn.execute("PRAGMA table_info(records)").fetchall()]
+    record_columns = _column_names(conn, "records")
     if "amount_base" in record_columns:
         conn.execute(
             "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('base_currency', 'KZT')"
@@ -20,6 +40,8 @@ def up(conn: sqlite3.Connection) -> None:
         )
         conn.commit()
         return
+
+    _ensure_legacy_minor_columns(conn)
 
     conn.executescript(
         """

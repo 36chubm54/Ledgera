@@ -168,3 +168,25 @@ def test_parse_import_row_rejects_invalid_initial_balance_amount() -> None:
     assert record is None
     assert balance is None
     assert "invalid initial_balance amount" in (error or "")
+
+
+def test_parse_import_row_accepts_legacy_amount_kzt_for_full_backup() -> None:
+    record, balance, error = parse_import_row(
+        {
+            "date": "2025-01-01",
+            "type": "income",
+            "wallet_id": "1",
+            "category": "Salary",
+            "amount_original": "10",
+            "currency": "USD",
+            "rate_at_operation": "500",
+            "amount_kzt": "5000",
+        },
+        row_label="row 9",
+        policy=ImportPolicy.FULL_BACKUP,
+    )
+    assert error is None
+    assert balance is None
+    assert record is not None
+    assert record.amount_original == pytest.approx(10.0)
+    assert record.amount_base == pytest.approx(5000.0)
