@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from infrastructure.sqlite_repository import SQLiteRecordRepository
+from app.repository_protocols import SqlQueryRepository
 from services.sqlite_money_sql import minor_amount_expr
 
 
@@ -13,7 +13,7 @@ class CategorySpend:
     """Aggregated spend or income for a single category."""
 
     category: str
-    total_kzt: float
+    total_base: float
     record_count: int
 
 
@@ -22,7 +22,7 @@ class TagSpend:
     """Aggregated expense allocation for a single tag."""
 
     tag: str
-    total_kzt: float
+    total_base: float
     record_count: int
     color: str = ""
 
@@ -45,14 +45,9 @@ class MetricsService:
     Read-only analytical service. All metrics are derived live from
     the records table via SQL aggregates. Never writes to the database.
 
-    Example usage:
-        repo = SQLiteRecordRepository("finance.db")
-        svc = MetricsService(repo)
-        rate = svc.get_savings_rate("2026-01-01", "2026-01-31")
-        # 23.4  (percent)
     """
 
-    def __init__(self, repository: SQLiteRecordRepository) -> None:
+    def __init__(self, repository: SqlQueryRepository) -> None:
         self._repo = repository
 
     def get_savings_rate(self, start_date: str, end_date: str) -> float:
@@ -71,7 +66,7 @@ class MetricsService:
 
     def get_burn_rate(self, start_date: str, end_date: str) -> float:
         """
-        Average daily expense (KZT) for the date range [start_date, end_date].
+        Average daily expense (base currency) for the date range [start_date, end_date].
 
         burn_rate = total_expenses / number_of_days_in_range
         Transfer records excluded (transfer_id IS NULL).
@@ -106,14 +101,14 @@ class MetricsService:
             f"""
             SELECT
                 category,
-                COALESCE(SUM({minor_amount_expr("amount_kzt")}), 0.0) AS total_kzt,
+                COALESCE(SUM({minor_amount_expr("amount_base")}), 0.0) AS total_base,
                 COUNT(*)                        AS record_count
             FROM records
             WHERE type IN ('expense', 'mandatory_expense')
               AND transfer_id IS NULL
               AND date >= ? AND date <= ?
             GROUP BY category
-            ORDER BY total_kzt DESC
+            ORDER BY total_base DESC
             {limit_clause}
             """,
             (str(start_date), str(end_date)),
@@ -121,7 +116,7 @@ class MetricsService:
         return [
             CategorySpend(
                 category=str(row[0]),
-                total_kzt=round(float(row[1]) / 100.0, 2),
+                total_base=round(float(row[1]) / 100.0, 2),
                 record_count=int(row[2]),
             )
             for row in rows
@@ -145,14 +140,14 @@ class MetricsService:
             f"""
             SELECT
                 category,
-                COALESCE(SUM({minor_amount_expr("amount_kzt")}), 0.0) AS total_kzt,
+                COALESCE(SUM({minor_amount_expr("amount_base")}), 0.0) AS total_base,
                 COUNT(*)                        AS record_count
             FROM records
             WHERE type = 'income'
               AND transfer_id IS NULL
               AND date >= ? AND date <= ?
             GROUP BY category
-            ORDER BY total_kzt DESC
+            ORDER BY total_base DESC
             {limit_clause}
             """,
             (str(start_date), str(end_date)),
@@ -160,7 +155,7 @@ class MetricsService:
         return [
             CategorySpend(
                 category=str(row[0]),
-                total_kzt=round(float(row[1]) / 100.0, 2),
+                total_base=round(float(row[1]) / 100.0, 2),
                 record_count=int(row[2]),
             )
             for row in rows
@@ -187,7 +182,7 @@ class MetricsService:
             SELECT
                 t.name AS tag_name,
                 COALESCE(t.color, '') AS color,
-                COALESCE(SUM({minor_amount_expr("r.amount_kzt")}), 0.0) AS total_kzt,
+                COALESCE(SUM({minor_amount_expr("r.amount_base")}), 0.0) AS total_base,
                 COUNT(DISTINCT r.id) AS record_count
             FROM records AS r
             JOIN record_tags AS rt
@@ -198,7 +193,7 @@ class MetricsService:
               AND r.transfer_id IS NULL
               AND r.date >= ? AND r.date <= ?
             GROUP BY t.id, t.name, t.color
-            ORDER BY total_kzt DESC, t.name COLLATE NOCASE, t.name
+            ORDER BY total_base DESC, t.name COLLATE NOCASE, t.name
             {limit_clause}
             """,
             (str(start_date), str(end_date)),
@@ -207,7 +202,7 @@ class MetricsService:
             TagSpend(
                 tag=str(row[0]),
                 color=str(row[1] or ""),
-                total_kzt=round(float(row[2]) / 100.0, 2),
+                total_base=round(float(row[2]) / 100.0, 2),
                 record_count=int(row[3]),
             )
             for row in rows
@@ -301,10 +296,10 @@ class MetricsService:
             SELECT
                 strftime('%Y-%m', date) AS month,
                 COALESCE(SUM(CASE type WHEN 'income'
-                        THEN {minor_amount_expr("amount_kzt")} ELSE 0 END), 0.0)
+                        THEN {minor_amount_expr("amount_base")} ELSE 0 END), 0.0)
                     AS income,
                 COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense')
-                        THEN {minor_amount_expr("amount_kzt")} ELSE 0 END), 0.0)
+                        THEN {minor_amount_expr("amount_base")} ELSE 0 END), 0.0)
                     AS expenses
             FROM records
             WHERE {date_filter}
@@ -336,7 +331,7 @@ class MetricsService:
             """
             SELECT 
             COALESCE(SUM("""
-            + minor_amount_expr("amount_kzt")
+            + minor_amount_expr("amount_base")
             + """), 0.0)
             FROM records
             WHERE type = 'income'
@@ -353,7 +348,7 @@ class MetricsService:
             """
             SELECT 
             COALESCE(SUM("""
-            + minor_amount_expr("amount_kzt")
+            + minor_amount_expr("amount_base")
             + """), 0.0)
             FROM records
             WHERE type IN ('expense', 'mandatory_expense')

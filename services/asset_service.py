@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from app.repository_protocols import AssetRepositoryProtocol
 from app.services import CurrencyService
 from domain.asset import Asset, AssetCategory, AssetSnapshot
 from domain.validation import ensure_not_future, parse_ymd
-from infrastructure.sqlite_repository import SQLiteRecordRepository
 from utils.money import minor_to_money, to_minor_units, to_money_float
 
 
 class AssetService:
-    def __init__(self, repository: SQLiteRecordRepository, currency: CurrencyService) -> None:
+    def __init__(self, repository: AssetRepositoryProtocol, currency: CurrencyService) -> None:
         self._repo = repository
         self._currency = currency
 
@@ -133,7 +133,7 @@ class AssetService:
     def get_latest_snapshots(self, *, active_only: bool = True) -> list[AssetSnapshot]:
         return self._repo.get_latest_asset_snapshots(active_only=active_only)
 
-    def get_total_assets_kzt(self, *, active_only: bool = True) -> float:
+    def get_total_assets_base(self, *, active_only: bool = True) -> float:
         total = 0.0
         for snapshot in self.get_latest_snapshots(active_only=active_only):
             total += self._currency.convert(

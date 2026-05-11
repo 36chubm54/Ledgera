@@ -50,7 +50,7 @@ def test_create_debt_creates_open_debt_and_income_record(tmp_path: Path) -> None
         debt = service.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             created_at="2026-03-01",
         )
 
@@ -73,7 +73,7 @@ def test_create_loan_rejects_when_wallet_has_insufficient_funds(tmp_path: Path) 
             service.create_loan(
                 contact_name="Bob",
                 wallet_id=1,
-                amount_kzt=100.0,
+                amount_base=100.0,
                 created_at="2026-03-01",
             )
     finally:
@@ -87,14 +87,14 @@ def test_register_payment_reduces_remaining_and_creates_record_and_payment(tmp_p
         debt = service.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             created_at="2026-03-01",
         )
 
         payment = service.register_payment(
             debt_id=debt.id,
             wallet_id=2,
-            amount_kzt=200.0,
+            amount_base=200.0,
             payment_date="2026-03-05",
         )
         refreshed = repo.get_debt_by_id(debt.id)
@@ -115,13 +115,13 @@ def test_register_write_off_closes_without_creating_wallet_record(tmp_path: Path
         debt = service.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=150.0,
+            amount_base=150.0,
             created_at="2026-03-01",
         )
 
         payment = service.register_write_off(
             debt_id=debt.id,
-            amount_kzt=150.0,
+            amount_base=150.0,
             payment_date="2026-03-10",
         )
         refreshed = repo.get_debt_by_id(debt.id)
@@ -142,13 +142,13 @@ def test_create_multiple_debts_does_not_overwrite_existing_rows(tmp_path: Path) 
         first = service.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=150.0,
+            amount_base=150.0,
             created_at="2026-03-01",
         )
         second = service.create_debt(
             contact_name="Bob",
             wallet_id=2,
-            amount_kzt=275.0,
+            amount_base=275.0,
             created_at="2026-03-02",
         )
 
@@ -168,20 +168,20 @@ def test_multiple_payments_do_not_overwrite_existing_debt_payment_rows(tmp_path:
         debt = service.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=500.0,
+            amount_base=500.0,
             created_at="2026-03-01",
         )
 
         first = service.register_payment(
             debt_id=debt.id,
             wallet_id=2,
-            amount_kzt=100.0,
+            amount_base=100.0,
             payment_date="2026-03-03",
         )
         second = service.register_payment(
             debt_id=debt.id,
             wallet_id=2,
-            amount_kzt=150.0,
+            amount_base=150.0,
             payment_date="2026-03-04",
         )
 
@@ -202,13 +202,13 @@ def test_delete_payment_restores_remaining_and_reopens_debt(tmp_path: Path) -> N
         debt = service.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=100.0,
+            amount_base=100.0,
             created_at="2026-03-01",
         )
         payment = service.register_payment(
             debt_id=debt.id,
             wallet_id=2,
-            amount_kzt=100.0,
+            amount_base=100.0,
             payment_date="2026-03-02",
         )
 
@@ -231,13 +231,13 @@ def test_delete_payment_with_linked_record_survives_stale_record_id_after_renorm
         debt = service.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=100.0,
+            amount_base=100.0,
             created_at="2026-03-01",
         )
         payment = service.register_payment(
             debt_id=debt.id,
             wallet_id=2,
-            amount_kzt=40.0,
+            amount_base=40.0,
             payment_date="2026-03-02",
         )
 
@@ -270,13 +270,13 @@ def test_recalculate_debt_syncs_remaining_from_payments(tmp_path: Path) -> None:
         debt = service.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=300.0,
+            amount_base=300.0,
             created_at="2026-03-01",
         )
         service.register_payment(
             debt_id=debt.id,
             wallet_id=2,
-            amount_kzt=100.0,
+            amount_base=100.0,
             payment_date="2026-03-03",
         )
         repo.save_debt(

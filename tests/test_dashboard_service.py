@@ -39,7 +39,7 @@ def _build_repo(tmp_path: Path, name: str = "dashboard.db") -> SQLiteRecordRepos
             INSERT INTO records (
                 id, type, date, wallet_id, amount_original, amount_original_minor,
                 currency, rate_at_operation, rate_at_operation_text,
-                amount_kzt, amount_kzt_minor, category, description
+                amount_base, amount_base_minor, category, description
             )
             VALUES
                 (1, 'income', '2026-04-01', 2, 500, 50000, 'KZT', 1, '1.000000', 500, 50000, 'Salary', ''),
@@ -76,15 +76,15 @@ def test_controller_builds_dashboard_payload(tmp_path: Path) -> None:
 
         payload = controller.get_dashboard_payload()
 
-        assert payload.summary.net_worth_kzt == 6400.0
-        assert payload.summary.assets_total_kzt == 5000.0
+        assert payload.summary.net_worth_base == 6400.0
+        assert payload.summary.assets_total_base == 5000.0
         assert payload.summary.goals_total == 1
         assert payload.summary.goals_completed == 0
         assert payload.trend[-1].month == "2026-04"
         assert payload.trend[-1].balance == 1400.0
         assert len(payload.allocation) == 1
         assert payload.allocation[0].category == "bank"
-        assert payload.allocation[0].amount_kzt == 5000.0
+        assert payload.allocation[0].amount_base == 5000.0
         assert payload.allocation[0].share_pct == 100.0
         assert len(payload.goals) == 1
         assert payload.goals[0].goal.id == goal.id

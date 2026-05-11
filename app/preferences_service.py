@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.repository import RecordRepository
+from app.repository_protocols import SchemaMetaRepository
 from app.services import CurrencyService
-from infrastructure.sqlite_repository import SQLiteRecordRepository
 
 
 @dataclass(frozen=True)
@@ -21,31 +21,31 @@ class UIPreferencesService:
 
     def set_online_mode(self, enabled: bool) -> None:
         self._currency.set_online(enabled)
-        if isinstance(self._repository, SQLiteRecordRepository):
+        if isinstance(self._repository, SchemaMetaRepository):
             self._repository.set_schema_meta("online_mode", "1" if enabled else "0")
 
     def load_online_mode_preference(self) -> bool:
-        if not isinstance(self._repository, SQLiteRecordRepository):
+        if not isinstance(self._repository, SchemaMetaRepository):
             return False
         value = self._repository.get_schema_meta("online_mode")
         return value == "1"
 
     def save_language_preference(self, code: str) -> None:
-        if isinstance(self._repository, SQLiteRecordRepository):
+        if isinstance(self._repository, SchemaMetaRepository):
             self._repository.set_schema_meta("app_language", str(code or "").strip().lower())
 
     def load_language_preference(self) -> str | None:
-        if not isinstance(self._repository, SQLiteRecordRepository):
+        if not isinstance(self._repository, SchemaMetaRepository):
             return None
         value = self._repository.get_schema_meta("app_language")
         return str(value).strip().lower() if value else None
 
     def save_theme_preference(self, name: str) -> None:
-        if isinstance(self._repository, SQLiteRecordRepository):
+        if isinstance(self._repository, SchemaMetaRepository):
             self._repository.set_schema_meta("app_theme", str(name or "").strip().lower())
 
     def load_theme_preference(self) -> str | None:
-        if not isinstance(self._repository, SQLiteRecordRepository):
+        if not isinstance(self._repository, SchemaMetaRepository):
             return None
         value = self._repository.get_schema_meta("app_theme")
         return str(value).strip().lower() if value else None

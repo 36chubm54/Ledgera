@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from app.repository_protocols import GoalRepositoryProtocol
 from app.services import CurrencyService
 from domain.goal import Goal, GoalProgress
 from domain.validation import ensure_not_future, parse_ymd
-from infrastructure.sqlite_repository import SQLiteRecordRepository
 from services.asset_service import AssetService
 from utils.money import minor_to_money, quantize_money, to_minor_units, to_money_float
 
@@ -15,7 +15,7 @@ from utils.money import minor_to_money, quantize_money, to_minor_units, to_money
 class GoalService:
     def __init__(
         self,
-        repository: SQLiteRecordRepository,
+        repository: GoalRepositoryProtocol,
         asset_service: AssetService,
         currency: CurrencyService,
     ) -> None:
@@ -112,7 +112,7 @@ class GoalService:
                 )
 
     def _build_progress(self, goal: Goal) -> GoalProgress:
-        total_assets_base = quantize_money(self._assets.get_total_assets_kzt())
+        total_assets_base = quantize_money(self._assets.get_total_assets_base())
         current_in_goal_currency = self._convert_from_base(
             float(total_assets_base),
             str(goal.currency),

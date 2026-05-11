@@ -10,6 +10,7 @@ from datetime import date as dt_date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import cast
 
+from app.repository_protocols import DistributionRepositoryProtocol
 from domain.distribution import (
     DistributionItem,
     DistributionSubitem,
@@ -19,7 +20,6 @@ from domain.distribution import (
     SubitemResult,
     ValidationError,
 )
-from infrastructure.sqlite_repository import SQLiteRecordRepository
 from services.sqlite_money_sql import signed_minor_amount_expr
 from utils.money import minor_to_money, to_minor_units, to_money_float
 
@@ -30,7 +30,7 @@ _FULL_PCT_MINOR = to_minor_units(100)
 class DistributionService:
     """Reads monthly net cashflow and manages persisted distribution structure."""
 
-    def __init__(self, repository: SQLiteRecordRepository) -> None:
+    def __init__(self, repository: DistributionRepositoryProtocol) -> None:
         self._repo = repository
         self._ensure_snapshot_schema()
 
@@ -338,7 +338,7 @@ class DistributionService:
         start_date, end_date = self._month_bounds(month)
         row = self._repo.query_one(
             f"""
-            SELECT COALESCE(SUM({signed_minor_amount_expr("amount_kzt")}), 0)
+            SELECT COALESCE(SUM({signed_minor_amount_expr("amount_base")}), 0)
             FROM records
             WHERE transfer_id IS NULL
               AND date >= ?
@@ -350,7 +350,7 @@ class DistributionService:
         return minor_to_money(net_minor), net_minor
 
     def get_monthly_distribution(self, month: str) -> MonthlyDistribution:
-        net_income_kzt, net_income_minor = self.get_net_income_for_month(month)
+        net_income_base, net_income_minor = self.get_net_income_for_month(month)
         item_results: list[ItemResult] = []
 
         for item in self.get_items(active_only=True):
@@ -361,14 +361,14 @@ class DistributionService:
                 subitem_results.append(
                     SubitemResult(
                         subitem=subitem,
-                        amount_kzt=minor_to_money(sub_minor),
+                        amount_base=minor_to_money(sub_minor),
                         amount_minor=sub_minor,
                     )
                 )
             item_results.append(
                 ItemResult(
                     item=item,
-                    amount_kzt=minor_to_money(item_minor),
+                    amount_base=minor_to_money(item_minor),
                     amount_minor=item_minor,
                     subitem_results=tuple(subitem_results),
                 )
@@ -376,7 +376,7 @@ class DistributionService:
 
         return MonthlyDistribution(
             month=month,
-            net_income_kzt=net_income_kzt,
+            net_income_base=net_income_base,
             net_income_minor=net_income_minor,
             item_results=tuple(item_results),
             is_negative=net_income_minor < 0,
@@ -681,7 +681,7 @@ class DistributionService:
         values = {
             "month": distribution.month,
             "fixed": "",
-            "net_income": self._fmt_amount(distribution.net_income_kzt),
+            "net_income": self._fmt_amount(distribution.net_income_base),
         }
         for item in items:
             result = item_results.get(item.id)
@@ -689,13 +689,13 @@ class DistributionService:
             if result is None:
                 values[item_key] = "-"
                 continue
-            values[item_key] = self._fmt_amount(result.amount_kzt)
+            values[item_key] = self._fmt_amount(result.amount_base)
             sub_results = {sub.subitem.id: sub for sub in result.subitem_results}
             for subitem in self.get_subitems(item.id):
                 sub_key = f"sub_{subitem.id}"
                 sub_result = sub_results.get(subitem.id)
                 values[sub_key] = (
-                    "-" if sub_result is None else self._fmt_amount(sub_result.amount_kzt)
+                    "-" if sub_result is None else self._fmt_amount(sub_result.amount_base)
                 )
         return values
 

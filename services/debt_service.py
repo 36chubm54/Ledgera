@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from app.use_case_support import wallet_balance_kzt, wallet_by_id
+from app.repository_protocols import DebtRepositoryProtocol
+from app.use_case_support import wallet_balance_base, wallet_by_id
 from domain.debt import Debt, DebtKind, DebtOperationType, DebtPayment, DebtStatus
 from domain.records import ExpenseRecord, IncomeRecord, Record
 from domain.validation import ensure_not_future, parse_ymd
-from infrastructure.sqlite_repository import SQLiteRecordRepository
 from utils.money import minor_to_money, to_minor_units, to_money_float
 
 
 class DebtService:
-    def __init__(self, repository: SQLiteRecordRepository) -> None:
+    def __init__(self, repository: DebtRepositoryProtocol) -> None:
         self._repo = repository
 
     def create_debt(
@@ -21,7 +21,7 @@ class DebtService:
         *,
         contact_name: str,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         created_at: str,
         currency: str = "KZT",
         interest_rate: float = 0.0,
@@ -31,7 +31,7 @@ class DebtService:
             kind=DebtKind.DEBT,
             contact_name=contact_name,
             wallet_id=wallet_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             created_at=created_at,
             currency=currency,
             interest_rate=interest_rate,
@@ -43,7 +43,7 @@ class DebtService:
         *,
         contact_name: str,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         created_at: str,
         currency: str = "KZT",
         interest_rate: float = 0.0,
@@ -53,7 +53,7 @@ class DebtService:
             kind=DebtKind.LOAN,
             contact_name=contact_name,
             wallet_id=wallet_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             created_at=created_at,
             currency=currency,
             interest_rate=interest_rate,
@@ -65,12 +65,12 @@ class DebtService:
         *,
         debt_id: int,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         payment_date: str,
         description: str = "",
     ) -> DebtPayment:
         debt = self._repo.get_debt_by_id(int(debt_id))
-        payment_amount_minor = self._validate_payment_amount(debt, amount_kzt)
+        payment_amount_minor = self._validate_payment_amount(debt, amount_base)
         payment_date_text = self._normalize_date(payment_date)
         record = self._build_payment_record(
             debt=debt,
@@ -110,11 +110,11 @@ class DebtService:
         self,
         *,
         debt_id: int,
-        amount_kzt: float,
+        amount_base: float,
         payment_date: str,
     ) -> DebtPayment:
         debt = self._repo.get_debt_by_id(int(debt_id))
-        payment_amount_minor = self._validate_payment_amount(debt, amount_kzt)
+        payment_amount_minor = self._validate_payment_amount(debt, amount_base)
         payment_date_text = self._normalize_date(payment_date)
 
         with self._repo.transaction():
@@ -147,13 +147,13 @@ class DebtService:
         description: str = "",
     ) -> Debt:
         debt = self._repo.get_debt_by_id(int(debt_id))
-        remaining_kzt = minor_to_money(debt.remaining_amount_minor)
+        remaining_base = minor_to_money(debt.remaining_amount_minor)
         if debt.remaining_amount_minor <= 0:
             return debt
         if write_off:
             self.register_write_off(
                 debt_id=debt.id,
-                amount_kzt=remaining_kzt,
+                amount_base=remaining_base,
                 payment_date=payment_date,
             )
         else:
@@ -162,7 +162,7 @@ class DebtService:
             self.register_payment(
                 debt_id=debt.id,
                 wallet_id=wallet_id,
-                amount_kzt=remaining_kzt,
+                amount_base=remaining_base,
                 payment_date=payment_date,
                 description=description,
             )
@@ -229,7 +229,7 @@ class DebtService:
         kind: DebtKind,
         contact_name: str,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         created_at: str,
         currency: str,
         interest_rate: float,
@@ -239,7 +239,7 @@ class DebtService:
         contact = str(contact_name or "").strip()
         if not contact:
             raise ValueError("Contact name is required")
-        amount_minor = to_minor_units(amount_kzt)
+        amount_minor = to_minor_units(amount_base)
         if amount_minor <= 0:
             raise ValueError("Amount must be positive")
 
@@ -247,7 +247,7 @@ class DebtService:
         if not wallet.is_active:
             raise ValueError("Cannot create obligation for inactive wallet")
         if kind is DebtKind.LOAN:
-            self._assert_wallet_can_spend(wallet_id, amount_kzt)
+            self._assert_wallet_can_spend(wallet_id, amount_base)
 
         debt = Debt(
             id=self._next_debt_id(),
@@ -283,15 +283,15 @@ class DebtService:
         operation_date: str,
         description: str,
     ) -> Record:
-        amount_kzt = minor_to_money(amount_minor)
+        amount_base = minor_to_money(amount_minor)
         common = {
             "date": operation_date,
             "wallet_id": int(wallet_id),
             "related_debt_id": int(debt.id),
-            "amount_original": amount_kzt,
+            "amount_original": amount_base,
             "currency": str(debt.currency).upper(),
             "rate_at_operation": 1.0,
-            "amount_kzt": amount_kzt,
+            "amount_base": amount_base,
             "category": "Debt" if debt.kind is DebtKind.DEBT else "Loan",
             "description": str(description or debt.contact_name),
         }
@@ -308,20 +308,20 @@ class DebtService:
         payment_date: str,
         description: str,
     ) -> Record:
-        amount_kzt = minor_to_money(amount_minor)
+        amount_base = minor_to_money(amount_minor)
         common = {
             "date": payment_date,
             "wallet_id": int(wallet_id),
             "related_debt_id": int(debt.id),
-            "amount_original": amount_kzt,
+            "amount_original": amount_base,
             "currency": str(debt.currency).upper(),
             "rate_at_operation": 1.0,
-            "amount_kzt": amount_kzt,
+            "amount_base": amount_base,
             "category": "Debt payment" if debt.kind is DebtKind.DEBT else "Loan payment",
             "description": str(description or debt.contact_name),
         }
         if debt.kind is DebtKind.DEBT:
-            self._assert_wallet_can_spend(wallet_id, amount_kzt)
+            self._assert_wallet_can_spend(wallet_id, amount_base)
             return ExpenseRecord(**common)
         return IncomeRecord(**common)
 
@@ -340,17 +340,17 @@ class DebtService:
             closed_at=closed_at if remaining_minor == 0 else None,
         )
 
-    def _assert_wallet_can_spend(self, wallet_id: int, amount_kzt: float) -> None:
+    def _assert_wallet_can_spend(self, wallet_id: int, amount_base: float) -> None:
         wallet = wallet_by_id(self._repo, int(wallet_id))
         if wallet.allow_negative:
             return
-        balance = wallet_balance_kzt(wallet, self._repo.load_all())
-        projected_balance = to_money_float(balance - to_money_float(amount_kzt))
+        balance = wallet_balance_base(wallet, self._repo.load_all())
+        projected_balance = to_money_float(balance - to_money_float(amount_base))
         if projected_balance < 0:
             raise ValueError("Insufficient funds in wallet")
 
-    def _validate_payment_amount(self, debt: Debt, amount_kzt: float) -> int:
-        amount_minor = to_minor_units(amount_kzt)
+    def _validate_payment_amount(self, debt: Debt, amount_base: float) -> int:
+        amount_minor = to_minor_units(amount_base)
         if amount_minor <= 0:
             raise ValueError("Payment amount must be positive")
         if amount_minor > int(debt.remaining_amount_minor):

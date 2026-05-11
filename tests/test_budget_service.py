@@ -50,7 +50,7 @@ def _insert_expense(
     *,
     date: str,
     category: str,
-    amount_kzt: float,
+    amount_base: float,
     record_type: str = "expense",
     wallet_id: int = 1,
     transfer_id: int | None = None,
@@ -60,7 +60,7 @@ def _insert_expense(
         INSERT INTO records (
             type, date, wallet_id, transfer_id, amount_original, amount_original_minor,
             currency, rate_at_operation, rate_at_operation_text,
-            amount_kzt, amount_kzt_minor, category, description, period
+            amount_base, amount_base_minor, category, description, period
         )
         VALUES (?, ?, ?, ?, ?, ?, 'KZT', 1.0, '1.0', ?, ?, ?, '', ?)
         """,
@@ -69,10 +69,10 @@ def _insert_expense(
             date,
             wallet_id,
             transfer_id,
-            amount_kzt,
-            to_minor_units(amount_kzt),
-            amount_kzt,
-            to_minor_units(amount_kzt),
+            amount_base,
+            to_minor_units(amount_base),
+            amount_base,
+            to_minor_units(amount_base),
             category,
             "monthly" if record_type == "mandatory_expense" else None,
         ),
@@ -121,7 +121,7 @@ def test_create_budget_persists_minor_limit(tmp_path: Path) -> None:
     repo = _build_repo(tmp_path)
     try:
         budget = BudgetService(repo).create_budget("Food", "2026-03-01", "2026-03-31", 1234.56)
-        assert budget.limit_kzt_minor == to_minor_units(1234.56)
+        assert budget.limit_base_minor == to_minor_units(1234.56)
     finally:
         repo.close()
 
@@ -174,8 +174,8 @@ def test_update_budget_limit_updates_money_and_minor_columns(tmp_path: Path) -> 
         service = BudgetService(repo)
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 1000.0)
         updated = service.update_budget_limit(budget.id, 2222.25)
-        assert updated.limit_kzt == 2222.25
-        assert updated.limit_kzt_minor == to_minor_units(2222.25)
+        assert updated.limit_base == 2222.25
+        assert updated.limit_base_minor == to_minor_units(2222.25)
     finally:
         repo.close()
 
@@ -186,7 +186,7 @@ def test_get_budget_result_without_expenses_is_on_track(tmp_path: Path) -> None:
         service = BudgetService(repo)
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 1000.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 10))
-        assert result.spent_kzt == 0.0
+        assert result.spent_base == 0.0
         assert result.pace_status == PaceStatus.ON_TRACK
     finally:
         repo.close()
@@ -196,12 +196,12 @@ def test_get_budget_result_counts_expenses_in_range(tmp_path: Path) -> None:
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-03-05", category="Food", amount_kzt=1500.0)
-            _insert_expense(conn, date="2026-03-10", category="Food", amount_kzt=500.0)
+            _insert_expense(conn, date="2026-03-05", category="Food", amount_base=1500.0)
+            _insert_expense(conn, date="2026-03-10", category="Food", amount_base=500.0)
         service = BudgetService(repo)
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 5000.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 15))
-        assert result.spent_kzt == 2000.0
+        assert result.spent_base == 2000.0
         assert result.spent_minor == to_minor_units(2000.0)
     finally:
         repo.close()
@@ -211,12 +211,12 @@ def test_get_budget_result_ignores_expenses_outside_range(tmp_path: Path) -> Non
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-02-28", category="Food", amount_kzt=1500.0)
-            _insert_expense(conn, date="2026-04-01", category="Food", amount_kzt=500.0)
+            _insert_expense(conn, date="2026-02-28", category="Food", amount_base=1500.0)
+            _insert_expense(conn, date="2026-04-01", category="Food", amount_base=500.0)
         service = BudgetService(repo)
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 5000.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 15))
-        assert result.spent_kzt == 0.0
+        assert result.spent_base == 0.0
     finally:
         repo.close()
 
@@ -225,18 +225,18 @@ def test_get_budget_result_excludes_mandatory_when_flag_disabled(tmp_path: Path)
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-03-05", category="Food", amount_kzt=1000.0)
+            _insert_expense(conn, date="2026-03-05", category="Food", amount_base=1000.0)
             _insert_expense(
                 conn,
                 date="2026-03-06",
                 category="Food",
-                amount_kzt=250.0,
+                amount_base=250.0,
                 record_type="mandatory_expense",
             )
         service = BudgetService(repo)
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 5000.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 15))
-        assert result.spent_kzt == 1000.0
+        assert result.spent_base == 1000.0
     finally:
         repo.close()
 
@@ -245,12 +245,12 @@ def test_get_budget_result_includes_mandatory_when_flag_enabled(tmp_path: Path) 
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-03-05", category="Food", amount_kzt=1000.0)
+            _insert_expense(conn, date="2026-03-05", category="Food", amount_base=1000.0)
             _insert_expense(
                 conn,
                 date="2026-03-06",
                 category="Food",
-                amount_kzt=250.0,
+                amount_base=250.0,
                 record_type="mandatory_expense",
             )
         service = BudgetService(repo)
@@ -262,7 +262,7 @@ def test_get_budget_result_includes_mandatory_when_flag_enabled(tmp_path: Path) 
             include_mandatory=True,
         )
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 15))
-        assert result.spent_kzt == 1250.0
+        assert result.spent_base == 1250.0
     finally:
         repo.close()
 
@@ -271,12 +271,12 @@ def test_get_budget_result_marks_overspent_when_limit_reached(tmp_path: Path) ->
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-03-05", category="Food", amount_kzt=1000.0)
+            _insert_expense(conn, date="2026-03-05", category="Food", amount_base=1000.0)
         service = BudgetService(repo)
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 1000.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 15))
         assert result.pace_status == PaceStatus.OVERSPENT
-        assert result.remaining_kzt == 0.0
+        assert result.remaining_base == 0.0
     finally:
         repo.close()
 
@@ -287,7 +287,7 @@ def test_get_budget_result_marks_overpace_when_usage_exceeds_elapsed_time_by_thr
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-03-02", category="Food", amount_kzt=600.0)
+            _insert_expense(conn, date="2026-03-02", category="Food", amount_base=600.0)
         service = BudgetService(repo)
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 1000.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 5))
@@ -303,7 +303,7 @@ def test_get_budget_result_stays_on_track_when_only_slightly_above_time_line(
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-05-02", category="Travel", amount_kzt=750.0)
+            _insert_expense(conn, date="2026-05-02", category="Travel", amount_base=750.0)
         service = BudgetService(repo)
         budget = service.create_budget("Travel", "2026-05-01", "2026-05-10", 800.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 5, 9))
@@ -322,13 +322,13 @@ def test_get_budget_result_ignores_transfer_linked_records(tmp_path: Path) -> No
                 conn,
                 date="2026-03-05",
                 category="Food",
-                amount_kzt=600.0,
+                amount_base=600.0,
                 transfer_id=10,
             )
         service = BudgetService(repo)
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 1000.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 10))
-        assert result.spent_kzt == 0.0
+        assert result.spent_base == 0.0
     finally:
         repo.close()
 
@@ -337,15 +337,15 @@ def test_budget_forecast_returns_localizable_status_key_and_params(tmp_path: Pat
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-03-02", category="Food", amount_kzt=100.0)
-            _insert_expense(conn, date="2026-03-03", category="Food", amount_kzt=100.0)
-            _insert_expense(conn, date="2026-03-04", category="Food", amount_kzt=100.0)
+            _insert_expense(conn, date="2026-03-02", category="Food", amount_base=100.0)
+            _insert_expense(conn, date="2026-03-03", category="Food", amount_base=100.0)
+            _insert_expense(conn, date="2026-03-04", category="Food", amount_base=100.0)
         service = BudgetService(repo)
         budget = service.create_budget("Food", "2026-03-01", "2026-03-31", 1000.0)
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 10))
         assert result.forecast_status_key == "budget.forecast.remaining"
         assert result.forecast_status_params is not None
-        assert "amount_kzt" in result.forecast_status_params
+        assert "amount_base" in result.forecast_status_params
     finally:
         repo.close()
 
@@ -354,8 +354,8 @@ def test_tag_budget_filters_by_tag_not_category_name(tmp_path: Path) -> None:
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-03-05", category="Travel", amount_kzt=600.0)
-            _insert_expense(conn, date="2026-03-06", category="Travel", amount_kzt=200.0)
+            _insert_expense(conn, date="2026-03-05", category="Travel", amount_base=600.0)
+            _insert_expense(conn, date="2026-03-06", category="Travel", amount_base=200.0)
         repo.replace_record_tags(1, ("travel",))
 
         service = BudgetService(repo)
@@ -371,7 +371,7 @@ def test_tag_budget_filters_by_tag_not_category_name(tmp_path: Path) -> None:
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 10))
         assert budget.scope_type == "tag"
         assert budget.scope_value == "travel"
-        assert result.spent_kzt == 600.0
+        assert result.spent_base == 600.0
     finally:
         repo.close()
 
@@ -380,8 +380,8 @@ def test_get_distinct_expense_categories_returns_sorted_unique_values(tmp_path: 
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-03-05", category="Food", amount_kzt=100.0)
-            _insert_expense(conn, date="2026-03-06", category="food", amount_kzt=50.0)
+            _insert_expense(conn, date="2026-03-05", category="Food", amount_base=100.0)
+            _insert_expense(conn, date="2026-03-06", category="food", amount_base=50.0)
         categories = MetricsService(repo).get_distinct_expense_categories()
         assert categories == ["Food", "food"]
     finally:
@@ -392,15 +392,15 @@ def test_get_all_results_returns_batch_results_with_correct_spend(tmp_path: Path
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_expense(conn, date="2026-03-05", category="Food", amount_kzt=100.0)
+            _insert_expense(conn, date="2026-03-05", category="Food", amount_base=100.0)
             _insert_expense(
                 conn,
                 date="2026-03-06",
                 category="Food",
-                amount_kzt=25.0,
+                amount_base=25.0,
                 record_type="mandatory_expense",
             )
-            _insert_expense(conn, date="2026-03-07", category="Travel", amount_kzt=300.0)
+            _insert_expense(conn, date="2026-03-07", category="Travel", amount_base=300.0)
 
         service = BudgetService(repo)
         food = service.create_budget("Food", "2026-03-01", "2026-03-31", 500.0)
@@ -416,9 +416,9 @@ def test_get_all_results_returns_batch_results_with_correct_spend(tmp_path: Path
         results = service.get_all_results(today=dt_date(2026, 3, 20))
         by_id = {result.budget.id: result for result in results}
 
-        assert by_id[food.id].spent_kzt == 100.0
-        assert by_id[travel.id].spent_kzt == 300.0
-        assert by_id[food_with_mandatory.id].spent_kzt == 0.0
+        assert by_id[food.id].spent_base == 100.0
+        assert by_id[travel.id].spent_base == 300.0
+        assert by_id[food_with_mandatory.id].spent_base == 0.0
     finally:
         repo.close()
 
@@ -433,7 +433,7 @@ def test_budget_includes_added_mandatory_record_within_period(tmp_path: Path) ->
                 amount_original=250.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=250.0,
+                amount_base=250.0,
                 category="Food",
                 description="Meal plan",
                 period="monthly",
@@ -451,6 +451,6 @@ def test_budget_includes_added_mandatory_record_within_period(tmp_path: Path) ->
         assert AddMandatoryExpenseToReport(repo).execute(0, "2026-03-15", 1) is True
 
         result = service.get_budget_result(budget, today=dt_date(2026, 3, 20))
-        assert result.spent_kzt == 250.0
+        assert result.spent_base == 250.0
     finally:
         repo.close()
