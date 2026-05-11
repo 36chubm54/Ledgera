@@ -7,6 +7,44 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [2.0.0-alpha.2] - 2026-05-10
+
+### Breaking Changes
+
+- DB schema: `amount_kzt` / `amount_kzt_minor` renamed to `amount_base` / `amount_base_minor` in `records`, `transfers`, and `mandatory_expenses`
+- DB schema: `limit_kzt` / `limit_kzt_minor` renamed to `limit_base` / `limit_base_minor` in `budgets`
+- Python naming aligned with base-currency storage, including `Record.amount_base`, `Record.signed_amount_base()`, `convert_money_to_base()`, and `wallet_balance_base()`
+
+### Migration
+
+- Added `migrations/migration_002_rename_amount_kzt_to_base.py`; migration runs automatically on startup and is idempotent
+- `schema_meta` now stores `base_currency = KZT` for migrated and newly initialized databases
+
+### Added
+
+- Added `CurrencyService.display_currency`, `set_display_currency()`, `to_display()`, and `display_symbol` for runtime-only display conversion
+- Added a status-bar display currency switcher that refreshes visible amounts without changing stored base values
+- Added `app/repository_protocols.py` to express upper-layer repository capabilities without direct `SQLiteRecordRepository` typing
+- Added `gui/shell/*` helpers and `gui/tabs/infographics_support.py` to move shell/runtime and infographics orchestration out of the main Tkinter shell module
+
+### Changed
+
+- Renamed the commercial fallback provider from `open_exchange` / `OpenExchangeProvider` to `exchange_rate` / `ExchangeRateProvider`
+- Aligned report/export/status-bar documentation and runtime messaging with the new `base_currency` / `display_currency` contract
+- Moved shell/runtime orchestration out of `gui/tkinter_gui.py` into dedicated status, refresh, lifecycle, notebook, preferences, startup, records, and setup helpers
+- Switched upper `app`, `services`, and `gui.controllers` layers from direct concrete SQLite typing to narrower repository capability protocols
+
+### Removed
+
+- Removed deprecated `*_kzt` Python aliases and helper methods that had been kept only for the transition period
+
+### Tests
+
+- Added architecture-boundary and protocol-regression coverage for the contract cleanup
+- Restored Tk-based local test execution as an optional local gate by validating the Tcl/Tk runtime path separately from product code
+
+---
+
 ## [2.0.0-alpha.1] - 2026-05-10
 
 ### Added
@@ -583,7 +621,7 @@ No breaking changes.
 
 ### Added
 
-- Budget System with persistent `budgets` table, overlap-safe date ranges, `limit_kzt_minor`, and `include_mandatory`
+- Budget System with persistent `budgets` table, overlap-safe date ranges, `limit_base_minor`, and `include_mandatory`
 - `domain/budget.py` with `Budget`, `BudgetResult`, `BudgetStatus`, `PaceStatus`, and pace computation helpers
 - `services/budget_service.py` for budget CRUD, spend aggregation, overlap checks, and category suggestions
 - New Budget tab between Analytics and Settings with creation form, Treeview summary, and pace-aware progress canvas
@@ -753,7 +791,7 @@ No breaking changes.
 
 - Mandatory auto-pay now supports all periods: `daily`, `weekly`, `monthly`, `yearly` (anchored by template `date`)
 - Mandatory templates: wallet dropdown on create, plus inline editing of `wallet` and `period` after creation
-- Operations tab inline edit: update `date` and `wallet` in addition to `amount_kzt`, `category`, and optional `description`
+- Operations tab inline edit: update `date` and `wallet` in addition to `amount_base`, `category`, and optional `description`
 
 ### Changed
 
@@ -814,7 +852,7 @@ No breaking changes.
 ### Added
 
 - `date` field (optional, YYYY-MM-DD) and `auto_pay` flag in mandatory expense templates
-- Inline editing of `amount_kzt` and `date` templates directly in the settings list
+- Inline editing of `amount_base` and `date` templates directly in the settings list
 - `Description` field in the `Add operation` form (Operations tab)
 - `Description` field in the `Transfer` form (Operations tab)
 - `date` support for `mandatory_expenses` in CSV/XLSX import-export and JSON backup/export flows
