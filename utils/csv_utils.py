@@ -32,6 +32,7 @@ from utils.report_export_i18n import (
     grouped_category_totals_note,
     grouped_report_csv_headers,
     is_report_total_row_label,
+    is_statement_title,
     report_csv_headers,
     subtotal_label,
     total_label,
@@ -318,10 +319,11 @@ def import_records_from_csv(
                 break
 
         normalized_first_line = first_data_line.lstrip("\ufeff").strip()
-        if not (
-            normalized_first_line.startswith("Transaction statement")
-            or normalized_first_line.startswith(localized_statement_title("Transaction statement"))
-        ):
+        first_line_cells = (
+            next(csv.reader([normalized_first_line]), [""]) if normalized_first_line else [""]
+        )
+        title_candidate = str(first_line_cells[0] or "").strip()
+        if not is_statement_title(title_candidate):
             csvfile.seek(first_data_pos)
         reader = csv.DictReader(csvfile)
         if not reader.fieldnames:

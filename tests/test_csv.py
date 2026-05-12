@@ -73,6 +73,28 @@ def test_to_csv_localizes_exported_report_and_keeps_roundtrip_in_ru():
         os.unlink(tmp_path)
 
 
+def test_to_csv_localized_report_roundtrips_after_language_switch():
+    records = [
+        IncomeRecord(date="2025-01-01", _amount_init=100.0, category="Зарплата"),
+        ExpenseRecord(date="2025-01-02", _amount_init=30.0, category="Еда"),
+    ]
+    report = Report(records, initial_balance=50.0)
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp:
+        tmp_path = tmp.name
+    previous = get_language()
+    try:
+        set_language("ru")
+        report_to_csv(report, tmp_path)
+        set_language("en")
+        imported = report_from_csv(tmp_path)
+        assert len(imported.records()) == 2
+        assert abs(imported.initial_balance - 50.0) < 1e-6
+        assert abs(imported.total() - report.total()) < 1e-6
+    finally:
+        set_language(previous)
+        os.unlink(tmp_path)
+
+
 def test_to_csv_with_initial_balance():
     records = [
         IncomeRecord(date="2025-01-01", _amount_init=100.0, category="Salary"),

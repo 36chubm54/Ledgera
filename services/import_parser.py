@@ -10,7 +10,7 @@ from typing import Any
 from openpyxl import load_workbook
 
 from domain.import_policy import ImportPolicy
-from domain.records import ExpenseRecord, IncomeRecord, Record
+from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
 from domain.transfers import Transfer
 from utils.backup_utils import unwrap_backup_payload
 from utils.import_core import as_float, norm_key, parse_optional_strict_int
@@ -216,13 +216,19 @@ def parse_transfer_row(
 
 
 def _record_row_payload(record: Record) -> dict[str, Any]:
+    if isinstance(record, IncomeRecord):
+        record_type = "income"
+    elif isinstance(record, MandatoryExpenseRecord):
+        record_type = "mandatory_expense"
+    else:
+        record_type = "expense"
     return {
         "date": (
             record.date.isoformat()
             if hasattr(record.date, "isoformat") and not isinstance(record.date, str)
             else str(record.date or "")
         ),
-        "type": "income" if isinstance(record, IncomeRecord) else "expense",
+        "type": record_type,
         "wallet_id": int(record.wallet_id),
         "category": str(record.category or ""),
         "amount_original": to_money_float(record.amount_original or 0.0),

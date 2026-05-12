@@ -292,6 +292,34 @@ def test_report_xlsx_localizes_visible_sheets_and_keeps_roundtrip_in_ru():
                 time.sleep(0.1)
 
 
+def test_report_xlsx_localized_roundtrip_after_language_switch():
+    records = [
+        IncomeRecord(date="2025-01-01", _amount_init=100.0, category="Зарплата", tags=("работа",)),
+        ExpenseRecord(date="2025-01-02", _amount_init=30.0, category="Еда", tags=("дом",)),
+    ]
+    report = Report(records, initial_balance=50.0)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        tmp_path = tmp.name
+    previous = get_language()
+    try:
+        set_language("ru")
+        report_to_xlsx(report, tmp_path)
+        set_language("en")
+        imported = report_from_xlsx(tmp_path)
+        assert len(imported.records()) == 2
+        assert abs(imported.initial_balance - 50.0) < 1e-6
+        assert abs(imported.total() - report.total()) < 1e-6
+    finally:
+        set_language(previous)
+        for _ in range(5):
+            try:
+                os.unlink(tmp_path)
+                break
+            except PermissionError:
+                time.sleep(0.1)
+
+
 def test_mandatory_xlsx_roundtrip():
     expenses = [
         MandatoryExpenseRecord(

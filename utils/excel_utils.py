@@ -42,6 +42,7 @@ from utils.report_export_i18n import (
     grouped_category_totals_note,
     grouped_report_csv_headers,
     is_report_total_row_label,
+    is_statement_title,
     monthly_summary_headers,
     report_xlsx_headers,
     sheet_title_by_category,
@@ -506,9 +507,7 @@ def import_records_from_xlsx(
         header_offset = 0
         header_row = first_row
         first_cell = _safe_str(first_row[0]).strip()
-        if first_cell.startswith("Transaction statement") or first_cell.startswith(
-            localized_statement_title("Transaction statement")
-        ):
+        if is_statement_title(first_cell):
             header_row = next(rows_iter, None)
             header_offset = 1
         if header_row is None:

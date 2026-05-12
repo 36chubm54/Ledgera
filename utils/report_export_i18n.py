@@ -345,27 +345,17 @@ def canonical_report_header(header: str, base_currency: str = "KZT") -> str:
     ):
         return "amount"
     aliases = {
-        "date": {
-            export_tr("common.date", "Date"),
-            "Date",
-        },
-        "type": {
-            export_tr("common.type_short", "Type"),
-            "Type",
-        },
-        "category": {
-            export_tr("common.category_short", "Category"),
-            "Category",
-        },
+        "date": _catalog_values_for("common.date", "Date"),
+        "type": _catalog_values_for("common.type_short", "Type"),
+        "category": _catalog_values_for("common.category_short", "Category"),
         "amount": {
             amount_base_header(base_currency),
             "Amount (KZT)",
             "Amount (base currency)",
+            "Сумма (KZT)",
+            "Сумма (валюта базы)",
         },
-        "tags": {
-            export_tr("common.tags", "Tags"),
-            "Tags",
-        },
+        "tags": _catalog_values_for("common.tags", "Tags"),
     }
     for canonical, values in aliases.items():
         if normalized in {_norm(value) for value in values}:
