@@ -87,7 +87,7 @@ def _record_to_payload(record: Record) -> dict:
         "amount_original": record.amount_original,
         "currency": record.currency,
         "rate_at_operation": record.rate_at_operation,
-        "amount_kzt": record.amount_kzt,
+        "amount_base": record.amount_base,
         "description": str(getattr(record, "description", "") or ""),
         "tags": list(normalize_tag_names(tuple(getattr(record, "tags", ()) or ()))),
         "period": "",
@@ -118,7 +118,7 @@ def _transfer_to_payload(transfer: Transfer) -> dict:
         "amount_original": to_money_float(transfer.amount_original),
         "currency": str(transfer.currency).upper(),
         "rate_at_operation": to_rate_float(transfer.rate_at_operation),
-        "amount_kzt": to_money_float(transfer.amount_kzt),
+        "amount_base": to_money_float(transfer.amount_base),
         "description": str(transfer.description or ""),
     }
 
@@ -131,8 +131,8 @@ def _budget_to_payload(budget: Budget) -> dict[str, Any]:
         "scope_value": str(budget.scope_value),
         "start_date": str(budget.start_date),
         "end_date": str(budget.end_date),
-        "limit_kzt": to_money_float(budget.limit_kzt),
-        "limit_kzt_minor": int(budget.limit_kzt_minor),
+        "limit_base": to_money_float(budget.limit_base),
+        "limit_base_minor": int(budget.limit_base_minor),
         "include_mandatory": bool(budget.include_mandatory),
     }
 
@@ -403,7 +403,7 @@ def _derive_transfers_from_linked_records(
                     amount_original=to_money_float(expense_record.amount_original or 0.0),
                     currency=str(expense_record.currency or "KZT").upper(),
                     rate_at_operation=to_rate_float(expense_record.rate_at_operation),
-                    amount_kzt=to_money_float(expense_record.amount_kzt or 0.0),
+                    amount_base=to_money_float(expense_record.amount_base or 0.0),
                     description=str(expense_record.description or ""),
                 )
             )
@@ -767,7 +767,7 @@ def import_full_backup_from_json(
                     amount_original=to_money_float(item.get("amount_original", 0.0) or 0.0),
                     currency=str(item.get("currency", "KZT") or "KZT").upper(),
                     rate_at_operation=to_rate_float(item.get("rate_at_operation", 1.0) or 1.0),
-                    amount_kzt=to_money_float(item.get("amount_kzt", 0.0) or 0.0),
+                    amount_base=to_money_float(item.get("amount_base", 0.0) or 0.0),
                     description=str(item.get("description", "") or ""),
                 )
             except (TypeError, ValueError, KeyError) as exc:

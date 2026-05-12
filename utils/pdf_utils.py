@@ -231,13 +231,13 @@ def report_to_pdf(report: Report, filepath: str, *, debts: list[Debt] | None = N
                 _safe_str(record.date),
                 record_type,
                 _safe_str(record.category),
-                f"{record.amount_kzt:.2f}",
+                f"{record.amount_base:.2f}",
                 format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
             ]
         )
 
     total = report.total_fixed()
-    records_total = sum(r.signed_amount_kzt() for r in report.records())
+    records_total = sum(r.signed_amount_base() for r in report.records())
     data.append(["SUBTOTAL", "", "", f"{records_total:.2f}", ""])
     data.append(["FINAL BALANCE", "", "", f"{total:.2f}", ""])
 
@@ -365,10 +365,10 @@ def report_to_pdf(report: Report, filepath: str, *, debts: list[Debt] | None = N
                     r_type = "Mandatory Expense"
                 else:
                     r_type = "Expense"
-                amt = getattr(r, "amount_kzt", 0.0)
+                amt = getattr(r, "amount_base", 0.0)
                 cat_total += (
-                    getattr(r, "amount_kzt", 0.0)
-                    if getattr(r, "amount_kzt", None) is not None
+                    getattr(r, "amount_base", 0.0)
+                    if getattr(r, "amount_base", None) is not None
                     else 0.0
                 )
                 cat_data.append([_safe_str(r.date), r_type, f"{abs(amt):.2f}"])
@@ -412,10 +412,10 @@ def report_to_pdf(report: Report, filepath: str, *, debts: list[Debt] | None = N
             )
         )
         elems.append(tag_title)
-        tag_data = [["Tag", "Operations", "Total (KZT)"], ["", "", "Grouped tag totals"]]
+        tag_data = [["Tag", "Operations", "Total"], ["", "", "Grouped tag totals"]]
         for row in tag_rows:
             tag_data.append(
-                [f"#{row.tag}", str(int(row.operations_count)), f"{float(row.total_kzt):.2f}"]
+                [f"#{row.tag}", str(int(row.operations_count)), f"{float(row.total_base):.2f}"]
             )
         tag_table = Table(
             tag_data,
@@ -528,12 +528,12 @@ def grouped_report_to_pdf(
         )
     )
 
-    data = [["Category", "Operations", "Total (KZT)"], ["", "", "Grouped category totals"]]
-    total_kzt = 0.0
-    for category, operations_count, amount_kzt in grouped_rows:
-        total_kzt += float(amount_kzt)
-        data.append([_safe_str(category), str(int(operations_count)), f"{float(amount_kzt):.2f}"])
-    data.append(["TOTAL", "", f"{total_kzt:.2f}"])
+    data = [["Category", "Operations", "Total"], ["", "", "Grouped category totals"]]
+    total_base = 0.0
+    for category, operations_count, amount_base in grouped_rows:
+        total_base += float(amount_base)
+        data.append([_safe_str(category), str(int(operations_count)), f"{float(amount_base):.2f}"])
+    data.append(["TOTAL", "", f"{total_base:.2f}"])
 
     table = Table(
         data,

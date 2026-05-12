@@ -81,7 +81,7 @@ def test_import_service_groups_two_transfer_records_into_single_transfer() -> No
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             },
             {
                 "date": "2026-01-02",
@@ -92,7 +92,7 @@ def test_import_service_groups_two_transfer_records_into_single_transfer() -> No
                 "amount_original": "10",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "10",
+                "amount_base": "10",
             },
             {
                 "date": "2026-01-02",
@@ -103,7 +103,7 @@ def test_import_service_groups_two_transfer_records_into_single_transfer() -> No
                 "amount_original": "10",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "10",
+                "amount_base": "10",
             },
         ],
     )
@@ -135,7 +135,7 @@ def test_import_service_csv_never_uses_bulk_replace_even_if_supported() -> None:
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             }
         ],
     )
@@ -167,7 +167,7 @@ def test_import_service_csv_preserves_related_debt_id_in_created_records() -> No
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             }
         ],
     )
@@ -196,7 +196,7 @@ def test_import_service_csv_preserves_tags_in_created_records() -> None:
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
                 "tags": "#work, #bonus",
             },
             {
@@ -207,7 +207,7 @@ def test_import_service_csv_preserves_tags_in_created_records() -> None:
                 "amount_original": "25",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "25",
+                "amount_base": "25",
                 "tags": "#food",
             },
         ],
@@ -238,7 +238,7 @@ def test_import_service_json_without_sections_preserves_debts_and_assets() -> No
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             }
         ],
         json_sections_present=frozenset({"records"}),
@@ -293,7 +293,7 @@ def test_import_service_records_only_json_preserves_related_debt_links() -> None
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             }
         ],
         json_sections_present=frozenset({"records"}),
@@ -366,7 +366,7 @@ def test_import_service_preserves_original_row_order_without_type_sorting() -> N
                 "amount_original": "15",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "15",
+                "amount_base": "15",
             },
             {
                 "date": "2026-01-03",
@@ -376,7 +376,7 @@ def test_import_service_preserves_original_row_order_without_type_sorting() -> N
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             },
             {
                 "date": "2026-01-03",
@@ -387,7 +387,7 @@ def test_import_service_preserves_original_row_order_without_type_sorting() -> N
                 "amount_original": "10",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "10",
+                "amount_base": "10",
             },
             {
                 "date": "2026-01-03",
@@ -398,7 +398,7 @@ def test_import_service_preserves_original_row_order_without_type_sorting() -> N
                 "amount_original": "10",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "10",
+                "amount_base": "10",
             },
             {
                 "date": "2026-01-03",
@@ -408,7 +408,7 @@ def test_import_service_preserves_original_row_order_without_type_sorting() -> N
                 "amount_original": "50",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "50",
+                "amount_base": "50",
                 "description": "Monthly",
                 "period": "monthly",
             },
@@ -444,7 +444,7 @@ def test_import_service_bulk_replace_preserves_original_row_order() -> None:
                 "amount_original": "15",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "15",
+                "amount_base": "15",
             },
             {
                 "date": "2026-01-03",
@@ -455,7 +455,7 @@ def test_import_service_bulk_replace_preserves_original_row_order() -> None:
                 "amount_original": "10",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "10",
+                "amount_base": "10",
             },
             {
                 "date": "2026-01-03",
@@ -466,7 +466,7 @@ def test_import_service_bulk_replace_preserves_original_row_order() -> None:
                 "amount_original": "10",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "10",
+                "amount_base": "10",
             },
             {
                 "date": "2026-01-03",
@@ -476,7 +476,7 @@ def test_import_service_bulk_replace_preserves_original_row_order() -> None:
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             },
         ],
     )
@@ -507,7 +507,7 @@ def test_import_service_preserves_csv_transfer_row_position() -> None:
                 "amount_original": "15",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "15",
+                "amount_base": "15",
             },
             {
                 "date": "2026-01-03",
@@ -517,7 +517,7 @@ def test_import_service_preserves_csv_transfer_row_position() -> None:
                 "amount_original": "10",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "10",
+                "amount_base": "10",
                 "description": "Move",
             },
             {
@@ -528,7 +528,7 @@ def test_import_service_preserves_csv_transfer_row_position() -> None:
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             },
         ],
     )
@@ -558,7 +558,7 @@ def test_import_service_skips_missing_wallet_and_does_not_apply_changes() -> Non
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             }
         ],
     )
@@ -592,7 +592,7 @@ def test_import_service_mandatory_import_uses_finance_service_only() -> None:
                 "amount_original": "50",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "50",
+                "amount_base": "50",
                 "description": "Monthly",
                 "period": "monthly",
             }
@@ -612,7 +612,48 @@ def test_import_service_mandatory_import_uses_finance_service_only() -> None:
         description="Monthly",
         period="monthly",
         date="2026-03-18",
-        amount_kzt=50.0,
+        amount_base=50.0,
+        rate_at_operation=1.0,
+    )
+
+
+def test_import_service_mandatory_import_respects_exported_wallet_id() -> None:
+    finance_service = _finance_mock()
+    finance_service.load_wallets.return_value = [
+        Wallet(id=7, name="Reserve", currency="KZT", initial_balance=0.0, system=False)
+    ]
+    payload = ParsedImportData(
+        path="mandatory.csv",
+        file_type="csv",
+        rows=[
+            {
+                "type": "mandatory_expense",
+                "date": "2026-03-18",
+                "wallet_id": "7",
+                "category": "Rent",
+                "amount_original": "50",
+                "currency": "KZT",
+                "rate_at_operation": "1",
+                "amount_base": "50",
+                "description": "Monthly",
+                "period": "monthly",
+            }
+        ],
+    )
+
+    with patch("services.import_service.parse_import_file", return_value=payload):
+        summary = ImportService(finance_service).import_mandatory_file("mandatory.csv")
+
+    assert summary == ImportResult(imported=1, skipped=0, errors=tuple())
+    finance_service.create_mandatory_expense.assert_called_once_with(
+        amount=50.0,
+        currency="KZT",
+        wallet_id=7,
+        category="Rent",
+        description="Monthly",
+        period="monthly",
+        date="2026-03-18",
+        amount_base=50.0,
         rate_at_operation=1.0,
     )
 
@@ -631,7 +672,7 @@ def test_import_service_fills_empty_mandatory_description() -> None:
                 "amount_original": "50",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "50",
+                "amount_base": "50",
                 "description": "",
                 "period": "monthly",
             }
@@ -652,7 +693,7 @@ def test_import_service_fills_empty_mandatory_description() -> None:
         category="Rent",
         description="Imported Rent",
         period="monthly",
-        amount_kzt=50.0,
+        amount_base=50.0,
         rate_at_operation=1.0,
     )
 
@@ -670,7 +711,7 @@ def test_import_service_json_backup_imports_mandatory_templates() -> None:
                 "amount_original": "12",
                 "currency": "USD",
                 "rate_at_operation": "500",
-                "amount_kzt": "6000",
+                "amount_base": "6000",
                 "description": "Music",
                 "period": "monthly",
             }
@@ -704,7 +745,7 @@ def test_import_service_json_backup_imports_mandatory_templates() -> None:
         description="Music",
         period="monthly",
         date="2026-03-19",
-        amount_kzt=6000.0,
+        amount_base=6000.0,
         rate_at_operation=500.0,
     )
 
@@ -723,7 +764,7 @@ def test_import_service_bulk_replace_preserves_mandatory_date() -> None:
                 "amount_original": "15",
                 "currency": "USD",
                 "rate_at_operation": "500",
-                "amount_kzt": "7500",
+                "amount_base": "7500",
                 "description": "ISP",
                 "period": "monthly",
                 "type": "mandatory_expense",
@@ -824,8 +865,8 @@ def test_import_service_json_backup_restores_budgets() -> None:
                 "category": "Food",
                 "start_date": "2026-03-01",
                 "end_date": "2026-03-31",
-                "limit_kzt": 1500.0,
-                "limit_kzt_minor": 150000,
+                "limit_base": 1500.0,
+                "limit_base_minor": 150000,
                 "include_mandatory": True,
             }
         ],
@@ -1399,7 +1440,7 @@ def test_import_service_full_backup_passes_fixed_rate_values() -> None:
                 "amount_original": "100",
                 "currency": "USD",
                 "rate_at_operation": "530",
-                "amount_kzt": "53000",
+                "amount_base": "53000",
                 "description": "Payroll",
             }
         ],
@@ -1418,7 +1459,7 @@ def test_import_service_full_backup_passes_fixed_rate_values() -> None:
         currency="USD",
         category="Salary",
         description="Payroll",
-        amount_kzt=53000.0,
+        amount_base=53000.0,
         rate_at_operation=530.0,
     )
 
@@ -1449,7 +1490,7 @@ def test_import_service_current_rate_does_not_pass_fixed_values() -> None:
     assert summary == ImportResult(imported=1, skipped=0, errors=tuple())
     finance_service.create_income.assert_called_once()
     kwargs = finance_service.create_income.call_args.kwargs
-    assert kwargs["amount_kzt"] is None
+    assert kwargs["amount_base"] is None
     assert kwargs["rate_at_operation"] is None
 
 
@@ -1493,7 +1534,7 @@ def test_import_service_bulk_replace_normalizes_mandatory_ids_from_one() -> None
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
                 "description": "Monthly",
                 "period": "monthly",
             },
@@ -1504,7 +1545,7 @@ def test_import_service_bulk_replace_normalizes_mandatory_ids_from_one() -> None
                 "amount_original": "25",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "25",
+                "amount_base": "25",
                 "description": "ISP",
                 "period": "monthly",
             },
@@ -1553,7 +1594,7 @@ def test_import_service_bulk_replace_passes_debts_and_debt_payments() -> None:
                 "amount_original": "25",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "25",
+                "amount_base": "25",
             }
         ],
         debts=[
@@ -1710,7 +1751,7 @@ def test_import_service_dry_run_returns_preview_without_writing() -> None:
                 "amount_original": "100",
                 "currency": "KZT",
                 "rate_at_operation": "1",
-                "amount_kzt": "100",
+                "amount_base": "100",
             }
         ],
     )
@@ -1758,7 +1799,7 @@ def test_build_list_items_uses_invariant_ids_where_transfer_counts_once() -> Non
                 amount_original=50.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=50.0,
+                amount_base=50.0,
                 category="Food",
             ),
             ExpenseRecord(
@@ -1769,7 +1810,7 @@ def test_build_list_items_uses_invariant_ids_where_transfer_counts_once() -> Non
                 amount_original=25.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=25.0,
+                amount_base=25.0,
                 category="Transfer",
                 description="Move",
             ),
@@ -1781,7 +1822,7 @@ def test_build_list_items_uses_invariant_ids_where_transfer_counts_once() -> Non
                 amount_original=25.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=25.0,
+                amount_base=25.0,
                 category="Transfer",
                 description="Move",
             ),
@@ -1792,7 +1833,7 @@ def test_build_list_items_uses_invariant_ids_where_transfer_counts_once() -> Non
                 amount_original=100.0,
                 currency="KZT",
                 rate_at_operation=1.0,
-                amount_kzt=100.0,
+                amount_base=100.0,
                 category="Salary",
             ),
         ]
@@ -1814,7 +1855,7 @@ def test_normalize_operation_ids_for_import_is_deterministic_by_date_then_id() -
             amount_original=10.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=10.0,
+            amount_base=10.0,
             category="Transfer",
         ),
         IncomeRecord(
@@ -1825,7 +1866,7 @@ def test_normalize_operation_ids_for_import_is_deterministic_by_date_then_id() -
             amount_original=10.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=10.0,
+            amount_base=10.0,
             category="Transfer",
         ),
         ExpenseRecord(
@@ -1836,7 +1877,7 @@ def test_normalize_operation_ids_for_import_is_deterministic_by_date_then_id() -
             amount_original=5.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=5.0,
+            amount_base=5.0,
             category="Food",
         ),
     ]
@@ -1849,7 +1890,7 @@ def test_normalize_operation_ids_for_import_is_deterministic_by_date_then_id() -
             amount_original=10.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=10.0,
+            amount_base=10.0,
             description="Later",
         ),
         Transfer(
@@ -1860,7 +1901,7 @@ def test_normalize_operation_ids_for_import_is_deterministic_by_date_then_id() -
             amount_original=7.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=7.0,
+            amount_base=7.0,
             description="Earlier",
         ),
     ]
@@ -1887,7 +1928,7 @@ def test_normalize_operation_ids_for_import_remaps_debt_payment_record_ids() -> 
             amount_original=5.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=5.0,
+            amount_base=5.0,
             category="Debt payment",
         )
     ]
@@ -1939,7 +1980,7 @@ def test_normalize_operation_ids_for_import_syncs_record_related_debt_id_from_pa
             amount_original=5.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=5.0,
+            amount_base=5.0,
             category="Debt payment",
         )
     ]
@@ -1991,7 +2032,7 @@ def test_normalize_operation_ids_for_import_conflicting_record_link_is_cleared(c
             amount_original=5.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=5.0,
+            amount_base=5.0,
             category="Debt payment",
         )
     ]
@@ -2055,7 +2096,7 @@ def test_normalize_operation_ids_for_import_restores_cleared_debt_payment_record
             amount_original=5.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=5.0,
+            amount_base=5.0,
             category="Debt payment",
             description="Alex",
         )
@@ -2108,7 +2149,7 @@ def test_normalize_operation_ids_for_import_restores_record_id_with_nonstandard_
             amount_original=5.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=5.0,
+            amount_base=5.0,
             category="Погашение долга",
         )
     ]
@@ -2160,7 +2201,7 @@ def test_normalize_operation_ids_for_import_restores_record_id_without_related_d
             amount_original=5.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=5.0,
+            amount_base=5.0,
             category="Debt payment",
         )
     ]
@@ -2212,7 +2253,7 @@ def test_normalize_operation_ids_for_import_restores_record_id_without_link_and_
             amount_original=5.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=5.0,
+            amount_base=5.0,
             category="Погашение долга",
         )
     ]
@@ -2264,7 +2305,7 @@ def test_normalize_operation_ids_for_import_excludes_mandatory_records_from_loan
         amount_original=5.0,
         currency="KZT",
         rate_at_operation=1.0,
-        amount_kzt=5.0,
+        amount_base=5.0,
         category="Loan payment",
         description="Monthly charge",
         period="monthly",
@@ -2588,7 +2629,9 @@ def test_run_import_transaction_restores_tags_snapshot_for_repo_rollback() -> No
             return []
 
         def list_tags(self):
-            return [Tag(id=7, name="food", color="#123ABC", usage_count=9, last_used_at="2026-05-01")]
+            return [
+                Tag(id=7, name="food", color="#123ABC", usage_count=9, last_used_at="2026-05-01")
+            ]
 
         def load_debts(self):
             return []

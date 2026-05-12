@@ -41,21 +41,21 @@ class ReportOperationRow:
     kind: str
     category: str
     tags_text: str
-    amount_kzt: float
+    amount_base: float
 
 
 @dataclass(frozen=True, slots=True)
 class CategoryGroupRow:
     category: str
     operations_count: int
-    total_kzt: float
+    total_base: float
 
 
 @dataclass(frozen=True, slots=True)
 class TagGroupRow:
     tag: str
     operations_count: int
-    total_kzt: float
+    total_base: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +107,7 @@ def build_operations_rows(report: Report) -> list[ReportOperationRow]:
                 kind=report_record_kind(record),
                 category=str(record.category or ""),
                 tags_text=format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
-                amount_kzt=float(record.signed_amount_kzt()),
+                amount_base=float(record.signed_amount_base()),
             )
         )
     return rows
@@ -118,13 +118,13 @@ def build_category_group_rows(rows: Iterable[ReportOperationRow]) -> list[Catego
     counts_by_category: dict[str, int] = {}
     for row in rows:
         key = str(row.category or "").strip() or "<Empty>"
-        totals_by_category[key] = float(totals_by_category.get(key, 0.0)) + float(row.amount_kzt)
+        totals_by_category[key] = float(totals_by_category.get(key, 0.0)) + float(row.amount_base)
         counts_by_category[key] = int(counts_by_category.get(key, 0)) + 1
     return [
         CategoryGroupRow(
             category=category,
             operations_count=int(counts_by_category.get(category, 0)),
-            total_kzt=float(totals_by_category[category]),
+            total_base=float(totals_by_category[category]),
         )
         for category in sorted(totals_by_category, key=lambda value: value.casefold())
     ]
@@ -155,7 +155,7 @@ def build_tag_group_rows(report: Report) -> list[TagGroupRow]:
         TagGroupRow(
             tag=tag,
             operations_count=len(subreport.records()),
-            total_kzt=float(sum(record.signed_amount_kzt() for record in subreport.records())),
+            total_base=float(sum(record.signed_amount_base() for record in subreport.records())),
         )
         for tag, subreport in sorted(groups.items(), key=lambda item: item[0].casefold())
     ]

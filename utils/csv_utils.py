@@ -43,7 +43,7 @@ DATA_HEADERS = [
     "amount_original",
     "currency",
     "rate_at_operation",
-    "amount_kzt",
+    "amount_base",
     "description",
     "tags",
     "period",
@@ -54,11 +54,12 @@ DATA_HEADERS = [
 MANDATORY_HEADERS = [
     "type",
     "date",
+    "wallet_id",
     "category",
     "amount_original",
     "currency",
     "rate_at_operation",
-    "amount_kzt",
+    "amount_base",
     "description",
     "period",
 ]
@@ -89,7 +90,7 @@ def _restore_missing_transfers(records: list[Record], transfers: dict[int, Trans
             amount_original=to_money_float(expense_record.amount_original or 0.0),
             currency=str(expense_record.currency or "KZT").upper(),
             rate_at_operation=to_rate_float(expense_record.rate_at_operation),
-            amount_kzt=to_money_float(expense_record.amount_kzt or 0.0),
+            amount_base=to_money_float(expense_record.amount_base or 0.0),
             description=str(expense_record.description or ""),
         )
 
@@ -154,10 +155,10 @@ def _validate_transfer_integrity(
             errors.append(f"Transfer #{transfer_id}: linked records amount_original mismatch")
         if abs(money_diff(expense_record.amount_original or 0.0, transfer.amount_original)) > 0:
             errors.append(f"Transfer #{transfer_id}: transfer amount_original mismatch")
-        if abs(money_diff(expense_record.amount_kzt or 0.0, income_record.amount_kzt or 0.0)) > 0:
-            errors.append(f"Transfer #{transfer_id}: linked records amount_kzt mismatch")
-        if abs(money_diff(expense_record.amount_kzt or 0.0, transfer.amount_kzt)) > 0:
-            errors.append(f"Transfer #{transfer_id}: transfer amount_kzt mismatch")
+        if abs(money_diff(expense_record.amount_base or 0.0, income_record.amount_base or 0.0)) > 0:
+            errors.append(f"Transfer #{transfer_id}: linked records amount_base mismatch")
+        if abs(money_diff(expense_record.amount_base or 0.0, transfer.amount_base)) > 0:
+            errors.append(f"Transfer #{transfer_id}: transfer amount_base mismatch")
         if abs(rate_diff(expense_record.rate_at_operation, income_record.rate_at_operation)) > 0:
             errors.append(f"Transfer #{transfer_id}: linked records rate mismatch")
         if abs(rate_diff(expense_record.rate_at_operation, transfer.rate_at_operation)) > 0:
@@ -207,11 +208,11 @@ def report_to_csv(report: Report, filepath: str) -> None:
                     record_date,
                     report_record_type_label(record),
                     record.category,
-                    f"{record.amount_kzt:.2f}",
+                    f"{record.amount_base:.2f}",
                 ]
             )
 
-        records_total = sum(r.signed_amount_kzt() for r in report.records())
+        records_total = sum(r.signed_amount_base() for r in report.records())
         writer.writerow(["SUBTOTAL", "", "", f"{records_total:.2f}"])
         writer.writerow(["FINAL BALANCE", "", "", f"{report.total_fixed():.2f}"])
 
@@ -223,16 +224,16 @@ def grouped_report_to_csv(
 ) -> None:
     """Export grouped category summary as currently shown in grouped Reports view."""
 
-    total_kzt = 0.0
+    total_base = 0.0
     with open(filepath, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow([statement_title, "", ""])
         writer.writerow(GROUPED_REPORT_HEADERS)
         writer.writerow(["", "", "Grouped category totals"])
-        for category, operations_count, amount_kzt in grouped_rows:
-            total_kzt += float(amount_kzt)
-            writer.writerow([category, int(operations_count), f"{float(amount_kzt):.2f}"])
-        writer.writerow(["TOTAL", "", f"{total_kzt:.2f}"])
+        for category, operations_count, amount_base in grouped_rows:
+            total_base += float(amount_base)
+            writer.writerow([category, int(operations_count), f"{float(amount_base):.2f}"])
+        writer.writerow(["TOTAL", "", f"{total_base:.2f}"])
 
 
 def report_from_csv(filepath: str) -> Report:

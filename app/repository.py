@@ -46,10 +46,10 @@ class RecordRepository(ABC):
         """Optional: update color for a known tag."""
         return None
 
-    def get_total_assets_kzt(
+    def get_total_assets_base(
         self, currency: CurrencyService, *, active_only: bool = True
     ) -> float | None:
-        """Optional: return total asset value in KZT for net-worth calculations."""
+        """Optional: return total asset value in base currency for net-worth calculations."""
         return None
 
     @abstractmethod

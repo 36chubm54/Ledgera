@@ -10,8 +10,6 @@ from domain.wallets import Wallet
 from infrastructure.repositories import JsonFileRecordRepository
 from tests.type_helpers import typed_repo
 
-# Removed DummyCurrency class because we are now using CurrencyService
-
 
 def _wallet_balance(repo: JsonFileRecordRepository, wallet_id: int) -> float:
     wallets = {wallet.id: wallet for wallet in repo.load_wallets()}
@@ -19,7 +17,7 @@ def _wallet_balance(repo: JsonFileRecordRepository, wallet_id: int) -> float:
     total = wallet.initial_balance
     for record in repo.load_all():
         if record.wallet_id == wallet_id:
-            total += record.signed_amount_kzt()
+            total += record.signed_amount_base()
     return total
 
 

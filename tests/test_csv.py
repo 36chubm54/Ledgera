@@ -173,7 +173,7 @@ def test_import_records_from_csv_with_partial_errors_keeps_valid_rows():
     from utils.csv_utils import import_records_from_csv
 
     csv_content = """
-date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_kzt
+date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base
 2025-01-01,income,1,Salary,10,USD,500,5000
 2025-13-01,expense,1,Food,2,KZT,1,2
 2025-01-03,expense,1,Food,3,KZT,1,3
@@ -201,7 +201,7 @@ def test_import_records_from_csv_rejects_fractional_transfer_wallet_ids():
     from utils.csv_utils import import_records_from_csv
 
     csv_content = """
-date,type,from_wallet_id,to_wallet_id,amount_original,currency,rate_at_operation,amount_kzt
+date,type,from_wallet_id,to_wallet_id,amount_original,currency,rate_at_operation,amount_base
 2025-01-01,transfer,1.5,2,10,KZT,1,10
 """
     with tempfile.NamedTemporaryFile(
@@ -276,7 +276,7 @@ def test_export_records_to_csv_preserves_record_positions_with_transfers() -> No
             amount_original=50.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=50.0,
+            amount_base=50.0,
             category="Food",
         ),
         ExpenseRecord(
@@ -287,7 +287,7 @@ def test_export_records_to_csv_preserves_record_positions_with_transfers() -> No
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             category="Transfer",
             description="Move",
         ),
@@ -299,7 +299,7 @@ def test_export_records_to_csv_preserves_record_positions_with_transfers() -> No
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             category="Transfer",
             description="Move",
         ),
@@ -310,7 +310,7 @@ def test_export_records_to_csv_preserves_record_positions_with_transfers() -> No
             amount_original=100.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=100.0,
+            amount_base=100.0,
             category="Salary",
         ),
     ]
@@ -323,7 +323,7 @@ def test_export_records_to_csv_preserves_record_positions_with_transfers() -> No
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             description="Move",
         )
     ]
@@ -352,7 +352,7 @@ def test_export_records_to_csv_keeps_unlinked_transfer_aggregates() -> None:
             amount_original=100.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=100.0,
+            amount_base=100.0,
             category="Salary",
         )
     ]
@@ -365,7 +365,7 @@ def test_export_records_to_csv_keeps_unlinked_transfer_aggregates() -> None:
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             description="Move",
         )
     ]

@@ -16,14 +16,14 @@ class DashboardTrendPoint:
 @dataclass(frozen=True)
 class DashboardAllocationSlice:
     category: str
-    amount_kzt: float
+    amount_base: float
     share_pct: float
 
 
 @dataclass(frozen=True)
 class DashboardSummary:
-    net_worth_kzt: float
-    assets_total_kzt: float
+    net_worth_base: float
+    assets_total_base: float
     goals_completed: int
     goals_total: int
 

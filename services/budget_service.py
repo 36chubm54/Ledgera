@@ -5,9 +5,9 @@ from __future__ import annotations
 import sqlite3
 from datetime import date as dt_date
 
+from app.repository_protocols import BudgetRepositoryProtocol
 from domain.budget import Budget, BudgetResult, compute_pace_status
 from domain.validation import parse_ymd
-from infrastructure.sqlite_repository import SQLiteRecordRepository
 from services.sqlite_money_sql import minor_amount_expr
 from utils.money import minor_to_money, to_minor_units, to_money_float
 from utils.tag_utils import normalize_tag_name
@@ -16,7 +16,7 @@ from utils.tag_utils import normalize_tag_name
 class BudgetService:
     """Reads records and manages persisted budgets."""
 
-    def __init__(self, repository: SQLiteRecordRepository) -> None:
+    def __init__(self, repository: BudgetRepositoryProtocol) -> None:
         self._repo = repository
 
     def create_budget(
@@ -24,7 +24,7 @@ class BudgetService:
         category: str,
         start_date: str,
         end_date: str,
-        limit_kzt: float,
+        limit_base: float,
         *,
         include_mandatory: bool = False,
         scope_type: str | None = None,
@@ -47,7 +47,7 @@ class BudgetService:
         if start > end:
             raise ValueError("start_date must be <= end_date")
 
-        limit_value = to_money_float(limit_kzt)
+        limit_value = to_money_float(limit_base)
         if limit_value <= 0:
             raise ValueError("Budget limit must be positive")
 
@@ -59,7 +59,7 @@ class BudgetService:
             """
             INSERT INTO budgets (
                 category, scope_type, scope_value,
-                start_date, end_date, limit_kzt, limit_kzt_minor, include_mandatory
+                start_date, end_date, limit_base, limit_base_minor, include_mandatory
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -84,7 +84,7 @@ class BudgetService:
         rows = self._repo.query_all(
             """
             SELECT id, category, start_date, end_date,
-                   limit_kzt, limit_kzt_minor, include_mandatory, scope_type, scope_value
+                   limit_base, limit_base_minor, include_mandatory, scope_type, scope_value
             FROM budgets
             ORDER BY start_date DESC, category ASC, id DESC
             """
@@ -98,15 +98,15 @@ class BudgetService:
         self._repo.execute("DELETE FROM budgets WHERE id = ?", (int(budget_id),))
         self._repo.commit()
 
-    def update_budget_limit(self, budget_id: int, new_limit_kzt: float) -> Budget:
-        limit_value = to_money_float(new_limit_kzt)
+    def update_budget_limit(self, budget_id: int, new_limit_base: float) -> Budget:
+        limit_value = to_money_float(new_limit_base)
         if limit_value <= 0:
             raise ValueError("Budget limit must be positive")
         row = self._repo.query_one("SELECT id FROM budgets WHERE id = ?", (int(budget_id),))
         if row is None:
             raise ValueError(f"Budget not found: {budget_id}")
         self._repo.execute(
-            "UPDATE budgets SET limit_kzt = ?, limit_kzt_minor = ? WHERE id = ?",
+            "UPDATE budgets SET limit_base = ?, limit_base_minor = ? WHERE id = ?",
             (limit_value, to_minor_units(limit_value), int(budget_id)),
         )
         self._repo.commit()
@@ -120,7 +120,7 @@ class BudgetService:
                     """
                     INSERT INTO budgets (
                         id, category, start_date, end_date,
-                        limit_kzt, limit_kzt_minor, include_mandatory, scope_type, scope_value
+                        limit_base, limit_base_minor, include_mandatory, scope_type, scope_value
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
@@ -129,8 +129,8 @@ class BudgetService:
                         str(budget.category),
                         str(budget.start_date),
                         str(budget.end_date),
-                        float(budget.limit_kzt),
-                        int(budget.limit_kzt_minor),
+                        float(budget.limit_base),
+                        int(budget.limit_base_minor),
                         int(bool(budget.include_mandatory)),
                         str(budget.scope_type),
                         str(budget.scope_value),
@@ -156,28 +156,28 @@ class BudgetService:
             self._spending_params_for_budget(budget),
         )
         spent_minor = int(row[0]) if row is not None else 0
-        spent_kzt = minor_to_money(spent_minor)
-        limit_minor = budget.limit_kzt_minor
+        spent_base = minor_to_money(spent_minor)
+        limit_minor = budget.limit_base_minor
         usage_pct = round(spent_minor / limit_minor * 100.0, 1) if limit_minor > 0 else 0.0
         time_pct = budget.time_pct(today)
         (
-            forecast_remaining_kzt,
-            forecast_delta_kzt,
+            forecast_remaining_base,
+            forecast_delta_base,
             forecast_days_left,
             forecast_status_key,
             forecast_status_params,
         ) = self._forecast_budget(budget, spent_minor=spent_minor, today=today)
         return BudgetResult(
             budget=budget,
-            spent_kzt=spent_kzt,
+            spent_base=spent_base,
             spent_minor=spent_minor,
             status=budget.status(today),
             pace_status=compute_pace_status(spent_minor, limit_minor, usage_pct, time_pct),
             usage_pct=usage_pct,
             time_pct=time_pct,
-            remaining_kzt=to_money_float(budget.limit_kzt - spent_kzt),
-            forecast_remaining_kzt=forecast_remaining_kzt,
-            forecast_delta_kzt=forecast_delta_kzt,
+            remaining_base=to_money_float(budget.limit_base - spent_base),
+            forecast_remaining_base=forecast_remaining_base,
+            forecast_delta_base=forecast_delta_base,
             forecast_days_left=forecast_days_left,
             forecast_status_key=forecast_status_key,
             forecast_status_params=forecast_status_params,
@@ -205,13 +205,13 @@ class BudgetService:
         results: list[BudgetResult] = []
         for budget in budgets:
             spent_minor = int(spent_minor_by_budget.get(budget.id, 0))
-            spent_kzt = minor_to_money(spent_minor)
-            limit_minor = budget.limit_kzt_minor
+            spent_base = minor_to_money(spent_minor)
+            limit_minor = budget.limit_base_minor
             usage_pct = round(spent_minor / limit_minor * 100.0, 1) if limit_minor > 0 else 0.0
             time_pct = budget.time_pct(today)
             (
-                forecast_remaining_kzt,
-                forecast_delta_kzt,
+                forecast_remaining_base,
+                forecast_delta_base,
                 forecast_days_left,
                 forecast_status_key,
                 forecast_status_params,
@@ -219,15 +219,15 @@ class BudgetService:
             results.append(
                 BudgetResult(
                     budget=budget,
-                    spent_kzt=spent_kzt,
+                    spent_base=spent_base,
                     spent_minor=spent_minor,
                     status=budget.status(today),
                     pace_status=compute_pace_status(spent_minor, limit_minor, usage_pct, time_pct),
                     usage_pct=usage_pct,
                     time_pct=time_pct,
-                    remaining_kzt=to_money_float(budget.limit_kzt - spent_kzt),
-                    forecast_remaining_kzt=forecast_remaining_kzt,
-                    forecast_delta_kzt=forecast_delta_kzt,
+                    remaining_base=to_money_float(budget.limit_base - spent_base),
+                    forecast_remaining_base=forecast_remaining_base,
+                    forecast_delta_base=forecast_delta_base,
                     forecast_days_left=forecast_days_left,
                     forecast_status_key=forecast_status_key,
                     forecast_status_params=forecast_status_params,
@@ -270,7 +270,7 @@ class BudgetService:
         row = self._repo.query_one(
             """
             SELECT id, category, start_date, end_date,
-                   limit_kzt, limit_kzt_minor, include_mandatory, scope_type, scope_value
+                   limit_base, limit_base_minor, include_mandatory, scope_type, scope_value
             FROM budgets
             WHERE id = ?
             """,
@@ -287,8 +287,8 @@ class BudgetService:
             category=str(row[1]),
             start_date=str(row[2]),
             end_date=str(row[3]),
-            limit_kzt=float(row[4]),
-            limit_kzt_minor=int(row[5]),
+            limit_base=float(row[4]),
+            limit_base_minor=int(row[5]),
             include_mandatory=bool(row[6]),
             scope_type=str(row[7]),
             scope_value=str(row[8]),
@@ -298,7 +298,7 @@ class BudgetService:
     def _spending_query_for_budget(budget: Budget, *, type_filter: str) -> str:
         if budget.scope_type == "tag":
             return f"""
-                SELECT COALESCE(SUM({minor_amount_expr("amount_kzt")}), 0)
+                SELECT COALESCE(SUM({minor_amount_expr("amount_base")}), 0)
                 FROM records
                 WHERE {type_filter}
                   AND transfer_id IS NULL
@@ -314,7 +314,7 @@ class BudgetService:
                   )
             """
         return f"""
-            SELECT COALESCE(SUM({minor_amount_expr("amount_kzt")}), 0)
+            SELECT COALESCE(SUM({minor_amount_expr("amount_base")}), 0)
             FROM records
             WHERE {type_filter}
               AND category = ?
@@ -337,16 +337,16 @@ class BudgetService:
         today: dt_date,
     ) -> tuple[float | None, float | None, int | None, str | None, dict[str, object] | None]:
         elapsed_days = budget.elapsed_days(today)
-        if elapsed_days < 3 and spent_minor < max(1, budget.limit_kzt_minor // 10):
+        if elapsed_days < 3 and spent_minor < max(1, budget.limit_base_minor // 10):
             return None, None, None, None, None
         daily_burn = spent_minor / max(1, elapsed_days)
         projected_spent_minor = int(round(daily_burn * budget.total_days()))
-        projected_remaining_minor = int(budget.limit_kzt_minor - projected_spent_minor)
-        current_remaining_minor = int(budget.limit_kzt_minor - spent_minor)
+        projected_remaining_minor = int(budget.limit_base_minor - projected_spent_minor)
+        current_remaining_minor = int(budget.limit_base_minor - spent_minor)
         forecast_days_left = None
         if daily_burn > 0 and current_remaining_minor > 0:
             forecast_days_left = max(0, int(current_remaining_minor / daily_burn))
-        forecast_remaining_kzt = minor_to_money(projected_remaining_minor)
+        forecast_remaining_base = minor_to_money(projected_remaining_minor)
         if projected_remaining_minor < 0 and forecast_days_left is not None:
             status_key = "budget.forecast.overspend_in_days"
             status_params: dict[str, object] | None = {"days": forecast_days_left}
@@ -355,10 +355,10 @@ class BudgetService:
             status_params = None
         else:
             status_key = "budget.forecast.remaining"
-            status_params = {"amount_kzt": forecast_remaining_kzt}
+            status_params = {"amount_base": forecast_remaining_base}
         return (
-            forecast_remaining_kzt,
-            forecast_remaining_kzt,
+            forecast_remaining_base,
+            forecast_remaining_base,
             forecast_days_left,
             status_key,
             status_params,

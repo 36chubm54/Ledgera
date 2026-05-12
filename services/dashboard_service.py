@@ -8,7 +8,6 @@ from domain.dashboard import (
     DashboardSummary,
     DashboardTrendPoint,
 )
-from infrastructure.sqlite_repository import SQLiteRecordRepository
 from services.asset_service import AssetService
 from services.goal_service import GoalService
 from services.timeline_service import TimelineService
@@ -17,18 +16,17 @@ from services.timeline_service import TimelineService
 class DashboardService:
     def __init__(
         self,
-        repository: SQLiteRecordRepository,
+        repository: object,
         asset_service: AssetService,
         goal_service: GoalService,
         timeline_service: TimelineService,
         *,
-        current_net_worth_kzt: float,
+        current_net_worth_base: float,
     ) -> None:
-        self._repo = repository
         self._assets = asset_service
         self._goals = goal_service
         self._timeline = timeline_service
-        self._current_net_worth_kzt = float(current_net_worth_kzt)
+        self._current_net_worth_base = float(current_net_worth_base)
 
     def build_payload(self) -> DashboardPayload:
         trend = [
@@ -38,19 +36,19 @@ class DashboardService:
         allocation = [
             DashboardAllocationSlice(
                 category=str(category),
-                amount_kzt=float(amount_kzt),
+                amount_base=float(amount_base),
                 share_pct=float(share_pct),
             )
-            for category, amount_kzt, share_pct in self._assets.get_allocation_by_category()
+            for category, amount_base, share_pct in self._assets.get_allocation_by_category()
         ]
         goals = self._goals.get_all_goal_progress()
         goals_total = len(goals)
         goals_completed = sum(1 for goal in goals if bool(goal.is_completed))
-        assets_total_kzt = float(self._assets.get_total_assets_kzt())
+        assets_total_base = float(self._assets.get_total_assets_base())
         return DashboardPayload(
             summary=DashboardSummary(
-                net_worth_kzt=float(self._current_net_worth_kzt),
-                assets_total_kzt=assets_total_kzt,
+                net_worth_base=float(self._current_net_worth_base),
+                assets_total_base=assets_total_base,
                 goals_completed=goals_completed,
                 goals_total=goals_total,
             ),

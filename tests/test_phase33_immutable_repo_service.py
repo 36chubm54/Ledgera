@@ -15,32 +15,32 @@ def test_record_is_immutable():
     record = IncomeRecord(
         date="2026-01-01",
         amount_original=100.0,
-        amount_kzt=50000.0,
+        amount_base=50000.0,
         currency="USD",
         rate_at_operation=500.0,
         category="Salary",
     )
     with pytest.raises(FrozenInstanceError):
-        record.amount_kzt = 123.0  # type: ignore
+        record.amount_base = 123.0  # type: ignore
 
 
-def test_with_updated_amount_kzt_returns_new_object():
+def test_with_updated_amount_base_returns_new_object():
     record = IncomeRecord(
         date="2026-01-01",
         amount_original=100.0,
-        amount_kzt=50000.0,
+        amount_base=50000.0,
         currency="USD",
         rate_at_operation=500.0,
         category="Salary",
     )
 
-    updated = record.with_updated_amount_kzt(51001.987)
+    updated = record.with_updated_amount_base(51001.987)
 
     assert updated is not record
     assert updated.id == record.id
-    assert updated.amount_kzt == 51001.99
+    assert updated.amount_base == 51001.99
     assert updated.rate_at_operation == 510.0199
-    assert record.amount_kzt == 50000.0
+    assert record.amount_base == 50000.0
 
 
 def test_repository_replace_updates_record():
@@ -52,18 +52,18 @@ def test_repository_replace_updates_record():
         record = IncomeRecord(
             date="2026-01-01",
             amount_original=100.0,
-            amount_kzt=50000.0,
+            amount_base=50000.0,
             currency="USD",
             rate_at_operation=500.0,
             category="Salary",
         )
         repo.save(record)
 
-        updated = record.with_updated_amount_kzt(52000.0)
+        updated = record.with_updated_amount_base(52000.0)
         repo.replace(updated)
 
         stored = repo.get_by_id(record.id)
-        assert stored.amount_kzt == 52000.0
+        assert stored.amount_base == 52000.0
         assert stored.rate_at_operation == 520.0
     finally:
         os.unlink(tmp.name)
@@ -78,7 +78,7 @@ def test_service_blocks_transfer_edit():
         amount_original=10.0,
         currency="USD",
         rate_at_operation=500.0,
-        amount_kzt=5000.0,
+        amount_base=5000.0,
         category="Transfer",
     )
     repo.get_by_id.return_value = transfer_record
@@ -87,7 +87,7 @@ def test_service_blocks_transfer_edit():
     with pytest.raises(ValueError, match="Transfer-linked"):
         service.update_record_inline(
             transfer_record.id,
-            new_amount_kzt=6000.0,
+            new_amount_base=6000.0,
             new_category="X",
             new_description="",
         )
@@ -101,14 +101,14 @@ def test_service_blocks_transfer_edit():
         amount_original=10.0,
         currency="USD",
         rate_at_operation=500.0,
-        amount_kzt=5000.0,
+        amount_base=5000.0,
         category="Transfer",
     )
     repo.get_by_id.return_value = manual_transfer
     with pytest.raises(ValueError, match="Transfer-linked"):
         service.update_record_inline(
             manual_transfer.id,
-            new_amount_kzt=6000.0,
+            new_amount_base=6000.0,
             new_category="X",
             new_description="",
         )
@@ -119,14 +119,14 @@ def test_domain_invariant_preserved():
     record = IncomeRecord(
         date="2026-01-01",
         amount_original=0.0,
-        amount_kzt=0.0,
+        amount_base=0.0,
         currency="KZT",
         rate_at_operation=1.0,
         category="Salary",
     )
 
     with pytest.raises(ValueError, match="amount_original"):
-        record.with_updated_amount_kzt(100.0)
+        record.with_updated_amount_base(100.0)
 
 
 def test_service_updates_amount_category_and_description():
@@ -137,7 +137,7 @@ def test_service_updates_amount_category_and_description():
         amount_original=100.0,
         currency="USD",
         rate_at_operation=500.0,
-        amount_kzt=50000.0,
+        amount_base=50000.0,
         category="Salary",
         description="Old",
     )
@@ -146,13 +146,13 @@ def test_service_updates_amount_category_and_description():
     service = RecordService(repo)
     service.update_record_inline(
         record.id,
-        new_amount_kzt=52000.0,
+        new_amount_base=52000.0,
         new_category="Bonus",
         new_description="Updated",
     )
 
     updated = repo.replace.call_args.args[0]
-    assert updated.amount_kzt == 52000.0
+    assert updated.amount_base == 52000.0
     assert updated.rate_at_operation == 520.0
     assert updated.category == "Bonus"
     assert updated.description == "Updated"
@@ -166,7 +166,7 @@ def test_service_updates_kzt_record_amount_as_primary_amount():
         amount_original=100.0,
         currency="KZT",
         rate_at_operation=1.0,
-        amount_kzt=100.0,
+        amount_base=100.0,
         category="Salary",
         description="Old",
     )
@@ -175,14 +175,14 @@ def test_service_updates_kzt_record_amount_as_primary_amount():
     service = RecordService(repo)
     service.update_record_inline(
         record.id,
-        new_amount_kzt=125.0,
+        new_amount_base=125.0,
         new_category="Bonus",
         new_description="Updated",
     )
 
     updated = repo.replace.call_args.args[0]
     assert updated.amount_original == 125.0
-    assert updated.amount_kzt == 125.0
+    assert updated.amount_base == 125.0
     assert updated.rate_at_operation == 1.0
     assert updated.category == "Bonus"
     assert updated.description == "Updated"
@@ -196,7 +196,7 @@ def test_service_updates_date_and_wallet():
         amount_original=10.0,
         currency="KZT",
         rate_at_operation=1.0,
-        amount_kzt=10.0,
+        amount_base=10.0,
         category="Food",
         description="Old",
     )
@@ -209,7 +209,7 @@ def test_service_updates_date_and_wallet():
     service = RecordService(repo)
     service.update_record_inline(
         record.id,
-        new_amount_kzt=12.0,
+        new_amount_base=12.0,
         new_category="Food",
         new_description="Old",
         new_date="2026-01-02",
@@ -229,7 +229,7 @@ def test_service_rejects_numeric_only_tags_on_inline_edit():
         amount_original=10.0,
         currency="KZT",
         rate_at_operation=1.0,
-        amount_kzt=10.0,
+        amount_base=10.0,
         category="Food",
         description="Old",
     )
@@ -239,7 +239,7 @@ def test_service_rejects_numeric_only_tags_on_inline_edit():
     with pytest.raises(ValueError, match="numbers only"):
         service.update_record_inline(
             record.id,
-            new_amount_kzt=12.0,
+            new_amount_base=12.0,
             new_category="Food",
             new_description="Old",
             new_tags="#2026",

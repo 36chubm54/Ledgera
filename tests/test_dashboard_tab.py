@@ -12,7 +12,7 @@ from domain.dashboard import (
     DashboardTrendPoint,
 )
 from domain.goal import Goal, GoalProgress
-from gui.tabs.dashboard_tab import build_dashboard_tab
+from gui.tabs.dashboard_tab import _parse_positive_amount, build_dashboard_tab
 
 
 @dataclass
@@ -49,8 +49,8 @@ class _Controller:
         )
         return DashboardPayload(
             summary=DashboardSummary(
-                net_worth_kzt=1_250_000.0,
-                assets_total_kzt=450_000.0,
+                net_worth_base=1_250_000.0,
+                assets_total_base=450_000.0,
                 goals_completed=1 if self.goal_completed else 0,
                 goals_total=1,
             ),
@@ -60,8 +60,8 @@ class _Controller:
                 DashboardTrendPoint(month="2026-03", balance=1_100_000.0),
             ],
             allocation=[
-                DashboardAllocationSlice(category="bank", amount_kzt=300_000.0, share_pct=66.7),
-                DashboardAllocationSlice(category="cash", amount_kzt=150_000.0, share_pct=33.3),
+                DashboardAllocationSlice(category="bank", amount_base=300_000.0, share_pct=66.7),
+                DashboardAllocationSlice(category="cash", amount_base=150_000.0, share_pct=33.3),
             ],
             goals=[
                 GoalProgress(
@@ -248,6 +248,11 @@ def test_dashboard_tab_refresh_renders_payload() -> None:
         assert bindings.goals_canvas.cget("yscrollcommand")
     finally:
         context.destroy()
+
+
+def test_parse_positive_amount_supports_grouping_and_decimal_comma() -> None:
+    assert _parse_positive_amount("15,000", field_name="Target amount") == 15000.0
+    assert _parse_positive_amount("15,5", field_name="Target amount") == 15.5
 
 
 def test_dashboard_tab_goal_complete_button_updates_goal_state() -> None:

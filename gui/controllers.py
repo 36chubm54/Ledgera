@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from typing import TypeVar, cast
 
 from app.audit_runner import run_repository_audit
 from app.finance_service import ImportCapabilities
-from app.import_support import (
-    normalize_operation_ids_for_import as normalize_import_ids,
-)
+from app.import_support import normalize_operation_ids_for_import as normalize_import_ids
 from app.import_support import run_import_transaction as run_import_op
 from app.preferences_service import OnlineStatusSnapshot, UIPreferencesService
 from app.record_service import RecordService
 from app.repository import RecordRepository
+from app.repository_protocols import (
+    AssetRepositoryProtocol,
+    BudgetRepositoryProtocol,
+    DebtRepositoryProtocol,
+    DistributionRepositoryProtocol,
+    GoalRepositoryProtocol,
+    SqlQueryRepository,
+)
 from app.services import CurrencyService
 from app.use_cases import (
     AddAssetSnapshot,
@@ -93,7 +100,6 @@ from gui.controller_support import (
     build_list_items,
     wallets_with_system_initial_balance,
 )
-from infrastructure.sqlite_repository import SQLiteRecordRepository
 from services.asset_service import AssetService
 from services.balance_service import BalanceService, CashflowResult, WalletBalance
 from services.budget_service import BudgetService
@@ -106,6 +112,7 @@ from services.timeline_service import TimelineService
 from utils.money import to_money_float
 
 logger = logging.getLogger(__name__)
+RepoCapability = TypeVar("RepoCapability")
 
 
 class FinancialController:
@@ -118,6 +125,15 @@ class FinancialController:
         self._debt_service_instance: DebtService | None = None
         self._distribution_service_instance: DistributionService | None = None
         self._goal_service_instance: GoalService | None = None
+
+    def _require_repository_capability(
+        self,
+        protocol: type[RepoCapability],
+        message: str,
+    ) -> RepoCapability:
+        if not isinstance(self._repository, protocol):
+            raise TypeError(message)
+        return cast(RepoCapability, self._repository)
 
     def build_record_list_items(self, records: list[Record] | None = None) -> list[RecordListItem]:
         if records is None:
@@ -159,7 +175,7 @@ class FinancialController:
         self,
         record_id: int,
         *,
-        new_amount_kzt: float,
+        new_amount_base: float,
         new_category: str,
         new_description: str = "",
         new_date: str | None = None,
@@ -168,7 +184,7 @@ class FinancialController:
     ) -> None:
         self._record_service.update_record_inline(
             record_id,
-            new_amount_kzt=new_amount_kzt,
+            new_amount_base=new_amount_base,
             new_category=new_category,
             new_description=new_description,
             new_date=new_date,
@@ -176,9 +192,9 @@ class FinancialController:
             new_tags=new_tags,
         )
 
-    def get_record_amount_kzt(self, record_id: int) -> float:
+    def get_record_amount_base(self, record_id: int) -> float:
         record = self._repository.get_by_id(int(record_id))
-        return to_money_float(record.amount_kzt or 0.0)
+        return to_money_float(record.amount_base or 0.0)
 
     def get_record_for_edit(self, record_id: int) -> Record:
         return self._repository.get_by_id(int(record_id))
@@ -191,7 +207,7 @@ class FinancialController:
         new_from_wallet_id: int,
         new_to_wallet_id: int,
         new_description: str = "",
-        new_amount_kzt: float | None = None,
+        new_amount_base: float | None = None,
     ) -> None:
         UpdateTransfer(self._repository, self._currency).execute(
             transfer_id,
@@ -199,7 +215,7 @@ class FinancialController:
             new_from_wallet_id=new_from_wallet_id,
             new_to_wallet_id=new_to_wallet_id,
             new_description=new_description,
-            new_amount_kzt=new_amount_kzt,
+            new_amount_base=new_amount_base,
         )
 
     def set_system_initial_balance(self, balance: float) -> None:
@@ -210,6 +226,43 @@ class FinancialController:
 
     def get_currency_rate(self, currency: str) -> float:
         return float(self._currency.get_rate(currency))
+
+    def get_display_currency(self) -> str:
+        return self._currency.display_currency
+
+    def get_display_currency_code(self) -> str:
+        return self._currency.display_currency
+
+    def get_base_currency_code(self) -> str:
+        return self._currency.base_currency
+
+    def get_display_symbol(self) -> str:
+        return self._currency.display_symbol
+
+    def get_available_display_currencies(self) -> list[str]:
+        return self._currency.get_available_display_currencies()
+
+    def set_display_currency(self, code: str) -> None:
+        self._currency.set_display_currency(code)
+
+    def to_display_amount(self, amount_base: float) -> float:
+        return float(self._currency.to_display(amount_base))
+
+    def format_display_amount(self, amount_base: float, precision: int = 2) -> str:
+        value = self.to_display_amount(amount_base)
+        return f"{value:,.{precision}f}"
+
+    def format_display_money(
+        self,
+        amount_base: float,
+        *,
+        precision: int = 2,
+        with_code: bool = True,
+    ) -> str:
+        amount = self.format_display_amount(amount_base, precision=precision)
+        if not with_code:
+            return amount
+        return f"{amount} {self.get_display_currency_code()}"
 
     def set_online_mode(self, enabled: bool) -> None:
         self._ui_preferences.set_online_mode(enabled)
@@ -245,7 +298,7 @@ class FinancialController:
         currency: str,
         category: str,
         description: str = "",
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
         tags: tuple[str, ...] = (),
@@ -257,7 +310,7 @@ class FinancialController:
             currency=currency,
             category=category,
             description=description,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             rate_at_operation=rate_at_operation,
             related_debt_id=related_debt_id,
             tags=tags,
@@ -272,7 +325,7 @@ class FinancialController:
         currency: str,
         category: str,
         description: str = "",
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
         related_debt_id: int | None = None,
         tags: tuple[str, ...] = (),
@@ -284,7 +337,7 @@ class FinancialController:
             currency=currency,
             category=category,
             description=description,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             rate_at_operation=rate_at_operation,
             related_debt_id=related_debt_id,
             tags=tags,
@@ -306,7 +359,7 @@ class FinancialController:
         description: str,
         period: str,
         date: str = "",
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
     ) -> None:
         CreateMandatoryExpense(self._repository, self._currency).execute(
@@ -317,7 +370,7 @@ class FinancialController:
             description=description,
             period=period,
             date=date,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             rate_at_operation=rate_at_operation,
         )
 
@@ -331,7 +384,7 @@ class FinancialController:
         category: str,
         description: str,
         period: str,
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
     ) -> None:
         CreateMandatoryExpenseRecord(self._repository, self._currency).execute(
@@ -342,15 +395,15 @@ class FinancialController:
             category=category,
             description=description,
             period=period,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             rate_at_operation=rate_at_operation,
         )
 
     def load_mandatory_expenses(self) -> list[MandatoryExpenseRecord]:
         return GetMandatoryExpenses(self._repository).execute()
 
-    def update_mandatory_expense_amount_kzt(self, expense_id: int, new_amount_kzt: float) -> None:
-        self._record_service.update_mandatory_amount_kzt(expense_id, new_amount_kzt)
+    def update_mandatory_expense_amount_base(self, expense_id: int, new_amount_base: float) -> None:
+        self._record_service.update_mandatory_amount_base(expense_id, new_amount_base)
 
     def update_mandatory_expense_date(self, expense_id: int, new_date: str) -> None:
         self._record_service.update_mandatory_date(expense_id, new_date)
@@ -428,18 +481,22 @@ class FinancialController:
         return CalculateNetWorth(self._repository, self._currency).execute_current()
 
     def _asset_service(self) -> AssetService:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Asset System is supported only for SQLite repository")
+        repo = self._require_repository_capability(
+            AssetRepositoryProtocol,
+            "Asset System is supported only for repositories with asset capabilities",
+        )
         if self._asset_service_instance is None:
-            self._asset_service_instance = AssetService(self._repository, self._currency)
+            self._asset_service_instance = AssetService(repo, self._currency)
         return self._asset_service_instance
 
     def _goal_service(self) -> GoalService:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Goal System is supported only for SQLite repository")
+        repo = self._require_repository_capability(
+            GoalRepositoryProtocol,
+            "Goal System is supported only for repositories with goal capabilities",
+        )
         if self._goal_service_instance is None:
             self._goal_service_instance = GoalService(
-                self._repository,
+                repo,
                 self._asset_service(),
                 self._currency,
             )
@@ -514,8 +571,8 @@ class FinancialController:
     def get_latest_asset_snapshots(self, *, active_only: bool = True) -> list[AssetSnapshot]:
         return GetLatestAssetSnapshots(self._asset_service()).execute(active_only=active_only)
 
-    def get_total_assets_kzt(self, *, active_only: bool = True) -> float:
-        return self._asset_service().get_total_assets_kzt(active_only=active_only)
+    def get_total_assets_base(self, *, active_only: bool = True) -> float:
+        return self._asset_service().get_total_assets_base(active_only=active_only)
 
     def get_asset_allocation(self, *, active_only: bool = True) -> list[tuple[str, float, float]]:
         return self._asset_service().get_allocation_by_category(active_only=active_only)
@@ -574,7 +631,7 @@ class FinancialController:
         description: str = "",
         commission_amount: float = 0.0,
         commission_currency: str | None = None,
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
     ) -> int:
         parse_ymd(transfer_date)
@@ -597,7 +654,7 @@ class FinancialController:
             description=description.strip(),
             commission_amount=to_money_float(commission_amount),
             commission_currency=(commission_currency or currency).strip().upper(),
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             rate_at_operation=rate_at_operation,
         )
 
@@ -730,9 +787,11 @@ class FinancialController:
         return run_repository_audit(self._repository)
 
     def _budget_service(self) -> BudgetService:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Budget System is supported only for SQLite repository")
-        return BudgetService(self._repository)
+        repo = self._require_repository_capability(
+            BudgetRepositoryProtocol,
+            "Budget System is supported only for repositories with budget capabilities",
+        )
+        return BudgetService(repo)
 
     def create_budget(
         self,
@@ -740,7 +799,7 @@ class FinancialController:
         category: str,
         start_date: str,
         end_date: str,
-        limit_kzt: float,
+        limit_base: float,
         include_mandatory: bool = False,
         scope_type: str = "category",
         scope_value: str = "",
@@ -749,7 +808,7 @@ class FinancialController:
             category,
             start_date,
             end_date,
-            limit_kzt,
+            limit_base,
             include_mandatory=include_mandatory,
             scope_type=scope_type,
             scope_value=scope_value,
@@ -764,14 +823,16 @@ class FinancialController:
     def delete_budget(self, budget_id: int) -> None:
         DeleteBudget(self._budget_service()).execute(budget_id)
 
-    def update_budget_limit(self, budget_id: int, new_limit_kzt: float):
-        return UpdateBudgetLimit(self._budget_service()).execute(budget_id, new_limit_kzt)
+    def update_budget_limit(self, budget_id: int, new_limit_base: float):
+        return UpdateBudgetLimit(self._budget_service()).execute(budget_id, new_limit_base)
 
     def _debt_service(self) -> DebtService:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Debt System is supported only for SQLite repository")
+        repo = self._require_repository_capability(
+            DebtRepositoryProtocol,
+            "Debt System is supported only for repositories with debt capabilities",
+        )
         if self._debt_service_instance is None:
-            self._debt_service_instance = DebtService(self._repository)
+            self._debt_service_instance = DebtService(repo)
         return self._debt_service_instance
 
     def create_debt(
@@ -779,18 +840,18 @@ class FinancialController:
         *,
         contact_name: str,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         created_at: str,
-        currency: str = "KZT",
+        currency: str | None = None,
         interest_rate: float = 0.0,
         description: str = "",
     ) -> Debt:
         return CreateDebt(self._debt_service()).execute(
             contact_name=contact_name,
             wallet_id=wallet_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             created_at=created_at,
-            currency=currency,
+            currency=(currency or self.get_base_currency_code()),
             interest_rate=interest_rate,
             description=description,
         )
@@ -800,18 +861,18 @@ class FinancialController:
         *,
         contact_name: str,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         created_at: str,
-        currency: str = "KZT",
+        currency: str | None = None,
         interest_rate: float = 0.0,
         description: str = "",
     ) -> Debt:
         return CreateLoan(self._debt_service()).execute(
             contact_name=contact_name,
             wallet_id=wallet_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             created_at=created_at,
-            currency=currency,
+            currency=(currency or self.get_base_currency_code()),
             interest_rate=interest_rate,
             description=description,
         )
@@ -844,14 +905,14 @@ class FinancialController:
         *,
         debt_id: int,
         wallet_id: int,
-        amount_kzt: float,
+        amount_base: float,
         payment_date: str,
         description: str = "",
     ) -> DebtPayment:
         return RegisterDebtPayment(self._debt_service()).execute(
             debt_id=debt_id,
             wallet_id=wallet_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             payment_date=payment_date,
             description=description,
         )
@@ -860,12 +921,12 @@ class FinancialController:
         self,
         *,
         debt_id: int,
-        amount_kzt: float,
+        amount_base: float,
         payment_date: str,
     ) -> DebtPayment:
         return RegisterDebtWriteOff(self._debt_service()).execute(
             debt_id=debt_id,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             payment_date=payment_date,
         )
 
@@ -899,10 +960,12 @@ class FinancialController:
         return RecalculateDebt(self._debt_service()).execute(debt_id)
 
     def _distribution_service(self) -> DistributionService:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Distribution System is supported only for SQLite repository")
+        repo = self._require_repository_capability(
+            DistributionRepositoryProtocol,
+            "Distribution System is supported only for repositories with distribution capabilities",
+        )
         if self._distribution_service_instance is None:
-            self._distribution_service_instance = DistributionService(self._repository)
+            self._distribution_service_instance = DistributionService(repo)
         return self._distribution_service_instance
 
     def create_distribution_item(
@@ -1003,9 +1066,11 @@ class FinancialController:
         self._distribution_service().replace_structure(list(items), dict(subitems_by_item))
 
     def _balance_service(self) -> BalanceService:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Balance Engine is supported only for SQLite repository")
-        return BalanceService(self._repository, self._currency)
+        repo = self._require_repository_capability(
+            SqlQueryRepository,
+            "Balance Engine is supported only for repositories with SQL query capabilities",
+        )
+        return BalanceService(repo, self._currency)
 
     def get_wallet_balance(self, wallet_id: int, date: str | None = None) -> float:
         return self._balance_service().get_wallet_balance(wallet_id, date=date)
@@ -1026,12 +1091,14 @@ class FinancialController:
         return self._balance_service().get_expenses(start_date, end_date)
 
     def _timeline_service(self) -> TimelineService:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Timeline Engine is supported only for SQLite repository")
-        return TimelineService(self._repository, self._currency)
+        repo = self._require_repository_capability(
+            SqlQueryRepository,
+            "Timeline Engine is supported only for repositories with SQL query capabilities",
+        )
+        return TimelineService(repo, self._currency)
 
     def get_net_worth_timeline(self) -> list:
-        """Net worth (KZT) at end of each month. Returns list[MonthlyNetWorth]."""
+        """Net worth in base currency at the end of each month. Returns list[MonthlyNetWorth]."""
         return self._timeline_service().get_net_worth_timeline()
 
     def get_monthly_cashflow(
@@ -1050,28 +1117,28 @@ class FinancialController:
         return self._timeline_service().get_cumulative_income_expense()
 
     def get_dashboard_payload(self) -> DashboardPayload:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Dashboard is supported only for SQLite repository")
         service = DashboardService(
             self._repository,
             self._asset_service(),
             self._goal_service(),
             self._timeline_service(),
-            current_net_worth_kzt=self.net_worth_fixed(),
+            current_net_worth_base=self.net_worth_fixed(),
         )
         return service.build_payload()
 
     def _metrics_service(self) -> MetricsService:
-        if not isinstance(self._repository, SQLiteRecordRepository):
-            raise TypeError("Metrics Engine is supported only for SQLite repository")
-        return MetricsService(self._repository)
+        repo = self._require_repository_capability(
+            SqlQueryRepository,
+            "Metrics Engine is supported only for repositories with SQL query capabilities",
+        )
+        return MetricsService(repo)
 
     def get_savings_rate(self, start_date: str, end_date: str) -> float:
         """Savings rate (%) for [start_date, end_date]."""
         return self._metrics_service().get_savings_rate(start_date, end_date)
 
     def get_burn_rate(self, start_date: str, end_date: str) -> float:
-        """Average daily expense (KZT) for [start_date, end_date]."""
+        """Average daily expense in base currency for [start_date, end_date]."""
         return self._metrics_service().get_burn_rate(start_date, end_date)
 
     def get_spending_by_category(
@@ -1105,7 +1172,7 @@ class FinancialController:
         return self._metrics_service().get_monthly_summary(start_date=start_date, end_date=end_date)
 
     def get_year_income(self, year: int, *, up_to_date: str | None = None) -> float:
-        """Total income (KZT) for the given calendar year, optionally up to a date."""
+        """Total income in base currency for the given calendar year, optionally up to a date."""
         start = f"{int(year):04d}-01-01"
         end = f"{int(year):04d}-12-31"
         if up_to_date is not None:
@@ -1115,7 +1182,7 @@ class FinancialController:
         return self.get_income(start, end)
 
     def get_year_expense(self, year: int, *, up_to_date: str | None = None) -> float:
-        """Total expenses (KZT) for the given calendar year, optionally up to a date."""
+        """Total expenses in base currency for the given calendar year, optionally up to a date."""
         start = f"{int(year):04d}-01-01"
         end = f"{int(year):04d}-12-31"
         if up_to_date is not None:
@@ -1126,7 +1193,8 @@ class FinancialController:
 
     def get_average_monthly_income(self, year: int, *, up_to_date: str | None = None) -> float:
         """
-        Average monthly income (KZT) for the given calendar year (year-to-date if up_to_date set).
+        Average monthly income in base currency for the given calendar year
+        (year-to-date if up_to_date is set).
         """
         start = f"{int(year):04d}-01-01"
         end = f"{int(year):04d}-12-31"
@@ -1140,25 +1208,25 @@ class FinancialController:
         return round(self.get_income(start, end) / months, 2)
 
     def get_average_monthly_expenses(self, start_date: str, end_date: str) -> float:
-        """Average monthly expenses (KZT) for [start_date, end_date], inclusive."""
+        """Average monthly expenses in base currency for [start_date, end_date], inclusive."""
         months = self._month_count_in_range(start_date, end_date)
         if months <= 0:
             return 0.0
         return round(self.get_expenses(start_date, end_date) / months, 2)
 
-    def convert_kzt_to_usd(self, amount_kzt: float) -> float:
-        """Convert a KZT amount to USD using the configured USD rate (KZT per 1 USD)."""
+    def convert_base_to_usd(self, amount_base: float) -> float:
+        """Convert a base-currency amount to USD using the configured base-per-USD rate."""
         try:
             rate = float(self._currency.get_rate("USD"))
         except ValueError:
             return 0.0
         if rate <= 0:
             return 0.0
-        return round(float(amount_kzt) / rate, 2)
+        return round(float(amount_base) / rate, 2)
 
     def get_time_costs(self, start_date: str, end_date: str) -> tuple[float, float, float]:
         """
-        Cost of day/hour/minute (KZT) based on year expenses up to end_date.
+        Cost of day, hour, and minute in base currency based on year expenses up to end_date.
         """
         del start_date
         end = parse_ymd(end_date)

@@ -2,7 +2,7 @@
 
 Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, тегами, бюджетами, долгами, активами и целями.
 
-Текущий патч `v1.15.2` завершает post-`v1.15.1` stabilization pass: уточняет UX-контракт редактирования сумм в `KZT`, восстанавливает top-level metadata тегов в bulk restore сценариях и унифицирует обслуживание `sqlite_sequence` в import/migration/replace путях.
+Текущая beta-версия `v2.0.0-beta.1` завершает alpha-цикл миграции валютной модели и переводит проект в стадию стабилизации: значения в БД хранятся как `amount_base` / `limit_base` в `base_currency`, `display_currency` управляет только отображением в UI, а shell/runtime orchestration уже вынесен из основных entry-point модулей в более узкие helpers.
 
 ## 🚀 Быстрый старт
 
@@ -14,7 +14,7 @@
 ### Установка
 
 ```bash
-cd "Проект ФУ/project"
+cd "Проект ФУ/FinAccountingApp-dev"
 
 python -m venv .venv
 
@@ -45,18 +45,19 @@ pip install -r requirements-dev.txt
 python main.py
 ```
 
-Приложение запускает Tkinter GUI поверх SQLite runtime-storage. Основные вкладки могут достраиваться лениво, а post-startup maintenance выполняется после первого показа окна.
+Приложение запускает Tkinter GUI поверх SQLite runtime-storage. Вкладки `Infographics` и `Operations` строятся сразу, остальные вкладки достраиваются лениво, а post-startup maintenance и тяжёлые refresh-проходы выполняются после первого показа окна.
 
 ## ✨ Основные возможности
 
 - Учёт доходов, расходов, обязательных платежей и переводов между кошельками
-- Мультивалютные записи с пересчётом в базовую валюту `KZT`
+- Мультивалютные записи с нормализацией в `base_currency` (по умолчанию `KZT`)
+- Двухуровневая валютная модель: `base_currency` для хранения и `display_currency` для отображения
 - Теги операций: свободный ввод, нормализация, автоподсказки, цветовая индикация и sidecar-отображение в журнале
 - Отчёты с fixed-rate и current-rate итогами, grouped view, tag filters и экспортом в `CSV` / `XLSX` / `PDF`
 - Финансовая аналитика: `net worth`, cashflow, category breakdown, tag coverage, monthly summary
 - Бюджеты по категориям и тегам с live progress, pace tracking и forecast-status
 - Учёт долгов и ссуд с историей погашений и write-off сценариями
-- Distribution System для monthly net-income allocation
+- Distribution System для monthly net-income allocation и frozen snapshots
 - Wealth layer: `Assets`, `Goals`, wealth `Dashboard`
 - Full backup / import / migration для `JSON` ↔ `SQLite`
 - Read-only Data Audit Engine для проверки консистентности данных, включая tag integrity
@@ -68,8 +69,15 @@ python main.py
 - Section-aware `JSON` import: records-only restore не затирает несвязанные `debts/assets/goals/budgets`
 - Более безопасная persistence-слой логика: quarantine для битых JSON-файлов, `.error` copies при save-failure, atomic backup/export paths
 - Patch-level stabilization поверх `v1.15.0`: safer import/runtime flows, GUI coordinator split, tighter rollback/durability guarantees
-- Inline editing теперь различает основную сумму `KZT`-операции и `KZT`-эквивалент для non-`KZT` записей, чтобы не вводить пользователя в заблуждение
+- Inline editing различает сумму записи в валюте операции и базовый эквивалент, чтобы не смешивать `display_currency` с persisted base-values
 - Bulk `JSON` restore сохраняет top-level `tags` даже без текущих привязок к операциям
+
+## 💱 Multicurrency Model
+
+- `base_currency` определяет, как нормализованные значения хранятся в SQLite (`amount_base`, `limit_base`), и записывается в `schema_meta`
+- `display_currency` меняет только представление сумм в работающем приложении и переключается из status bar
+- Бизнес-расчёты продолжают работать в базовой валюте; UI-конвертация выполняется через `CurrencyService.to_display(...)`
+- По умолчанию селектор отображения ограничен whitelist-ом `KZT` / `USD` / `EUR` / `RUB`, даже если кэш курсов содержит больше кодов
 
 ## 🖥️ Вкладки приложения
 
@@ -107,6 +115,7 @@ python main.py
 | --- | --- |
 | `gui.controllers.FinancialController` | Главная точка входа для GUI и интеграций верхнего уровня |
 | `app.repository.RecordRepository` | Application-level repository contract для use case-ов |
+| `app.repository_protocols` | Узкие capability-contracts для runtime repository вместо direct concrete typing |
 | `app.import_support.run_import_transaction(...)` | Rollback-safe orchestration между controller/import service и runtime repository |
 | `app.preferences_service` | Сохранение runtime UI preferences: `theme`, `language`, online-mode |
 | `app.audit_runner` | App-level запуск audit-flow из GUI/controller |
@@ -119,6 +128,7 @@ python main.py
 | `services.distribution_service.DistributionService` | Monthly distribution и frozen rows |
 | `infrastructure.sqlite_repository.SQLiteRecordRepository` | Основной runtime repository |
 | `storage.sqlite_storage.SQLiteStorage` | Низкоуровневый SQLite adapter / schema bootstrap |
+| `infrastructure.currency_providers.CurrencyProviderRegistry` | Реестр и extension point для rate providers |
 
 Практические акценты текущего рабочего дерева:
 
@@ -128,6 +138,8 @@ python main.py
 - `gui.startup_coordinator.DeferredStartupCoordinator` — deferred startup, auto-application mandatory payments и post-startup maintenance
 - `gui.status_bar_coordinator.StatusBarCoordinator` — online-mode toggle и периодический status refresh
 - `gui.tab_lifecycle` — lazy tab build и lifecycle dispatch вне основного shell-класса
+- `gui.shell.*` — shell-specific lifecycle/refresh/preferences/status helpers, вынесенные из `gui.tkinter_gui`
+- `CurrencyService.get_available_display_currencies()` — whitelist-aware набор кодов для status-bar switcher вместо полного набора из кэша
 - `FinanceService.get_import_capabilities()` — единая capability-модель для import pipeline вместо ad-hoc проверок по атрибутам
 - `services.import_payload_support`, `services.import_replace_support`, `services.import_execution_support`, `services.import_mandatory_support` — разрезанный import stack вместо одного разросшегося service body
 - `FinancialController.list_tags()` / `search_tags()` / `set_tag_color()` — app-level entry points для tag-aware UI и аналитики
@@ -175,6 +187,7 @@ python main.py
 | `Ctrl+Shift+X` | Отчеты | Экспортировать отчет в XLSX |
 | `Ctrl+Shift+P` | Отчеты | Экспортировать отчет в PDF |
 | `Ctrl+R` | Аналитика | Обновить аналитику (пересчитать метрики) |
+| `Ctrl+T` | Аналитика | Переключить режим тегов |
 | `Enter` | Бюджет | Добавить новый бюджет |
 | `Del` | Бюджет | Удалить выбранный бюджет |
 | `F2` | Бюджет | Редактировать выбранный бюджет |
@@ -262,12 +275,21 @@ python migrate_json_to_sqlite.py --json-path data.json --sqlite-path finance.db
 
 ## 💱 Поддерживаемые валюты
 
-- `KZT` — базовая валюта
-- `RUB`
-- `USD`
-- `EUR`
+- По умолчанию UI-селектор отображения использует `KZT`, `USD`, `EUR`, `RUB`
+- Базовая валюта в текущем beta-конфиге по умолчанию — `KZT`
+- Provider chain может загружать более широкий набор курсов, если это разрешено конфигом и текущим online-provider
 
-Курсы обновляются через `CurrencyService`; offline-mode сохраняет последнее доступное состояние.
+Курсы обновляются через `CurrencyService` и ordered provider chain:
+
+- `NBKProvider` — основной online-источник для `KZT`
+- `ExchangeRateProvider` — fallback provider с API key
+- `CBRProvider` — опциональный provider для `RUB`-base сценариев через Rambler mirror
+- `StaticProvider` — safe fallback без сети
+
+Полезные config points:
+
+- `currency_config.json` — `provider_mode`, `fallback_provider`, `commercial_fallback_provider`, `display_currency_whitelist`
+- env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` — runtime override для `exchange_rate_api_key`
 
 ## 📄 Лицензия
 

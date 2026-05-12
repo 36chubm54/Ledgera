@@ -80,6 +80,7 @@ def test_export_and_import_mandatory_expenses_csv_xlsx():
     expenses = [
         MandatoryExpenseRecord(
             date="2026-03-15",
+            wallet_id=7,
             _amount_init=50.0,
             category="Utilities",
             description="Water",
@@ -88,6 +89,7 @@ def test_export_and_import_mandatory_expenses_csv_xlsx():
         ),
         MandatoryExpenseRecord(
             date="",
+            wallet_id=9,
             _amount_init=120.0,
             category="Internet",
             description="ISP",
@@ -106,6 +108,8 @@ def test_export_and_import_mandatory_expenses_csv_xlsx():
         data, _ = importers.import_mandatory_expenses_from_csv(str(csv_path))
         assert len(data) == len(expenses)
         assert str(data[0].date) == "2026-03-15"
+        assert data[0].wallet_id == 7
+        assert data[1].wallet_id == 9
         assert data[0].auto_pay is True
 
         exporters.export_mandatory_expenses(expenses, str(xlsx_path), "xlsx")
@@ -113,6 +117,8 @@ def test_export_and_import_mandatory_expenses_csv_xlsx():
         data2, _ = importers.import_mandatory_expenses_from_xlsx(str(xlsx_path))
         assert len(data2) == len(expenses)
         assert str(data2[0].date) == "2026-03-15"
+        assert data2[0].wallet_id == 7
+        assert data2[1].wallet_id == 9
         assert data2[0].auto_pay is True
     finally:
         for p in (csv_path, xlsx_path):
@@ -161,7 +167,7 @@ def test_export_records_pipeline_preserves_order_for_csv_and_xlsx():
             amount_original=50.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=50.0,
+            amount_base=50.0,
             category="Food",
         ),
         ExpenseRecord(
@@ -172,7 +178,7 @@ def test_export_records_pipeline_preserves_order_for_csv_and_xlsx():
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             category="Transfer",
             description="Move",
         ),
@@ -184,7 +190,7 @@ def test_export_records_pipeline_preserves_order_for_csv_and_xlsx():
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             category="Transfer",
             description="Move",
         ),
@@ -195,7 +201,7 @@ def test_export_records_pipeline_preserves_order_for_csv_and_xlsx():
             amount_original=100.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=100.0,
+            amount_base=100.0,
             category="Salary",
         ),
     ]
@@ -208,7 +214,7 @@ def test_export_records_pipeline_preserves_order_for_csv_and_xlsx():
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             description="Move",
         )
     ]
@@ -314,7 +320,7 @@ def test_import_full_backup_exposes_debts_and_payments_without_breaking_legacy_u
             amount_original=600.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=600.0,
+            amount_base=600.0,
             category="Loan payment",
         )
 

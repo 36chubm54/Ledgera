@@ -1,5 +1,5 @@
 from domain.budget import Budget, BudgetResult, BudgetStatus, PaceStatus
-from gui.tabs.budget_tab import _visual_budget_state
+from gui.tabs.budget_tab import _normalize_budget_limit_input, _visual_budget_state
 
 
 def _result(*, scope_type: str, status: BudgetStatus, pace_status: PaceStatus) -> BudgetResult:
@@ -9,19 +9,19 @@ def _result(*, scope_type: str, status: BudgetStatus, pace_status: PaceStatus) -
             category="travel",
             start_date="2026-05-01",
             end_date="2026-05-31",
-            limit_kzt=1000.0,
-            limit_kzt_minor=100000,
+            limit_base=1000.0,
+            limit_base_minor=100000,
             include_mandatory=False,
             scope_type=scope_type,
             scope_value="travel",
         ),
-        spent_kzt=600.0,
+        spent_base=600.0,
         spent_minor=60000,
         status=status,
         pace_status=pace_status,
         usage_pct=60.0,
         time_pct=30.0,
-        remaining_kzt=400.0,
+        remaining_base=400.0,
     )
 
 
@@ -47,3 +47,12 @@ def test_visual_budget_state_prefers_budget_status_for_non_active_budgets() -> N
 
     assert _visual_budget_state(future_result) == "future"
     assert _visual_budget_state(expired_result) == "expired"
+
+
+def test_normalize_budget_limit_input_handles_grouping_and_decimal_separators() -> None:
+    assert _normalize_budget_limit_input("15,000") == "15000"
+    assert _normalize_budget_limit_input("15 000") == "15000"
+    assert _normalize_budget_limit_input("15,5") == "15.5"
+    assert _normalize_budget_limit_input("15.5") == "15.5"
+    assert _normalize_budget_limit_input("15.000,25") == "15000.25"
+    assert _normalize_budget_limit_input("15,000.25") == "15000.25"

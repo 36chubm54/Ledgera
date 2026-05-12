@@ -58,7 +58,7 @@ def build_test_db(
                 """
                 INSERT INTO transfers (
                     id, from_wallet_id, to_wallet_id, date, amount_original, currency,
-                    rate_at_operation, amount_kzt, description
+                    rate_at_operation, amount_base, description
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -69,7 +69,7 @@ def build_test_db(
                     transfer["amount_original"],
                     transfer["currency"],
                     transfer["rate_at_operation"],
-                    transfer["amount_kzt"],
+                    transfer["amount_base"],
                     transfer.get("description", ""),
                 ),
             )
@@ -79,7 +79,7 @@ def build_test_db(
                 """
                 INSERT INTO records (
                     id, type, date, wallet_id, transfer_id, related_debt_id,
-                    amount_original, currency, rate_at_operation, amount_kzt,
+                    amount_original, currency, rate_at_operation, amount_base,
                     category, description, period
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -93,7 +93,7 @@ def build_test_db(
                     record["amount_original"],
                     record["currency"],
                     record["rate_at_operation"],
-                    record["amount_kzt"],
+                    record["amount_base"],
                     record.get("category", "General"),
                     record.get("description", ""),
                     record.get("period"),
@@ -174,7 +174,7 @@ def build_test_db(
             conn.execute(
                 """
                 INSERT INTO mandatory_expenses (
-                    id, wallet_id, amount_original, currency, rate_at_operation, amount_kzt,
+                    id, wallet_id, amount_original, currency, rate_at_operation, amount_base,
                     category, description, period, date, auto_pay
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -184,7 +184,7 @@ def build_test_db(
                     expense["amount_original"],
                     expense["currency"],
                     expense["rate_at_operation"],
-                    expense["amount_kzt"],
+                    expense["amount_base"],
                     expense.get("category", "Mandatory"),
                     expense.get("description", "Template"),
                     expense.get("period", "monthly"),
@@ -286,7 +286,7 @@ def _clean_transfers() -> list[dict]:
             "amount_original": 100.0,
             "currency": "KZT",
             "rate_at_operation": 1.0,
-            "amount_kzt": 100.0,
+            "amount_base": 100.0,
             "description": "Transfer",
         }
     ]
@@ -302,7 +302,7 @@ def _clean_records() -> list[dict]:
             "amount_original": 200.0,
             "currency": "KZT",
             "rate_at_operation": 1.0,
-            "amount_kzt": 200.0,
+            "amount_base": 200.0,
             "category": "Salary",
         },
         {
@@ -313,7 +313,7 @@ def _clean_records() -> list[dict]:
             "amount_original": 50.0,
             "currency": "KZT",
             "rate_at_operation": 1.0,
-            "amount_kzt": 50.0,
+            "amount_base": 50.0,
             "category": "Food",
         },
         {
@@ -325,7 +325,7 @@ def _clean_records() -> list[dict]:
             "amount_original": 100.0,
             "currency": "KZT",
             "rate_at_operation": 1.0,
-            "amount_kzt": 100.0,
+            "amount_base": 100.0,
             "category": "Transfer",
         },
         {
@@ -337,7 +337,7 @@ def _clean_records() -> list[dict]:
             "amount_original": 100.0,
             "currency": "KZT",
             "rate_at_operation": 1.0,
-            "amount_kzt": 100.0,
+            "amount_base": 100.0,
             "category": "Transfer",
         },
     ]
@@ -351,7 +351,7 @@ def _clean_mandatory_expenses() -> list[dict]:
             "amount_original": 75.0,
             "currency": "KZT",
             "rate_at_operation": 1.0,
-            "amount_kzt": 75.0,
+            "amount_base": 75.0,
             "category": "Mandatory",
             "description": "Rent",
             "period": "monthly",
@@ -565,7 +565,7 @@ def test_debt_balance_integrity_reports_error(tmp_path: Path) -> None:
             "amount_original": 25.0,
             "currency": "KZT",
             "rate_at_operation": 1.0,
-            "amount_kzt": 25.0,
+            "amount_base": 25.0,
             "category": "Debt payment",
         }
     ]
@@ -627,7 +627,7 @@ def test_transfer_with_three_non_commission_records_reports_error(tmp_path: Path
             "amount_original": 1.0,
             "currency": "KZT",
             "rate_at_operation": 1.0,
-            "amount_kzt": 1.0,
+            "amount_base": 1.0,
             "category": "Transfer",
         }
     ]
@@ -650,7 +650,7 @@ def test_commission_record_is_excluded_from_transfer_pair_count(tmp_path: Path) 
             "amount_original": 2.0,
             "currency": "KZT",
             "rate_at_operation": 1.0,
-            "amount_kzt": 2.0,
+            "amount_base": 2.0,
             "category": "Commission",
         }
     ]
@@ -664,7 +664,7 @@ def test_commission_record_is_excluded_from_transfer_pair_count(tmp_path: Path) 
 
 def test_transfer_amount_alignment_reports_error(tmp_path: Path) -> None:
     transfers = _clean_transfers()
-    transfers[0]["amount_kzt"] = 101.0
+    transfers[0]["amount_base"] = 101.0
     repo, report = _run_audit(tmp_path, transfers=transfers)
     try:
         findings = _findings_by_check(report, "transfer_amount_alignment")
@@ -675,7 +675,7 @@ def test_transfer_amount_alignment_reports_error(tmp_path: Path) -> None:
 
 def test_amount_inconsistency_reports_warning(tmp_path: Path) -> None:
     records = _clean_records()
-    records[0]["amount_kzt"] = 200.05
+    records[0]["amount_base"] = 200.05
     repo, report = _run_audit(tmp_path, records=records)
     try:
         findings = _findings_by_check(report, "amount_consistency")
@@ -708,7 +708,7 @@ def test_negative_rate_reports_error(tmp_path: Path) -> None:
 
 def test_non_positive_amount_reports_error(tmp_path: Path) -> None:
     mandatory_expenses = _clean_mandatory_expenses()
-    mandatory_expenses[0]["amount_kzt"] = 0.0
+    mandatory_expenses[0]["amount_base"] = 0.0
     repo, report = _run_audit(tmp_path, mandatory_expenses=mandatory_expenses)
     try:
         findings = _findings_by_check(report, "amount_positivity")
@@ -836,7 +836,7 @@ def test_audit_report_summary_format(tmp_path: Path) -> None:
 
 def test_audit_report_is_clean_false_when_errors_exist(tmp_path: Path) -> None:
     records = _clean_records()
-    records[0]["amount_kzt"] = 0.0
+    records[0]["amount_base"] = 0.0
     repo, report = _run_audit(tmp_path, records=records)
     try:
         assert report.is_clean is False

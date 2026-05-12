@@ -1,26 +1,61 @@
-import ctypes
 import logging
-import os
 import tkinter as tk
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
-from tkinter import TclError, ttk
+from tkinter import ttk
 from typing import Any, cast
 
 from app.services import CurrencyService
 from bootstrap import bootstrap_repository
 from domain.import_policy import ImportPolicy
 from gui.controllers import FinancialController
-from gui.hotkeys import _show_hotkey_help, register_hotkeys
-from gui.i18n import get_available_languages, get_language, set_language, tr
-from gui.record_colors import KIND_TO_FOREGROUND, foreground_for_kind
+from gui.hotkeys import register_hotkeys
+from gui.i18n import set_language, tr
 from gui.runtime_coordinator import AfterOwner, UiRuntimeCoordinator
+from gui.shell.shell_lifecycle import ensure_tab_built, handle_tab_changed, schedule_deferred_action
+from gui.shell.shell_notebook import render_notebook_underline
+from gui.shell.shell_notebook import (
+    schedule_notebook_underline as schedule_notebook_underline_render,
+)
+from gui.shell.shell_preferences import (
+    handle_owner_display_currency_change,
+    handle_owner_language_change,
+    handle_owner_theme_change,
+    reload_ui_strings,
+)
+from gui.shell.shell_records import (
+    hide_owner_records_tooltip,
+    refresh_owner_record_views,
+    show_owner_records_tooltip,
+)
+from gui.shell.shell_refresh import (
+    refresh_owner_all,
+    refresh_owner_budgets,
+    refresh_owner_display_currency_views,
+    refresh_owner_theme_surfaces,
+    refresh_owner_wallet_views,
+)
+from gui.shell.shell_runtime import run_background_task, set_busy_state
+from gui.shell.shell_setup import attach_tab_aliases, initialize_shell_state
+from gui.shell.shell_startup import report_startup_auto_payments
+from gui.shell.shell_state import (
+    apply_saved_ui_preferences,
+    assign_status_bar_state,
+    rebuild_status_bar,
+    reset_tab_bindings_state,
+)
+from gui.shell.shell_support import resolve_import_policy
+from gui.shell.shell_tabs import apply_tab_titles, rebuild_built_tabs
+from gui.shell.shell_window import apply_window_icon, configure_main_window
 from gui.startup_coordinator import DeferredStartupCoordinator
+from gui.status_bar_builder import build_status_bar
 from gui.status_bar_coordinator import StatusBarCoordinator, StatusBarOwner
 from gui.tab_lifecycle import TAB_ORDER, TabBuildContext, attach_tabs, build_tab, create_tab_frames
-from gui.tabs.infographics_tab import draw_expense_pie, update_pie_month_options
-from gui.tooltip import show_popup_tooltip
+from gui.tabs.infographics_support import (
+    handle_chart_filter_change,
+    refresh_owner_infographics,
+    scroll_owner_legend_canvas,
+)
 from gui.ui_helpers import show_error, show_info
 from gui.ui_text import app_title, get_import_formats, get_tab_titles
 from gui.ui_theme import (
@@ -32,103 +67,83 @@ from gui.ui_theme import (
     get_theme,
     refresh_treeview_zebra,
 )
-from utils.charting import (
-    aggregate_daily_cashflow,
-    aggregate_monthly_cashflow,
-    extract_months,
-    extract_years,
-)
-from utils.tag_utils import color_for_tag
-from version import __version__
 
 logger = logging.getLogger(__name__)
 
 
-def _enable_windows_dpi_awareness() -> None:
-    """Enable high-DPI awareness early so Tk and native file dialogs stay sharp."""
-    if os.name != "nt":
-        return
-    errors: list[str] = []
-
-    try:
-        user32 = ctypes.windll.user32
-    except Exception as exc:
-        logger.debug("DPI awareness skipped: user32 is unavailable: %s", exc)
-        return
-
-    try:
-        # Best quality on modern Windows: Per-Monitor v2.
-        if hasattr(user32, "SetProcessDpiAwarenessContext"):
-            per_monitor_v2 = ctypes.c_void_p(-4)
-            if user32.SetProcessDpiAwarenessContext(per_monitor_v2):
-                logger.debug("DPI awareness enabled via SetProcessDpiAwarenessContext(PMv2).")
-                return
-            errors.append("SetProcessDpiAwarenessContext returned 0")
-    except Exception as exc:
-        errors.append(f"SetProcessDpiAwarenessContext failed: {exc}")
-
-    try:
-        # Fallback for Windows 8.1+.
-        shcore = ctypes.windll.shcore
-        if hasattr(shcore, "SetProcessDpiAwareness"):
-            # 2 == PROCESS_PER_MONITOR_DPI_AWARE
-            shcore.SetProcessDpiAwareness(2)
-            logger.debug("DPI awareness enabled via SetProcessDpiAwareness(2).")
-            return
-        errors.append("SetProcessDpiAwareness is unavailable")
-    except Exception as exc:
-        errors.append(f"SetProcessDpiAwareness failed: {exc}")
-
-    try:
-        # Legacy fallback for older Windows versions.
-        if hasattr(user32, "SetProcessDPIAware"):
-            user32.SetProcessDPIAware()
-            logger.debug("DPI awareness enabled via SetProcessDPIAware().")
-            return
-        errors.append("SetProcessDPIAware is unavailable")
-    except Exception as exc:
-        errors.append(f"SetProcessDPIAware failed: {exc}")
-
-    if errors:
-        logger.warning("DPI awareness was not enabled. Details: %s", " | ".join(errors))
-
-
 class FinancialApp(tk.Tk):
+    _record_id_to_repo_index: dict[str, int]
+    _record_id_to_domain_id: dict[str, int]
+    _record_id_to_description: dict[str, str]
+    _chart_refresh_suspended: bool
+    _built_tabs: set[str]
+    _analytics_bindings: Any | None
+    _dashboard_bindings: Any | None
+    _budget_bindings: Any | None
+    _debt_bindings: Any | None
+    _distribution_bindings: Any | None
+    _operations_bindings: Any | None
+    _reports_tab: Any | None
+    _settings_bindings: Any | None
+    _after_jobs: dict[str, str]
+    _online_var: tk.BooleanVar | None
+    _currency_status_label: ttk.Label | None
+    _price_status_label: ttk.Label | None
+    _display_currency_var: tk.StringVar | None
+    _display_currency_combo: ttk.Combobox | None
+    _language_var: tk.StringVar | None
+    _language_combo: ttk.Combobox | None
+    _theme_var: tk.StringVar | None
+    _theme_combo: ttk.Combobox | None
+    _theme_label_to_key: dict[str, str]
+    _reload_tabs_pending: bool
+    _online_toggle_running: bool
+    _hotkey_help_dialog: tk.Toplevel | None
+    _hotkeys_registered: bool
+    _records_tooltip_window: tk.Toplevel | None
+    _records_tooltip_text: str
+    records_tree: ttk.Treeview | None
+    record_tags_tree: ttk.Treeview | None
+    refresh_operation_wallet_menu: Callable[[], None] | None
+    refresh_transfer_wallet_menus: Callable[[], None] | None
+    refresh_wallets: Callable[[], None] | None
+    refresh_budgets: Callable[[], None] | None
+    refresh_all: Callable[[], None] | None
+    pie_month_var: tk.StringVar | None
+    pie_month_menu: ttk.Combobox | None
+    chart_month_var: tk.StringVar | None
+    chart_month_menu: ttk.Combobox | None
+    chart_year_var: tk.StringVar | None
+    chart_year_menu: ttk.Combobox | None
+    expense_pie_canvas: tk.Canvas | None
+    expense_legend_canvas: tk.Canvas | None
+    expense_legend_frame: tk.Frame | None
+    daily_bar_canvas: tk.Canvas | None
+    monthly_bar_canvas: tk.Canvas | None
+
     def __init__(self) -> None:
         super().__init__()
 
         icons_dir = Path(__file__).resolve().parent / "assets" / "icons"
-        ico_path = icons_dir / "app.ico"
-        png_path = icons_dir / "app.png"
-
-        try:
-            # Windows native icon
-            if ico_path.exists():
-                self.iconbitmap(default=str(ico_path))
-        except (TclError, OSError):
-            pass
-
-        try:
-            # Tk fallback (and for other OS)
-            if png_path.exists():
-                app_icon = tk.PhotoImage(file=str(png_path))
-                self.iconphoto(True, app_icon)
-                self._app_icon_ref = app_icon  # so that GC does not gather
-        except (TclError, OSError):
-            pass
-
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-        min_width = min(1640, int(screen_w * 0.9))
-        min_height = min(1080, int(screen_h * 0.87))
-        self.geometry(f"{min_width}x{min_height}")
-        self.minsize(min_width, min_height)
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        apply_window_icon(self, icons_dir=icons_dir)
+        configure_main_window(self)
 
         self.repository = bootstrap_repository(run_maintenance=False)
-        self.currency = CurrencyService()
+        base_currency = "KZT"
+        get_schema_meta = getattr(self.repository, "get_schema_meta", None)
+        if callable(get_schema_meta):
+            base_currency = str(get_schema_meta("base_currency") or "KZT").upper()
+        self.currency = CurrencyService(base=base_currency)
         self.controller = FinancialController(self.repository, self.currency)
-        self._apply_saved_ui_preferences()
+        apply_saved_ui_preferences(
+            self,
+            controller=self.controller,
+            set_language=set_language,
+            bootstrap_ui=bootstrap_ui,
+            get_theme=get_theme,
+            default_theme=DEFAULT_THEME,
+            logger=logger,
+        )
         self._import_formats = get_import_formats()
         self.title(app_title())
         self.grid_columnconfigure(0, weight=1)
@@ -137,67 +152,51 @@ class FinancialApp(tk.Tk):
         self._runtime = UiRuntimeCoordinator(cast(AfterOwner, self))
         self._status = StatusBarCoordinator(cast(StatusBarOwner, self), logger=logger)
         self._busy = False
+
+        def _refresh_charts_deferred(records: list[Any] | None = None) -> None:
+            schedule_deferred_action(
+                self._schedule_after_idle,
+                "startup_refresh_charts",
+                lambda: self._refresh_charts(records=records),
+            )
+
+        def _refresh_budgets_deferred() -> None:
+            schedule_deferred_action(
+                self._schedule_after_idle,
+                "startup_refresh_budgets",
+                self._refresh_budgets,
+            )
+
+        def _refresh_all_deferred() -> None:
+            schedule_deferred_action(
+                self._schedule_after_idle,
+                "startup_refresh_all",
+                self._refresh_all,
+            )
+
         self._startup = DeferredStartupCoordinator(
             controller=self.controller,
             repository=self.repository,
             run_background=self._run_background,
             refresh_list=self._refresh_list,
-            refresh_charts=self._refresh_charts,
-            refresh_budgets=self._refresh_budgets,
-            refresh_all=self._refresh_all,
+            refresh_charts=_refresh_charts_deferred,
+            refresh_budgets=_refresh_budgets_deferred,
+            refresh_all=_refresh_all_deferred,
             apply_saved_online_mode=self._apply_saved_online_mode,
-            show_auto_payment_message=self._show_startup_auto_payment_message,
+            show_auto_payment_message=lambda created_auto_payments: report_startup_auto_payments(
+                created_auto_payments,
+                logger=logger,
+                format_money=lambda amount: self.controller.format_display_money(amount),
+                show_info_message=lambda message: show_info(
+                    message,
+                    title=tr("app.autopay.title", "Автоплатежи применены"),
+                ),
+            ),
             logger=logger,
         )
-        self._record_id_to_repo_index: dict[str, int] = {}
-        self._record_id_to_domain_id: dict[str, int] = {}
-        self._record_id_to_description: dict[str, str] = {}
-        self._chart_refresh_suspended = False
-        self._built_tabs: set[str] = set()
-        self._analytics_bindings: Any | None = None
-        self._dashboard_bindings: Any | None = None
-        self._budget_bindings: Any | None = None
-        self._debt_bindings: Any | None = None
-        self._distribution_bindings: Any | None = None
-        self._operations_bindings: Any | None = None
-        self._reports_tab: Any | None = None
+        initialize_shell_state(self, after_jobs=self._runtime.after_jobs)
 
-        self.records_tree: ttk.Treeview | None = None
-        self.record_tags_tree: ttk.Treeview | None = None
-        self.refresh_operation_wallet_menu: Callable[[], None] | None = None
-        self.refresh_transfer_wallet_menus: Callable[[], None] | None = None
-        self.refresh_wallets: Callable[[], None] | None = None
-        self.refresh_budgets: Callable[[], None] | None = None
-        self.refresh_all: Callable[[], None] | None = None
-        self._after_jobs = self._runtime.after_jobs
-        self._online_var: tk.BooleanVar | None = None
-        self._currency_status_label: ttk.Label | None = None
-        self._price_status_label: ttk.Label | None = None
-        self._language_var: tk.StringVar | None = None
-        self._language_combo: ttk.Combobox | None = None
-        self._theme_var: tk.StringVar | None = None
-        self._theme_combo: ttk.Combobox | None = None
-        self._theme_label_to_key: dict[str, str] = {}
-        self._reload_tabs_pending = False
-        self._online_toggle_running = False
-        self._hotkey_help_dialog: tk.Toplevel | None = None
-        self._hotkeys_registered = False
-        self._records_tooltip_window: tk.Toplevel | None = None
-        self._records_tooltip_text = ""
-
-        self.pie_month_var: tk.StringVar | None = None
-        self.pie_month_menu: ttk.Combobox | None = None
-        self.chart_month_var: tk.StringVar | None = None
-        self.chart_month_menu: ttk.Combobox | None = None
-        self.chart_year_var: tk.StringVar | None = None
-        self.chart_year_menu: ttk.Combobox | None = None
-        self.expense_pie_canvas: tk.Canvas | None = None
-        self.expense_legend_canvas: tk.Canvas | None = None
-        self.expense_legend_frame: tk.Frame | None = None
-        self.daily_bar_canvas: tk.Canvas | None = None
-        self.monthly_bar_canvas: tk.Canvas | None = None
-
-        self._status_bar = self._build_status_bar()
+        self._status_bar = assign_status_bar_state(self, build_status_bar(self))
         self._status_bar.grid(row=2, column=0, sticky="ew")
 
         notebook = ttk.Notebook(self)
@@ -213,15 +212,7 @@ class FinancialApp(tk.Tk):
 
         self._tab_order = list(TAB_ORDER)
         self._tab_widgets = create_tab_frames(notebook)
-        self.tab_infographics = self._tab_widgets["infographics"]
-        self.tab_operations = self._tab_widgets["operations"]
-        self.tab_reports = self._tab_widgets["reports"]
-        self.tab_analytics = self._tab_widgets["analytics"]
-        self.tab_dashboard = self._tab_widgets["dashboard"]
-        self.tab_budget = self._tab_widgets["budget"]
-        self.tab_debts = self._tab_widgets["debts"]
-        self.tab_distribution = self._tab_widgets["distribution"]
-        self.tab_settings = self._tab_widgets["settings"]
+        attach_tab_aliases(self, self._tab_widgets)
         self._tab_keys_by_widget = attach_tabs(notebook, self._tab_widgets)
         notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed, add="+")
         notebook.bind("<Configure>", lambda _event: self._schedule_notebook_underline(), add="+")
@@ -236,7 +227,7 @@ class FinancialApp(tk.Tk):
         self.progress.grid_remove()
         self._schedule_notebook_underline()
 
-        self._schedule_after_idle("deferred_startup", self._start_deferred_startup)
+        self._schedule_after_idle("deferred_startup", self._startup.start)
 
     def destroy(self) -> None:
         self._runtime.shutdown()
@@ -257,89 +248,51 @@ class FinancialApp(tk.Tk):
     def _schedule_after_idle(self, key: str, callback: Callable[[], None]) -> str:
         return self._runtime.schedule_after_idle(key, callback)
 
-    def _apply_saved_ui_preferences(self) -> None:
-        saved_language = self.controller.load_language_preference()
-        if saved_language:
-            try:
-                set_language(saved_language)
-            except ValueError:
-                logger.warning("Unsupported saved language preference: %s", saved_language)
-        saved_theme = self.controller.load_theme_preference()
-        bootstrap_ui(self, saved_theme or get_theme() or DEFAULT_THEME)
-
-    def _reset_tab_bindings(self) -> None:
-        self._hide_records_tooltip()
-        self.records_tree = None
-        self.record_tags_tree = None
-        self.refresh_operation_wallet_menu = None
-        self.refresh_transfer_wallet_menus = None
-        self.refresh_wallets = None
-        self.refresh_budgets = None
-        self.refresh_all = None
-        self._operations_bindings = None
-        self._reports_tab = None
-        self._analytics_bindings = None
-        self._dashboard_bindings = None
-        self._budget_bindings = None
-        self._debt_bindings = None
-        self._distribution_bindings = None
-        self.pie_month_var = None
-        self.pie_month_menu = None
-        self.chart_month_var = None
-        self.chart_month_menu = None
-        self.chart_year_var = None
-        self.chart_year_menu = None
-        self.expense_pie_canvas = None
-        self.expense_legend_canvas = None
-        self.expense_legend_frame = None
-        self.daily_bar_canvas = None
-        self.monthly_bar_canvas = None
-
     def _rebuild_status_bar(self) -> None:
-        if hasattr(self, "_status_bar") and self._status_bar is not None:
-            try:
-                self._status_bar.destroy()
-            except (TclError, RuntimeError):
-                pass
-        self._status_bar = self._build_status_bar()
-        self._status_bar.grid(row=2, column=0, sticky="ew")
-        self._refresh_status_bar()
+        self._status_bar = rebuild_status_bar(
+            self,
+            build_status_bar_result=build_status_bar,
+            refresh_status_bar=self._refresh_status_bar,
+        )
 
     def _rebuild_built_tabs(self) -> None:
         if not hasattr(self, "_notebook"):
             return
-        selected = self._notebook.select()
-        selected_key = self._tab_keys_by_widget.get(str(selected))
-        built_keys = [key for key in self._tab_order if key in self._built_tabs]
-        for key in built_keys:
-            frame = self._tab_widgets[key]
-            for child in frame.winfo_children():
-                child.destroy()
-        self._built_tabs.clear()
-        self._reset_tab_bindings()
-        for key in built_keys:
-            self._ensure_tab_built(key)
-        if selected_key in self._tab_widgets:
-            self._notebook.select(self._tab_widgets[selected_key])
-        if "operations" in built_keys:
-            self._refresh_list()
-        if "infographics" in built_keys:
-            self._refresh_charts()
-        if "budget" in built_keys:
-            self._refresh_budgets()
-        if "distribution" in built_keys:
-            self._refresh_all()
+        rebuild_built_tabs(
+            notebook=self._notebook,
+            tab_keys_by_widget=self._tab_keys_by_widget,
+            tab_order=self._tab_order,
+            built_tabs=self._built_tabs,
+            tab_widgets=self._tab_widgets,
+            reset_tab_bindings=lambda: reset_tab_bindings_state(
+                self,
+                hide_records_tooltip=self._hide_records_tooltip,
+            ),
+            ensure_tab_built=self._ensure_tab_built,
+            refresh_operations=self._refresh_list,
+            refresh_infographics=self._refresh_charts,
+            refresh_budgets=self._refresh_budgets,
+            refresh_distribution=self._refresh_all,
+        )
 
     def reload_strings(self, *, rebuild_tabs: bool = False) -> None:
-        self._import_formats = get_import_formats()
-        self.title(app_title())
-        if hasattr(self, "_notebook"):
-            tab_titles = get_tab_titles()
-            for key, tab_widget in self._tab_widgets.items():
-                self._notebook.tab(tab_widget, text=tab_titles[key])
-        self._rebuild_status_bar()
-        if rebuild_tabs:
-            self._rebuild_built_tabs()
+        reload_ui_strings(
+            set_import_formats=lambda: setattr(self, "_import_formats", get_import_formats()),
+            set_title=self.title,
+            title_text=app_title(),
+            apply_tab_titles=lambda: (
+                apply_tab_titles(
+                    self._notebook,
+                    self._tab_widgets,
+                    tab_titles=get_tab_titles(),
+                )
+                if hasattr(self, "_notebook")
+                else None
+            ),
+            rebuild_status_bar=self._rebuild_status_bar,
+            rebuild_tabs=rebuild_tabs,
+            rebuild_built_tabs=self._rebuild_built_tabs,
+        )
 
     def _schedule_reload_strings(self, *, rebuild_tabs: bool = False) -> None:
         self._reload_tabs_pending = self._reload_tabs_pending or rebuild_tabs
@@ -354,106 +307,45 @@ class FinancialApp(tk.Tk):
         self._schedule_after_idle("reload_strings", _run)
 
     def _on_language_changed(self, _event: tk.Event | None = None) -> None:
-        if self._language_var is None:
-            return
-        selected = str(self._language_var.get() or "").strip().lower()
-        if not selected or selected == get_language():
-            return
-        try:
-            set_language(selected)
-        except ValueError:
-            logger.warning("Unsupported language selected: %s", selected)
-            return
-        self.controller.save_language_preference(selected)
-        self._schedule_reload_strings(rebuild_tabs=True)
+        handle_owner_language_change(self, set_language=set_language, logger=logger)
 
     def _on_theme_changed(self, _event: tk.Event | None = None) -> None:
-        if self._theme_var is None:
-            return
-        selected_label = str(self._theme_var.get() or "")
-        selected_theme = self._theme_label_to_key.get(selected_label, DEFAULT_THEME)
-        if selected_theme == get_theme():
-            return
-        bootstrap_ui(self, selected_theme)
-        self._schedule_notebook_underline()
-        self.controller.save_theme_preference(selected_theme)
-        self._refresh_theme_surfaces()
+        handle_owner_theme_change(self, bootstrap_ui=lambda theme: bootstrap_ui(self, theme))
 
     def _schedule_notebook_underline(self) -> None:
-        self._schedule_after_idle("notebook_underline", self._render_notebook_underline)
+        schedule_notebook_underline_render(
+            schedule_after_idle=self._schedule_after_idle,
+            render_callback=self._render_notebook_underline,
+        )
 
     def _render_notebook_underline(self) -> None:
         if not hasattr(self, "_notebook") or not hasattr(self, "_notebook_underline"):
             return
         palette = get_palette()
-        self._notebook_underline.configure(bg=palette.background)
         try:
-            current_index = self._notebook.index("current")
-            bbox_result = self._notebook.bbox(current_index)
-            if bbox_result is None:
-                self._notebook_underline.place_forget()
-                return
-            x, y, width, height = bbox_result
-        except (TclError, tk.TclError):
+            render_notebook_underline(
+                notebook=self._notebook,
+                canvas=self._notebook_underline,
+                background=palette.background,
+                line_color=palette.tab_underline,
+                horizontal_padding=PAD_SM,
+            )
+        except tk.TclError:
             self._notebook_underline.place_forget()
-            return
-        if width <= 0 or height <= 0:
-            self._notebook_underline.place_forget()
-            return
-        line_y = max(height - 2, 1)
-        self._notebook_underline.place(in_=self._notebook, x=0, y=y + line_y, relwidth=1, height=3)
-        self._notebook_underline.delete("all")
-        start_x = x + PAD_SM
-        end_x = x + max(width - PAD_SM, PAD_SM)
-        self._notebook_underline.create_line(
-            start_x,
-            1,
-            end_x,
-            1,
-            fill=palette.tab_underline,
-            width=2,
-            capstyle=tk.ROUND,
-        )
-        self._notebook_underline.lift(self._notebook)  # type: ignore[arg-type]
 
     def _refresh_theme_surfaces(self) -> None:
-        self._refresh_status_bar()
-        if self.records_tree is not None:
-            self._refresh_list()
-            refresh_treeview_zebra(self.records_tree)
-        if "infographics" in self._built_tabs:
-            self._refresh_charts()
-        analytics_refresh = getattr(self._analytics_bindings, "refresh", None)
-        if callable(analytics_refresh):
-            analytics_refresh()
-        dashboard_refresh = getattr(self._dashboard_bindings, "refresh", None)
-        if callable(dashboard_refresh):
-            dashboard_refresh()
-        if callable(self.refresh_budgets):
-            self.refresh_budgets()
-        debt_refresh = getattr(self._debt_bindings, "refresh", None)
-        if callable(debt_refresh):
-            debt_refresh()
-        if callable(self.refresh_all):
-            self.refresh_all()
+        refresh_owner_theme_surfaces(
+            self,
+            refresh_tree_zebra=lambda: refresh_treeview_zebra(
+                cast(ttk.Treeview, self.records_tree)
+            ),
+        )
+
+    def _refresh_display_currency_views(self) -> None:
+        refresh_owner_display_currency_views(self)
 
     def _set_busy(self, busy: bool, message: str = "") -> None:
-        self._busy = busy
-        try:
-            self.attributes("-disabled", busy)
-        except TclError:
-            pass
-        if busy:
-            self.progress.grid()
-            self.progress.start(12)
-            base_title = app_title()
-            self.title(f"{base_title} - {message}" if message else base_title)
-            self.config(cursor="watch")
-        else:
-            self.progress.stop()
-            self.progress.grid_remove()
-            self.title(app_title())
-            self.config(cursor="")
+        set_busy_state(self, busy=busy, message=message, base_title=app_title())
 
     def _run_background(
         self,
@@ -464,7 +356,8 @@ class FinancialApp(tk.Tk):
         busy_message: str = tr("app.busy.default", "Выполняется операция..."),
         block_ui: bool = True,
     ) -> None:
-        self._runtime.run_background(
+        run_background_task(
+            self._runtime,
             task,
             on_success=on_success,
             on_error=on_error,
@@ -472,7 +365,7 @@ class FinancialApp(tk.Tk):
             block_ui=block_ui,
             is_busy=lambda: self._busy,
             set_busy=self._set_busy,
-            show_info=lambda _token: show_info(
+            show_wait_info=lambda _token: show_info(
                 tr("app.wait_running", "Дождитесь завершения текущей операции."),
                 title=tr("app.wait", "Подождите"),
             ),
@@ -480,115 +373,14 @@ class FinancialApp(tk.Tk):
             logger=logger,
         )
 
-    def _build_status_bar(self) -> ttk.Frame:
-        bar = ttk.Frame(self, style="StatusBar.TFrame", padding=(PAD_SM, 3))
-        bar.grid_columnconfigure(5, weight=1)
-        self._online_var = tk.BooleanVar(value=False)
-        online_check = ttk.Checkbutton(
-            bar,
-            text=tr("app.status.online", "Онлайн"),
-            variable=self._online_var,
-            command=self._on_online_toggle,
-            style="StatusBar.TCheckbutton",
-        )
-        online_check.grid(row=0, column=0, sticky="w", padx=(PAD_SM, PAD_SM), pady=4)
-        ttk.Separator(bar, orient=tk.VERTICAL, style="StatusBar.TSeparator").grid(
-            row=0, column=1, sticky="ns", pady=5, padx=(0, PAD_SM)
-        )
-        self._currency_status_label = ttk.Label(
-            bar,
-            text=tr("app.status.currency_offline", "Курсы: офлайн"),
-            anchor="w",
-            style="StatusBar.TLabel",
-        )
-        self._currency_status_label.grid(row=0, column=2, sticky="w", padx=(0, PAD_SM), pady=4)
-        ttk.Separator(bar, orient=tk.VERTICAL, style="StatusBar.TSeparator").grid(
-            row=0, column=3, sticky="ns", pady=5, padx=(0, PAD_SM)
-        )
-        self._price_status_label = ttk.Label(
-            bar,
-            text=tr("app.status.prices_local", "Цены активов: локально"),
-            anchor="w",
-            style="StatusBar.TLabel",
-        )
-        self._price_status_label.grid(row=0, column=4, sticky="w", padx=(0, PAD_SM), pady=4)
-        ttk.Separator(bar, orient=tk.VERTICAL, style="StatusBar.TSeparator").grid(
-            row=0, column=5, sticky="ns", pady=5, padx=(0, PAD_SM)
-        )
-        ttk.Label(
-            bar,
-            text=tr("common.language", "Язык:"),
-            style="StatusBarMuted.TLabel",
-        ).grid(row=0, column=6, sticky="w", padx=(0, 6), pady=4)
-        language_codes = [code.upper() for code in get_available_languages()] or ["RU"]
-        current_language = get_language().upper()
-        if current_language not in language_codes:
-            language_codes.insert(0, current_language)
-        self._language_var = tk.StringVar(value=current_language)
-        self._language_combo = ttk.Combobox(
-            bar,
-            textvariable=self._language_var,
-            values=language_codes,
-            width=max(4, min(6, max(len(code) for code in language_codes))),
-            state="readonly",
-            style="StatusBar.TCombobox",
-        )
-        self._language_combo.grid(row=0, column=7, sticky="w", padx=(0, PAD_SM), pady=2)
-        self._language_combo.bind("<<ComboboxSelected>>", self._on_language_changed, add="+")
-        ttk.Separator(bar, orient=tk.VERTICAL, style="StatusBar.TSeparator").grid(
-            row=0, column=8, sticky="ns", pady=5, padx=(0, PAD_SM)
-        )
-        ttk.Label(
-            bar,
-            text=tr("common.theme", "Тема:"),
-            style="StatusBarMuted.TLabel",
-        ).grid(row=0, column=9, sticky="w", padx=(0, 6), pady=4)
-        self._theme_label_to_key = {
-            tr("app.theme.light", "Светлая"): "light",
-            tr("app.theme.dark", "Темная"): "dark",
-        }
-        theme_labels = list(self._theme_label_to_key.keys())
-        current_theme_label = next(
-            (label for label, key in self._theme_label_to_key.items() if key == get_theme()),
-            theme_labels[0],
-        )
-        self._theme_var = tk.StringVar(value=current_theme_label)
-        self._theme_combo = ttk.Combobox(
-            bar,
-            textvariable=self._theme_var,
-            values=theme_labels,
-            width=max(10, max(len(label) for label in theme_labels)),
-            state="readonly",
-            style="StatusBar.TCombobox",
-        )
-        self._theme_combo.grid(row=0, column=10, sticky="w", padx=(0, PAD_SM), pady=2)
-        self._theme_combo.bind("<<ComboboxSelected>>", self._on_theme_changed, add="+")
-        ttk.Separator(bar, orient=tk.VERTICAL, style="StatusBar.TSeparator").grid(
-            row=0, column=11, sticky="ns", pady=5, padx=(0, PAD_SM)
-        )
-        ttk.Label(
-            bar,
-            text=tr("app.status.version", "v{version}", version=__version__),
-            style="StatusBarMuted.TLabel",
-        ).grid(row=0, column=12, sticky="e", padx=(0, PAD_SM), pady=4)
-        ttk.Separator(bar, orient=tk.VERTICAL, style="StatusBar.TSeparator").grid(
-            row=0, column=13, sticky="ns", pady=5, padx=(0, 4)
-        )
-        ttk.Button(
-            bar,
-            text=tr("app.status.hotkeys_help", "?"),
-            style="StatusBar.TButton",
-            command=lambda: _show_hotkey_help(self),
-            takefocus=False,
-            width=1,
-        ).grid(row=0, column=14, sticky="e", padx=(0, 6), pady=2)
-        return bar
-
     def _on_online_toggle(self) -> None:
         self._status.on_online_toggle()
 
     def _refresh_status_bar(self) -> None:
         self._status.refresh_status_bar()
+
+    def _on_display_currency_changed(self, _event: tk.Event | None = None) -> None:
+        handle_owner_display_currency_change(self)
 
     def _start_status_refresh_timer(self) -> None:
         self._status.start_status_refresh_timer()
@@ -597,462 +389,51 @@ class FinancialApp(tk.Tk):
         self._status.apply_saved_online_mode()
 
     def _import_policy_from_ui(self, mode_label: str) -> ImportPolicy:
-        mapping = {
-            "operations.mode.replace": ImportPolicy.FULL_BACKUP,
-            "operations.mode.legacy": ImportPolicy.LEGACY,
-            "operations.mode.current_rate": ImportPolicy.CURRENT_RATE,
-        }
-        if mode_label in mapping:
-            return mapping[mode_label]
-        if mode_label == tr("operations.mode.replace", "Полная замена"):
-            return ImportPolicy.FULL_BACKUP
-        if mode_label == tr("operations.mode.legacy", "Наследуемый импорт"):
-            return ImportPolicy.LEGACY
-        if mode_label == tr("operations.mode.current_rate", "По текущему курсу"):
-            return ImportPolicy.CURRENT_RATE
-        return ImportPolicy.CURRENT_RATE
+        return resolve_import_policy(mode_label)
 
     def _refresh_list(self, records: list[Any] | None = None) -> None:
-        if self.records_tree is None:
-            return
-        for iid in self.records_tree.get_children():
-            self.records_tree.delete(iid)
-        if self.record_tags_tree is not None:
-            for iid in self.record_tags_tree.get_children():
-                self.record_tags_tree.delete(iid)
-        self._record_id_to_repo_index = {}
-        self._record_id_to_domain_id = {}
-        self._record_id_to_description = {}
-        for kind, color in KIND_TO_FOREGROUND.items():
-            try:
-                self.records_tree.tag_configure(kind, foreground=color)
-            except TclError:
-                pass
-
-        list_items = (
-            self.controller.build_record_list_items(records)
-            if records is not None
-            else self.controller.build_record_list_items()
-        )
-        tag_color_map = {
-            str(getattr(tag, "name", "") or ""): str(getattr(tag, "color", "") or "")
-            for tag in self.controller.list_tags()
-        }
-
-        def _display_type_label(raw_label: str, kind: str) -> str:
-            normalized = str(raw_label or "").strip().lower()
-            mapping = {
-                "income": tr("operations.type.income", "Доход"),
-                "expense": tr("operations.type.expense", "Расход"),
-                "mandatory expense": tr("operations.type.mandatory", "Обязательный расход"),
-                "transfer": tr("operations.type.transfer", "Перевод"),
-            }
-            return mapping.get(normalized, mapping.get(kind, str(raw_label)))
-
-        def _display_category_label(raw_category: str, kind: str) -> str:
-            category = str(raw_category or "")
-            if category:
-                category = category.replace("\r", " ").replace("\n", " ")
-                category = " ".join(category.split())
-            if kind == "transfer" and category.lower().startswith("transfer #"):
-                base, _, description = category.partition("|")
-                suffix = base.split("#", 1)[1].strip() if "#" in base else ""
-                label = tr("operations.transfer.category", "Перевод #{id}", id=suffix or "?")
-                if description.strip():
-                    return f"{label} | {description.strip()}"
-                return label
-            return category
-
-        for item in list_items:
-            self._record_id_to_repo_index[item.record_id] = item.repository_index
-            if item.domain_record_id is not None:
-                self._record_id_to_domain_id[item.record_id] = item.domain_record_id
-            self._record_id_to_description[item.record_id] = str(
-                getattr(item, "description_text", "") or ""
-            ).strip()
-            kind = str(getattr(item, "kind", "") or "").strip().lower()
-            tags = (kind,) if foreground_for_kind(kind) else ()
-            values = (
-                str(item.invariant_id),
-                str(item.date),
-                _display_type_label(str(item.type_label), kind),
-                _display_category_label(str(item.category), kind),
-                f"{float(item.amount_original):.2f}",
-                str(item.currency),
-                f"{float(item.amount_kzt):.2f}",
-                str(item.wallet_label),
-                str(item.extra),
-            )
-            try:
-                self.records_tree.insert("", "end", iid=item.record_id, values=values, tags=tags)
-            except TclError:
-                self.records_tree.insert("", "end", values=values, tags=tags)
-            if self.record_tags_tree is not None:
-                item_tags = tuple(getattr(item, "tags", ()) or ())
-                tag_tree_tags: tuple[str, ...] = ()
-                if item_tags:
-                    first_tag = str(item_tags[0])
-                    tag_color = tag_color_map.get(first_tag) or color_for_tag(first_tag)
-                    tag_style = f"tag_color_{tag_color.replace('#', '').lower()}"
-                    try:
-                        self.record_tags_tree.tag_configure(tag_style, foreground=tag_color)
-                    except TclError:
-                        pass
-                    tag_tree_tags = (tag_style,)
-                try:
-                    self.record_tags_tree.insert(
-                        "",
-                        "end",
-                        iid=item.record_id,
-                        values=(str(getattr(item, "tags_text", "") or ""),),
-                        tags=tag_tree_tags,
-                    )
-                except TclError:
-                    self.record_tags_tree.insert(
-                        "",
-                        "end",
-                        values=(str(getattr(item, "tags_text", "") or ""),),
-                        tags=tag_tree_tags,
-                    )
+        refresh_owner_record_views(self, records=records)
 
     def _hide_records_tooltip(self, _event: object | None = None) -> None:
-        if self._records_tooltip_window is not None:
-            try:
-                self._records_tooltip_window.destroy()
-            except TclError:
-                pass
-            self._records_tooltip_window = None
-        self._records_tooltip_text = ""
+        hide_owner_records_tooltip(self, _event)
 
     def _show_records_tooltip(self, event: tk.Event) -> None:
-        if self.records_tree is None:
-            return
-        row_id = self.records_tree.identify_row(event.y)
-        if not row_id:
-            self._hide_records_tooltip()
-            return
-        description = self._record_id_to_description.get(str(row_id), "").strip()
-        if not description:
-            self._hide_records_tooltip()
-            return
-        if description == self._records_tooltip_text and self._records_tooltip_window is not None:
-            return
-
-        self._hide_records_tooltip()
-        self._records_tooltip_text = description
-        self._records_tooltip_window = show_popup_tooltip(
-            owner=self.records_tree,
-            text=description,
-            preferred_x=event.x_root + 12,
-            preferred_y_bottom=event.y_root + 12,
-            widget_top_y=event.y_root,
-            wraplength=320,
-        )
+        show_owner_records_tooltip(self, event)
 
     def _refresh_charts(self, records: list[Any] | None = None) -> None:
-        if (
-            self.chart_month_menu is None
-            or self.chart_month_var is None
-            or self.pie_month_menu is None
-            or self.pie_month_var is None
-            or self.chart_year_menu is None
-            or self.chart_year_var is None
-        ):
-            return
-
-        if records is None:
-            records = self.repository.load_all()
-
-        self._chart_refresh_suspended = True
-        try:
-            self._update_month_options(records)
-            self._update_pie_month_options(records)
-            self._update_year_options(records)
-        finally:
-            self._chart_refresh_suspended = False
-
-        self._draw_expense_pie(records)
-        self._draw_daily_bars(records)
-        self._draw_monthly_bars(records)
+        refresh_owner_infographics(self, records=records)
 
     def _ensure_tab_built(self, tab_key: str) -> None:
-        if tab_key in self._built_tabs:
-            return
-        if not build_tab(cast(TabBuildContext, self), tab_key):
-            return
-
-        self._built_tabs.add(tab_key)
+        ensure_tab_built(
+            self._built_tabs,
+            tab_key,
+            build_tab_for_key=lambda key: build_tab(cast(TabBuildContext, self), key),
+        )
 
     def _on_tab_changed(self, _event: tk.Event) -> None:
         if not hasattr(self, "_notebook"):
             return
-        selected = self._notebook.select()
-        tab_key = self._tab_keys_by_widget.get(str(selected))
-        if tab_key is not None:
-            self._ensure_tab_built(tab_key)
-        self._schedule_notebook_underline()
-
-    def _start_deferred_startup(self) -> None:
-        self._startup.start()
-
-    def _show_startup_auto_payment_message(self, created_auto_payments: list[Any]) -> None:
-        if not created_auto_payments:
-            return
-        logger.info("Auto-applied mandatory payments on startup: %s", len(created_auto_payments))
-        details = []
-        for record in created_auto_payments:
-            details.append(f"- {record.category}: {record.amount_kzt:.2f} KZT ({record.date})")
-        max_details = 5
-        if len(details) > max_details:
-            displayed = details[:max_details]
-            remaining = len(details) - max_details
-            displayed.append(f"+ {remaining} more")
-            details_text = "\n".join(displayed)
-        else:
-            details_text = "\n".join(details)
-        message_text = (
-            tr(
-                "app.autopay.summary",
-                "Создано автоплатежей: {count}",
-                count=len(created_auto_payments),
-            )
-            + "\n"
-            + details_text
+        handle_tab_changed(
+            self._notebook,
+            self._tab_keys_by_widget,
+            ensure_tab_built_for_key=self._ensure_tab_built,
+            schedule_notebook_underline=self._schedule_notebook_underline,
         )
-        show_info(message_text, title=tr("app.autopay.title", "Автоплатежи применены"))
 
     def _refresh_wallets(self) -> None:
-        """Refresh wallet list in settings tab and wallet menus in operations tab."""
-        if self.refresh_wallets is not None:
-            try:
-                self.refresh_wallets()
-            except (TclError, RuntimeError, ValueError, TypeError):
-                pass
-        if self.refresh_operation_wallet_menu is not None:
-            try:
-                self.refresh_operation_wallet_menu()
-            except (TclError, RuntimeError, ValueError, TypeError):
-                pass
-        if self.refresh_transfer_wallet_menus is not None:
-            try:
-                self.refresh_transfer_wallet_menus()
-            except (TclError, RuntimeError, ValueError, TypeError):
-                pass
+        refresh_owner_wallet_views(self)
 
     def _refresh_budgets(self) -> None:
-        if self.refresh_budgets is not None:
-            try:
-                self.refresh_budgets()
-            except (TclError, RuntimeError, ValueError, TypeError):
-                pass
+        refresh_owner_budgets(self)
 
     def _refresh_all(self) -> None:
-        if self.refresh_all is not None:
-            try:
-                self.refresh_all()
-            except (TclError, RuntimeError, ValueError, TypeError):
-                pass
+        refresh_owner_all(self)
 
     def _on_chart_filter_change(self, *_args: Any) -> None:
-        if self._chart_refresh_suspended:
-            return
-        self._refresh_charts()
-
-    def _update_month_options(self, records: Any) -> None:
-        if self.chart_month_menu is None or self.chart_month_var is None:
-            return
-        chart_month_var = self.chart_month_var
-        months = extract_months(records)
-        current_month = datetime.now().strftime("%Y-%m")
-        if current_month not in months:
-            months.append(current_month)
-        months = sorted(set(months))
-
-        self.chart_month_menu["values"] = months
-        if not chart_month_var.get() or chart_month_var.get() not in months:
-            chart_month_var.set(months[-1] if months else "")
-
-    def _update_pie_month_options(self, records: Any) -> None:
-        update_pie_month_options(self.pie_month_menu, self.pie_month_var, records)
-
-    def _update_year_options(self, records: Any) -> None:
-        if self.chart_year_menu is None or self.chart_year_var is None:
-            return
-        chart_year_var = self.chart_year_var
-        years = extract_years(records)
-        current_year = datetime.now().year
-        if current_year not in years:
-            years.append(current_year)
-        years = sorted(set(years))
-
-        self.chart_year_menu["values"] = [str(year) for year in years]
-        if not chart_year_var.get() or int(chart_year_var.get()) not in years:
-            chart_year_var.set(str(years[-1]) if years else "")
-
-    def _draw_expense_pie(self, records: Any) -> None:
-        draw_expense_pie(
-            pie_month_var=self.pie_month_var,
-            expense_pie_canvas=self.expense_pie_canvas,
-            expense_legend_canvas=self.expense_legend_canvas,
-            expense_legend_frame=self.expense_legend_frame,
-            records=records,
-        )
-
-    def _draw_daily_bars(self, records: Any) -> None:
-        if self.chart_month_var is None or self.daily_bar_canvas is None:
-            return
-        month_value = self.chart_month_var.get()
-        if not month_value:
-            return
-        year, month = map(int, month_value.split("-"))
-        income, expense = aggregate_daily_cashflow(records, year, month)
-        labels = [str(idx + 1) for idx in range(len(income))]
-        self._draw_bar_chart(self.daily_bar_canvas, labels, income, expense, max_labels=8)
-
-    def _draw_monthly_bars(self, records: Any) -> None:
-        if self.chart_year_var is None or self.monthly_bar_canvas is None:
-            return
-        year_value = self.chart_year_var.get()
-        if not year_value:
-            return
-        year = int(year_value)
-        income, expense = aggregate_monthly_cashflow(records, year)
-        labels = [
-            "Jan",
-            "Feb",
-            "Mar",
-            "Apr",
-            "May",
-            "Jun",
-            "Jul",
-            "Aug",
-            "Sep",
-            "Oct",
-            "Nov",
-            "Dec",
-        ]
-        self._draw_bar_chart(self.monthly_bar_canvas, labels, income, expense, 12)
+        handle_chart_filter_change(self)
 
     def _on_legend_mousewheel(self, event: tk.Event) -> None:
-        if self.expense_legend_canvas is None:
-            return
-
-        widget = self.winfo_containing(event.x_root, event.y_root)
-        while widget is not None:
-            if widget == self.expense_legend_canvas:
-                delta = -1 if event.delta > 0 else 1
-                self.expense_legend_canvas.yview_scroll(delta, "units")
-                return
-            widget = widget.master
-
-    def _draw_bar_chart(
-        self,
-        canvas: tk.Canvas,
-        labels: list[str],
-        income_values: list[float],
-        expense_values: list[float],
-        max_labels: int,
-    ) -> None:
-        canvas.delete("all")
-        palette = get_palette()
-        try:
-            canvas.configure(bg=palette.surface_elevated, highlightbackground=palette.border_soft)
-        except TclError:
-            pass
-        width = max(canvas.winfo_width(), 300)
-        height = max(canvas.winfo_height(), 220)
-
-        max_income = max(income_values) if income_values else 0
-        max_expense = max(expense_values) if expense_values else 0
-        max_value = max(max_income, max_expense)
-
-        if max_value <= 0:
-            canvas.create_text(
-                10,
-                10,
-                anchor="nw",
-                text=tr("common.empty", "Нет данных для отображения"),
-                fill=palette.chart_empty,
-                font=("Segoe UI", 11),
-            )
-            return
-
-        padding = {
-            "left": 34 if width < 420 else 40,
-            "right": 16 if width < 420 else 20,
-            "top": 20,
-            "bottom": 34 if height < 240 else 30,
-        }
-        chart_w = width - padding["left"] - padding["right"]
-        chart_h = height - padding["top"] - padding["bottom"]
-        zero_y = padding["top"] + chart_h / 2
-        scale = (chart_h / 2 - 10) / max_value
-
-        canvas.create_line(
-            padding["left"],
-            zero_y,
-            padding["left"] + chart_w,
-            zero_y,
-            fill=palette.chart_axis,
-        )
-
-        group_width = chart_w / max(1, len(labels))
-        bar_width = max(4, min(18, group_width * 0.28))
-
-        for idx, label in enumerate(labels):
-            x_center = padding["left"] + group_width * idx + group_width / 2
-            income_h = income_values[idx] * scale
-            expense_h = expense_values[idx] * scale
-            x1 = x_center - bar_width / 2
-            x2 = x_center + bar_width / 2
-
-            canvas.create_rectangle(
-                x1,
-                zero_y - income_h,
-                x2,
-                zero_y,
-                fill=palette.chart_income,
-                outline="",
-            )
-            canvas.create_rectangle(
-                x1,
-                zero_y,
-                x2,
-                zero_y + expense_h,
-                fill=palette.chart_expense,
-                outline="",
-            )
-
-            label_capacity = max(
-                3,
-                min(max_labels, int(chart_w // 44) if chart_w > 0 else max_labels),
-            )
-            label_step = max(1, len(labels) // label_capacity)
-            if idx % label_step == 0 or len(labels) <= label_capacity:
-                canvas.create_text(
-                    x_center,
-                    padding["top"] + chart_h + 10,
-                    text=label,
-                    fill=palette.chart_empty,
-                    font=("Segoe UI", 9),
-                )
-
-        canvas.create_text(
-            padding["left"],
-            padding["top"] - 6,
-            text=tr("operations.type.income", "Доход"),
-            fill=palette.chart_income,
-            anchor="sw",
-            font=("Segoe UI", 9),
-        )
-        canvas.create_text(
-            padding["left"] + 60,
-            padding["top"] - 6,
-            text=tr("operations.type.expense", "Расход"),
-            fill=palette.chart_expense,
-            anchor="sw",
-            font=("Segoe UI", 9),
-        )
+        scroll_owner_legend_canvas(self, event)
 
 
 def main() -> None:

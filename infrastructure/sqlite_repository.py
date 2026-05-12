@@ -259,19 +259,40 @@ class SQLiteRecordRepository(RecordRepository):
     def _wallet_balance_columns(balance: object) -> tuple[float, int]:
         return (to_money_float(balance), to_minor_units(balance))
 
+    def _default_base_currency(self) -> str:
+        schema_currency = str(self.get_schema_meta("base_currency") or "").strip().upper()
+        if schema_currency:
+            return schema_currency
+        row = self._conn.execute(
+            """
+            SELECT currency
+            FROM wallets
+            WHERE (system = 1 OR id = ?)
+              AND trim(coalesce(currency, '')) <> ''
+            ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, id
+            LIMIT 1
+            """,
+            (SYSTEM_WALLET_ID, SYSTEM_WALLET_ID),
+        ).fetchone()
+        if row is not None:
+            currency = str(row["currency"] or "").strip().upper()
+            if currency:
+                return currency
+        return "KZT"
+
     @staticmethod
     def _money_columns(
         amount_original: object,
         rate_at_operation: object,
-        amount_kzt: object,
+        amount_base: object,
     ) -> tuple[float, int, float, str, float, int]:
         return (
             to_money_float(amount_original),
             to_minor_units(amount_original),
             to_rate_float(rate_at_operation),
             rate_to_text(rate_at_operation),
-            to_money_float(amount_kzt),
-            to_minor_units(amount_kzt),
+            to_money_float(amount_base),
+            to_minor_units(amount_base),
         )
 
     def _validate_transfer_integrity(
@@ -353,7 +374,7 @@ class SQLiteRecordRepository(RecordRepository):
             key = (
                 int(record.related_debt_id),
                 self._date_as_text(record.date),
-                to_minor_units(record.amount_kzt or 0.0),
+                to_minor_units(record.amount_base or 0.0),
                 record_type,
             )
             candidate_groups.setdefault(key, []).append(int(record.id))
@@ -438,8 +459,8 @@ class SQLiteRecordRepository(RecordRepository):
             currency,
             rate_at_operation,
             rate_at_operation_text,
-            amount_kzt,
-            amount_kzt_minor,
+            amount_base,
+            amount_base_minor,
             category,
             description,
             period
@@ -607,7 +628,7 @@ class SQLiteRecordRepository(RecordRepository):
             ),
             "currency": str(row["currency"]).upper(),
             "rate_at_operation": self._storage._rate_from_row(row),
-            "amount_kzt": self._storage._money_from_row(row, "amount_kzt", "amount_kzt_minor"),
+            "amount_base": self._storage._money_from_row(row, "amount_base", "amount_base_minor"),
             "category": str(row["category"]),
             "description": str(row["description"] or ""),
             "tags": tags,
@@ -693,7 +714,7 @@ class SQLiteRecordRepository(RecordRepository):
             ),
             currency=str(row["currency"]).upper(),
             rate_at_operation=self._storage._rate_from_row(row),
-            amount_kzt=self._storage._money_from_row(row, "amount_kzt", "amount_kzt_minor"),
+            amount_base=self._storage._money_from_row(row, "amount_base", "amount_base_minor"),
             category=str(row["category"]),
             description=str(row["description"] or ""),
             period=str(row["period"] or "monthly"),  # type: ignore[arg-type]
@@ -771,12 +792,12 @@ class SQLiteRecordRepository(RecordRepository):
             amount_original_minor,
             rate_at_operation,
             rate_at_operation_text,
-            amount_kzt,
-            amount_kzt_minor,
+            amount_base,
+            amount_base_minor,
         ) = self._money_columns(
             transfer.amount_original,
             transfer.rate_at_operation,
-            transfer.amount_kzt,
+            transfer.amount_base,
         )
         cursor = self._conn.execute(
             """
@@ -789,8 +810,8 @@ class SQLiteRecordRepository(RecordRepository):
                 currency,
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 description
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -804,8 +825,8 @@ class SQLiteRecordRepository(RecordRepository):
                 str(transfer.currency).upper(),
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 str(transfer.description or ""),
             ),
         )
@@ -824,12 +845,12 @@ class SQLiteRecordRepository(RecordRepository):
             amount_original_minor,
             rate_at_operation,
             rate_at_operation_text,
-            amount_kzt,
-            amount_kzt_minor,
+            amount_base,
+            amount_base_minor,
         ) = self._money_columns(
             transfer.amount_original,
             transfer.rate_at_operation,
-            transfer.amount_kzt,
+            transfer.amount_base,
         )
         self._conn.execute(
             """
@@ -843,8 +864,8 @@ class SQLiteRecordRepository(RecordRepository):
                 currency = ?,
                 rate_at_operation = ?,
                 rate_at_operation_text = ?,
-                amount_kzt = ?,
-                amount_kzt_minor = ?,
+                amount_base = ?,
+                amount_base_minor = ?,
                 description = ?
             WHERE id = ?
             """,
@@ -857,8 +878,8 @@ class SQLiteRecordRepository(RecordRepository):
                 str(transfer.currency).upper(),
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 str(transfer.description or ""),
                 int(transfer_id),
             ),
@@ -1158,12 +1179,12 @@ class SQLiteRecordRepository(RecordRepository):
             amount_original_minor,
             rate_at_operation,
             rate_at_operation_text,
-            amount_kzt,
-            amount_kzt_minor,
+            amount_base,
+            amount_base_minor,
         ) = self._money_columns(
             record.amount_original or 0.0,
             record.rate_at_operation,
-            record.amount_kzt or 0.0,
+            record.amount_base or 0.0,
         )
         cursor = self._conn.execute(
             """
@@ -1178,8 +1199,8 @@ class SQLiteRecordRepository(RecordRepository):
                 currency,
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 category,
                 description,
                 period
@@ -1199,8 +1220,8 @@ class SQLiteRecordRepository(RecordRepository):
                 str(record.currency).upper(),
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 str(record.category),
                 str(record.description or ""),
                 str(period) if period is not None else None,
@@ -1223,12 +1244,12 @@ class SQLiteRecordRepository(RecordRepository):
             amount_original_minor,
             rate_at_operation,
             rate_at_operation_text,
-            amount_kzt,
-            amount_kzt_minor,
+            amount_base,
+            amount_base_minor,
         ) = self._money_columns(
             record.amount_original or 0.0,
             record.rate_at_operation,
-            record.amount_kzt or 0.0,
+            record.amount_base or 0.0,
         )
         self._conn.execute(
             """
@@ -1244,8 +1265,8 @@ class SQLiteRecordRepository(RecordRepository):
                 currency = ?,
                 rate_at_operation = ?,
                 rate_at_operation_text = ?,
-                amount_kzt = ?,
-                amount_kzt_minor = ?,
+                amount_base = ?,
+                amount_base_minor = ?,
                 category = ?,
                 description = ?,
                 period = ?
@@ -1264,8 +1285,8 @@ class SQLiteRecordRepository(RecordRepository):
                 str(record.currency).upper(),
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 str(record.category),
                 str(record.description or ""),
                 str(period) if period is not None else None,
@@ -1279,12 +1300,12 @@ class SQLiteRecordRepository(RecordRepository):
             amount_original_minor,
             rate_at_operation,
             rate_at_operation_text,
-            amount_kzt,
-            amount_kzt_minor,
+            amount_base,
+            amount_base_minor,
         ) = self._money_columns(
             expense.amount_original or 0.0,
             expense.rate_at_operation,
-            expense.amount_kzt or 0.0,
+            expense.amount_base or 0.0,
         )
         cursor = self._conn.execute(
             """
@@ -1295,8 +1316,8 @@ class SQLiteRecordRepository(RecordRepository):
                 currency,
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 category,
                 description,
                 period,
@@ -1312,8 +1333,8 @@ class SQLiteRecordRepository(RecordRepository):
                 str(expense.currency).upper(),
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 str(expense.category),
                 str(expense.description or ""),
                 str(expense.period),
@@ -1359,7 +1380,7 @@ class SQLiteRecordRepository(RecordRepository):
         wallet = Wallet(
             id=SYSTEM_WALLET_ID,
             name="Main wallet",
-            currency="KZT",
+            currency=self._default_base_currency(),
             initial_balance=to_money_float(balance),
             system=True,
             allow_negative=False,
@@ -1412,7 +1433,7 @@ class SQLiteRecordRepository(RecordRepository):
             draft = Wallet(
                 id=SYSTEM_WALLET_ID,
                 name=str(name or "Wallet"),
-                currency=str(currency or "KZT").upper(),
+                currency=str(currency or self._default_base_currency()).upper(),
                 initial_balance=to_money_float(initial_balance),
                 system=bool(system),
                 allow_negative=bool(allow_negative),
@@ -1458,12 +1479,12 @@ class SQLiteRecordRepository(RecordRepository):
         rows = self._conn.execute(sql, params).fetchall()
         return [self._asset_from_row(row) for row in rows]
 
-    def get_total_assets_kzt(
+    def get_total_assets_base(
         self, currency: CurrencyService, *, active_only: bool = True
     ) -> float | None:
         from services.asset_service import AssetService
 
-        return AssetService(self, currency).get_total_assets_kzt(active_only=active_only)
+        return AssetService(self, currency).get_total_assets_base(active_only=active_only)
 
     def get_asset_by_id(self, asset_id: int) -> Asset:
         row = self._conn.execute(
@@ -1873,7 +1894,7 @@ class SQLiteRecordRepository(RecordRepository):
         return Wallet(
             id=SYSTEM_WALLET_ID,
             name="Main wallet",
-            currency="KZT",
+            currency=self._default_base_currency(),
             initial_balance=0.0,
             system=True,
             allow_negative=False,
@@ -1959,8 +1980,8 @@ class SQLiteRecordRepository(RecordRepository):
                 currency,
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 category,
                 description,
                 period
@@ -2091,8 +2112,8 @@ class SQLiteRecordRepository(RecordRepository):
                 currency,
                 rate_at_operation,
                 rate_at_operation_text,
-                amount_kzt,
-                amount_kzt_minor,
+                amount_base,
+                amount_base_minor,
                 category,
                 description,
                 period,
@@ -2116,12 +2137,12 @@ class SQLiteRecordRepository(RecordRepository):
             amount_original_minor,
             rate_at_operation,
             rate_at_operation_text,
-            amount_kzt,
-            amount_kzt_minor,
+            amount_base,
+            amount_base_minor,
         ) = self._money_columns(
             expense.amount_original or 0.0,
             expense.rate_at_operation,
-            expense.amount_kzt or 0.0,
+            expense.amount_base or 0.0,
         )
         with self._conn:
             self._conn.execute(
@@ -2133,8 +2154,8 @@ class SQLiteRecordRepository(RecordRepository):
                     currency          = ?,
                     rate_at_operation = ?,
                     rate_at_operation_text = ?,
-                    amount_kzt        = ?,
-                    amount_kzt_minor  = ?,
+                    amount_base        = ?,
+                    amount_base_minor  = ?,
                     category          = ?,
                     description       = ?,
                     period            = ?,
@@ -2149,8 +2170,8 @@ class SQLiteRecordRepository(RecordRepository):
                     str(expense.currency).upper(),
                     rate_at_operation,
                     rate_at_operation_text,
-                    amount_kzt,
-                    amount_kzt_minor,
+                    amount_base,
+                    amount_base_minor,
                     str(expense.category),
                     str(expense.description or ""),
                     str(expense.period),
@@ -2299,7 +2320,7 @@ class SQLiteRecordRepository(RecordRepository):
                 Wallet(
                     id=SYSTEM_WALLET_ID,
                     name="Main wallet",
-                    currency="KZT",
+                    currency=self._default_base_currency(),
                     initial_balance=to_money_float(initial_balance),
                     system=True,
                     allow_negative=False,

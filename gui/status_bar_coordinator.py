@@ -20,6 +20,16 @@ class LabelLike(Protocol):
     def cget(self, key: str) -> object: ...
 
 
+class StringVarLike(Protocol):
+    def get(self) -> str: ...
+
+    def set(self, value: str) -> None: ...
+
+
+class ComboLike(Protocol):
+    def config(self, **kwargs: object) -> None: ...
+
+
 class OnlineStatusSnapshot(Protocol):
     last_fetched_at: datetime | None
     is_online: bool
@@ -33,6 +43,10 @@ class StatusBarController(Protocol):
     def get_online_mode(self) -> bool: ...
 
     def load_online_mode_preference(self) -> bool: ...
+
+    def get_display_currency(self) -> str: ...
+
+    def get_available_display_currencies(self) -> list[str]: ...
 
 
 class BackgroundRunner(Protocol):
@@ -64,6 +78,12 @@ class StatusBarOwner(Protocol):
     def _price_status_label(self) -> LabelLike | None: ...
 
     @property
+    def _display_currency_var(self) -> StringVarLike | None: ...
+
+    @property
+    def _display_currency_combo(self) -> ComboLike | None: ...
+
+    @property
     def _online_toggle_running(self) -> bool: ...
 
     @_online_toggle_running.setter
@@ -74,6 +94,8 @@ class StatusBarOwner(Protocol):
 
     @property
     def _schedule_after(self) -> ScheduleAfterCallback: ...
+
+    def _refresh_display_currency_views(self) -> None: ...
 
 
 class StatusBarCoordinator:
@@ -136,6 +158,12 @@ class StatusBarCoordinator:
         else:
             currency_status = tr("app.status.currency_offline", "Курсы: офлайн")
         self._owner._currency_status_label.config(text=currency_status)
+        if self._owner._display_currency_var is not None:
+            self._owner._display_currency_var.set(self._owner.controller.get_display_currency())
+        if self._owner._display_currency_combo is not None:
+            self._owner._display_currency_combo.config(
+                values=self._owner.controller.get_available_display_currencies()
+            )
         if self._owner._price_status_label is not None and not self._owner._price_status_label.cget(
             "text"
         ):

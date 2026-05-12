@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk
+from typing import Any, cast
 
 from gui.i18n import tr
 from gui.ui_dialogs import ask_confirm as _ask_confirm_dialog
@@ -70,6 +72,57 @@ def ask_text(
         initialvalue=initialvalue,
         validator=validator,
         normalize=normalize,
+        ok_text=ok_text,
+        cancel_text=cancel_text,
+    )
+
+
+def normalize_numeric_input(value: str) -> str:
+    normalized = str(value or "").replace(" ", "").strip()
+    if not normalized:
+        return normalized
+    if "," in normalized and "." in normalized:
+        if normalized.rfind(",") > normalized.rfind("."):
+            return normalized.replace(".", "").replace(",", ".")
+        return normalized.replace(",", "")
+    if "," in normalized:
+        integer_part, fraction = normalized.split(",", 1)
+        if len(fraction) == 3 and integer_part.replace("-", "").isdigit() and fraction.isdigit():
+            return f"{integer_part}{fraction}"
+        return normalized.replace(",", ".")
+    return normalized
+
+
+def parse_numeric_input(value: str) -> float:
+    return float(normalize_numeric_input(value))
+
+
+def ask_numeric_text(
+    title: str,
+    prompt: str,
+    *,
+    parent: tk.Misc | None = None,
+    initialvalue: str = "",
+    validator=None,
+    ok_text: str | None = None,
+    cancel_text: str | None = None,
+) -> str | None:
+    def _validate_numeric(value: str) -> str | None:
+        try:
+            float(value)
+        except ValueError:
+            return tr("common.error.number_required", "Значение должно быть числом.")
+        if validator is None:
+            return None
+        return validator(value)
+
+    return _ask_text_dialog(
+        title,
+        prompt,
+        parent=parent,
+        initialvalue=initialvalue,
+        validator=_validate_numeric,
+        normalize=normalize_numeric_input,
         ok_text=ok_text,
         cancel_text=cancel_text,
     )
@@ -152,6 +205,188 @@ def attach_treeview_scrollbars(
         x_scroll.grid(row=row + 1, column=column, sticky="ew", padx=padx, pady=(6, pady))
         tree.configure(xscrollcommand=x_scroll.set)
     return y_scroll, x_scroll
+
+
+def enable_treeview_column_autosize(
+    tree: ttk.Treeview,
+    *,
+    columns: tuple[str, ...] | None = None,
+    max_width: int = 420,
+    cell_padding: int = 24,
+    header_padding: int = 28,
+    sample_limit: int = 250,
+    shrink: bool = False,
+) -> ttk.Treeview:
+    tree_any = cast(Any, tree)
+    state = getattr(tree_any, "_column_autosize_state", None)
+    if state is not None:
+        schedule = state.get("schedule")
+        if callable(schedule):
+            schedule()
+        return tree
+
+    managed_columns = tuple(columns or tree.cget("columns"))
+    if not managed_columns:
+        return tree
+
+    style = ttk.Style(tree)
+
+    def _resolve_font(style_name: str, fallback: str) -> tkfont.Font:
+        configured = style.lookup(style_name, "font")
+        try:
+            if configured:
+                return tkfont.nametofont(str(configured))
+        except (tk.TclError, RuntimeError):
+            pass
+        return tkfont.Font(font=configured or fallback)
+
+    body_font = _resolve_font("Treeview", "TkDefaultFont")
+    heading_font = _resolve_font("Treeview.Heading", "TkHeadingFont")
+
+    def _column_size(column_id: str, option: str, fallback: int = 0) -> int:
+        try:
+            return int(tree.column(column_id, option))
+        except (tk.TclError, RuntimeError, ValueError, TypeError):
+            return fallback
+
+    base_widths = {
+        column_id: max(
+            _column_size(column_id, "width"),
+            _column_size(column_id, "minwidth"),
+        )
+        for column_id in managed_columns
+    }
+    observed_widths = dict(base_widths)
+    pending_job: dict[str, str | None] = {"value": None}
+    is_applying = {"value": False}
+
+    def _iter_items(parent: str = ""):
+        for item_id in tree.get_children(parent):
+            yield item_id
+            yield from _iter_items(str(item_id))
+
+    def _measure_text(value: Any, font: tkfont.Font, padding: int) -> int:
+        text = str(value or "").replace("\n", " ")
+        return font.measure(text) + padding
+
+    def _apply() -> None:
+        pending_job["value"] = None
+        is_applying["value"] = True
+        try:
+            if not tree.winfo_exists():
+                return
+        except (tk.TclError, RuntimeError):
+            return
+
+        try:
+            for column_id in managed_columns:
+                try:
+                    current_base = max(
+                        base_widths.get(column_id, 0),
+                        _column_size(column_id, "minwidth"),
+                    )
+                    if not shrink:
+                        current_base = max(current_base, observed_widths.get(column_id, 0))
+                    heading_text = original_heading(column_id, "text")
+                    width = max(
+                        current_base,
+                        _measure_text(heading_text, heading_font, header_padding),
+                    )
+                    for index, item_id in enumerate(_iter_items()):
+                        if index >= sample_limit:
+                            break
+                        value = (
+                            original_item(item_id, "text")
+                            if column_id == "#0"
+                            else original_set(item_id, column_id)
+                        )
+                        width = max(width, _measure_text(value, body_font, cell_padding))
+                    final_width = min(width, max(current_base, max_width))
+                    observed_widths[column_id] = max(
+                        observed_widths.get(column_id, 0),
+                        final_width,
+                    )
+                    original_column(column_id, width=final_width)
+                except (tk.TclError, RuntimeError):
+                    continue
+        finally:
+            is_applying["value"] = False
+
+    def _schedule(*_args: Any) -> None:
+        if pending_job["value"] is not None or is_applying["value"]:
+            return
+        try:
+            pending_job["value"] = tree.after_idle(_apply)
+        except (tk.TclError, RuntimeError):
+            pending_job["value"] = None
+
+    original_insert = cast(Any, tree.insert)
+    original_delete = cast(Any, tree.delete)
+    original_item = cast(Any, tree.item)
+    original_set = cast(Any, tree.set)
+    original_heading = cast(Any, tree.heading)
+    original_column = cast(Any, tree.column)
+
+    def _insert(*args: Any, **kwargs: Any):
+        result = original_insert(*args, **kwargs)
+        _schedule()
+        return result
+
+    def _delete(*args: Any) -> None:
+        original_delete(*args)
+        _schedule()
+
+    def _item(*args: Any, **kwargs: Any):
+        result = original_item(*args, **kwargs)
+        if kwargs:
+            _schedule()
+        return result
+
+    def _set(*args: Any, **kwargs: Any):
+        result = original_set(*args, **kwargs)
+        if len(args) >= 3 or "value" in kwargs:
+            _schedule()
+        return result
+
+    def _heading(*args: Any, **kwargs: Any):
+        result = original_heading(*args, **kwargs)
+        if kwargs:
+            _schedule()
+        return result
+
+    def _column(*args: Any, **kwargs: Any):
+        result = original_column(*args, **kwargs)
+        if args and kwargs and not is_applying["value"]:
+            column_id = str(args[0])
+            if column_id in base_widths and ("width" in kwargs or "minwidth" in kwargs):
+                base_widths[column_id] = max(
+                    _column_size(column_id, "width"),
+                    _column_size(column_id, "minwidth"),
+                )
+                if shrink:
+                    observed_widths[column_id] = base_widths[column_id]
+                else:
+                    observed_widths[column_id] = max(
+                        observed_widths.get(column_id, 0),
+                        base_widths[column_id],
+                    )
+            _schedule()
+        return result
+
+    tree_any.insert = _insert
+    tree_any.delete = _delete
+    tree_any.item = _item
+    tree_any.set = _set
+    tree_any.heading = _heading
+    tree_any.column = _column
+    tree_any._column_autosize_state = {
+        "schedule": _schedule,
+        "columns": managed_columns,
+        "shrink": shrink,
+    }
+    tree.bind("<Map>", _schedule, add="+")
+    _schedule()
+    return tree
 
 
 def bind_label_wrap(

@@ -45,7 +45,7 @@ def _insert_record(
     *,
     record_type: str,
     date: str,
-    amount_kzt: float,
+    amount_base: float,
     wallet_id: int = 1,
     transfer_id: int | None = None,
     category: str = "General",
@@ -56,7 +56,7 @@ def _insert_record(
             type, date, wallet_id, transfer_id,
             amount_original, amount_original_minor,
             currency, rate_at_operation, rate_at_operation_text,
-            amount_kzt, amount_kzt_minor, category, description, period
+            amount_base, amount_base_minor, category, description, period
         )
         VALUES (?, ?, ?, ?, ?, ?, 'KZT', 1.0, '1.0', ?, ?, ?, '', ?)
         """,
@@ -65,10 +65,10 @@ def _insert_record(
             date,
             wallet_id,
             transfer_id,
-            amount_kzt,
-            to_minor_units(amount_kzt),
-            amount_kzt,
-            to_minor_units(amount_kzt),
+            amount_base,
+            to_minor_units(amount_base),
+            amount_base,
+            to_minor_units(amount_base),
             category,
             "monthly" if record_type == "mandatory_expense" else None,
         ),
@@ -262,9 +262,9 @@ def test_get_net_income_for_month_counts_income_only(tmp_path: Path) -> None:
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=100000.0)
-        net_kzt, net_minor = DistributionService(repo).get_net_income_for_month("2026-03")
-        assert net_kzt == 100000.0
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=100000.0)
+        net_base, net_minor = DistributionService(repo).get_net_income_for_month("2026-03")
+        assert net_base == 100000.0
         assert net_minor == to_minor_units(100000.0)
     finally:
         repo.close()
@@ -274,16 +274,16 @@ def test_get_net_income_for_month_subtracts_expenses(tmp_path: Path) -> None:
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=100000.0)
-            _insert_record(conn, record_type="expense", date="2026-03-06", amount_kzt=25000.0)
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=100000.0)
+            _insert_record(conn, record_type="expense", date="2026-03-06", amount_base=25000.0)
             _insert_record(
                 conn,
                 record_type="mandatory_expense",
                 date="2026-03-07",
-                amount_kzt=5000.0,
+                amount_base=5000.0,
             )
-        net_kzt, _net_minor = DistributionService(repo).get_net_income_for_month("2026-03")
-        assert net_kzt == 70000.0
+        net_base, _net_minor = DistributionService(repo).get_net_income_for_month("2026-03")
+        assert net_base == 70000.0
     finally:
         repo.close()
 
@@ -292,16 +292,16 @@ def test_get_net_income_for_month_excludes_transfers(tmp_path: Path) -> None:
     repo = _build_repo(tmp_path)
     try:
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=100000.0)
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=100000.0)
             _insert_record(
                 conn,
                 record_type="expense",
                 date="2026-03-06",
-                amount_kzt=50000.0,
+                amount_base=50000.0,
                 transfer_id=10,
             )
-        net_kzt, _net_minor = DistributionService(repo).get_net_income_for_month("2026-03")
-        assert net_kzt == 100000.0
+        net_base, _net_minor = DistributionService(repo).get_net_income_for_month("2026-03")
+        assert net_base == 100000.0
     finally:
         repo.close()
 
@@ -313,11 +313,11 @@ def test_get_monthly_distribution_calculates_item_amounts(tmp_path: Path) -> Non
         service.create_item("Investments", pct=25.0)
         service.create_item("Reserve", pct=75.0)
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=100000.0)
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=100000.0)
         distribution = service.get_monthly_distribution("2026-03")
-        assert distribution.net_income_kzt == 100000.0
-        assert distribution.item_results[0].amount_kzt == 25000.0
-        assert distribution.item_results[1].amount_kzt == 75000.0
+        assert distribution.net_income_base == 100000.0
+        assert distribution.item_results[0].amount_base == 25000.0
+        assert distribution.item_results[1].amount_base == 75000.0
     finally:
         repo.close()
 
@@ -330,12 +330,12 @@ def test_get_monthly_distribution_calculates_subitem_amounts(tmp_path: Path) -> 
         service.create_subitem(item.id, "BTC", pct=60.0)
         service.create_subitem(item.id, "ETH", pct=40.0)
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=100000.0)
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=100000.0)
         distribution = service.get_monthly_distribution("2026-03")
         item_result = distribution.item_results[0]
-        assert item_result.amount_kzt == 100000.0
-        assert item_result.subitem_results[0].amount_kzt == 60000.0
-        assert item_result.subitem_results[1].amount_kzt == 40000.0
+        assert item_result.amount_base == 100000.0
+        assert item_result.subitem_results[0].amount_base == 60000.0
+        assert item_result.subitem_results[1].amount_base == 40000.0
     finally:
         repo.close()
 
@@ -346,9 +346,9 @@ def test_get_distribution_history_returns_only_months_in_range(tmp_path: Path) -
         service = DistributionService(repo)
         service.create_item("Investments", pct=100.0)
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-01-05", amount_kzt=1000.0)
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=3000.0)
-            _insert_record(conn, record_type="income", date="2026-05-05", amount_kzt=5000.0)
+            _insert_record(conn, record_type="income", date="2026-01-05", amount_base=1000.0)
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=3000.0)
+            _insert_record(conn, record_type="income", date="2026-05-05", amount_base=5000.0)
         history = service.get_distribution_history("2026-02", "2026-04")
         assert [row.month for row in history] == ["2026-03"]
     finally:
@@ -361,7 +361,7 @@ def test_freeze_month_creates_snapshot_independent_from_later_pct_changes(tmp_pa
         service = DistributionService(repo)
         service.create_item("Investments", pct=100.0)
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=100000.0)
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=100000.0)
 
         frozen = service.freeze_month("2026-03")
         service.update_item_pct(service.get_items()[0].id, 50.0)
@@ -382,7 +382,7 @@ def test_toggle_month_fixed_unfreezes_existing_snapshot(tmp_path: Path) -> None:
         service = DistributionService(repo)
         service.create_item("Investments", pct=100.0)
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=100000.0)
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=100000.0)
 
         assert service.toggle_month_fixed("2026-03") is True
         assert service.is_month_fixed("2026-03") is True
@@ -399,7 +399,7 @@ def test_auto_fixed_month_cannot_be_unfrozen(tmp_path: Path) -> None:
         service = DistributionService(repo)
         service.create_item("Investments", pct=100.0)
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-01-05", amount_kzt=100000.0)
+            _insert_record(conn, record_type="income", date="2026-01-05", amount_base=100000.0)
 
         frozen_months = service.freeze_closed_months(as_of="2026-02-01")
 
@@ -418,7 +418,7 @@ def test_frozen_rows_persist_across_service_and_repository_reopen(tmp_path: Path
         service = DistributionService(repo)
         service.create_item("Investments", pct=100.0)
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=100000.0)
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=100000.0)
         service.freeze_month("2026-03")
     finally:
         repo.close()
@@ -444,9 +444,9 @@ def test_freeze_closed_months_backfills_only_months_before_cutoff(tmp_path: Path
         service = DistributionService(repo)
         service.create_item("Investments", pct=100.0)
         with sqlite3.connect(repo.db_path) as conn:
-            _insert_record(conn, record_type="income", date="2026-01-05", amount_kzt=1000.0)
-            _insert_record(conn, record_type="income", date="2026-02-05", amount_kzt=2000.0)
-            _insert_record(conn, record_type="income", date="2026-03-05", amount_kzt=3000.0)
+            _insert_record(conn, record_type="income", date="2026-01-05", amount_base=1000.0)
+            _insert_record(conn, record_type="income", date="2026-02-05", amount_base=2000.0)
+            _insert_record(conn, record_type="income", date="2026-03-05", amount_base=3000.0)
 
         frozen_months = service.freeze_closed_months(as_of="2026-03-15")
 

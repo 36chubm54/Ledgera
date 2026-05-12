@@ -6,7 +6,7 @@ from datetime import date as dt_date
 from datetime import timedelta
 
 from app.repository import RecordRepository
-from app.use_case_support import build_rate, wallet_balance_kzt, wallet_by_id
+from app.use_case_support import build_rate, wallet_balance_base, wallet_by_id
 from domain.records import MandatoryExpenseRecord
 from utils.money import quantize_money, to_money_float, to_rate_float
 
@@ -31,7 +31,7 @@ class CreateMandatoryExpense:
         description: str,
         period: str,
         date: str = "",
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
     ) -> None:
         from domain.validation import ensure_valid_period, parse_ymd
@@ -47,16 +47,16 @@ class CreateMandatoryExpense:
             parse_ymd(normalized_date)
         auto_pay = bool(normalized_date)
 
-        if amount_kzt is None:
-            amount_kzt = self._currency.convert(amount, currency)
+        if amount_base is None:
+            amount_base = self._currency.convert(amount, currency)
         if rate_at_operation is None:
-            rate_at_operation = build_rate(amount, amount_kzt, currency)
+            rate_at_operation = build_rate(amount, amount_base, currency)
         expense = MandatoryExpenseRecord(
             wallet_id=int(wallet_id),
             amount_original=to_money_float(amount),
             currency=currency.upper(),
             rate_at_operation=to_rate_float(rate_at_operation),
-            amount_kzt=to_money_float(amount_kzt),
+            amount_base=to_money_float(amount_base),
             category=category,
             description=description,
             period=period,  # type: ignore[arg-type]
@@ -89,7 +89,7 @@ class CreateMandatoryExpenseRecord:
         category: str,
         description: str,
         period: str,
-        amount_kzt: float | None = None,
+        amount_base: float | None = None,
         rate_at_operation: float | None = None,
     ) -> None:
         from domain.validation import ensure_valid_period
@@ -99,14 +99,14 @@ class CreateMandatoryExpenseRecord:
         if not wallet.is_active:
             raise ValueError("Cannot create operation for inactive wallet")
 
-        if amount_kzt is None:
-            amount_kzt = self._currency.convert(amount, currency)
+        if amount_base is None:
+            amount_base = self._currency.convert(amount, currency)
         if rate_at_operation is None:
-            rate_at_operation = build_rate(amount, amount_kzt, currency)
-        amount_kzt_value = to_money_float(amount_kzt)
+            rate_at_operation = build_rate(amount, amount_base, currency)
+        amount_base_value = to_money_float(amount_base)
         if not wallet.allow_negative:
-            balance = wallet_balance_kzt(wallet, self._repository.load_all(), self._currency)
-            if to_money_float(quantize_money(balance) - quantize_money(amount_kzt_value)) < 0:
+            balance = wallet_balance_base(wallet, self._repository.load_all(), self._currency)
+            if to_money_float(quantize_money(balance) - quantize_money(amount_base_value)) < 0:
                 raise ValueError("Insufficient funds in wallet")
 
         record = MandatoryExpenseRecord(
@@ -115,7 +115,7 @@ class CreateMandatoryExpenseRecord:
             amount_original=to_money_float(amount),
             currency=currency.upper(),
             rate_at_operation=to_rate_float(rate_at_operation),
-            amount_kzt=amount_kzt_value,
+            amount_base=amount_base_value,
             category=category,
             description=description,
             period=period,  # type: ignore[arg-type]
@@ -170,7 +170,7 @@ class AddMandatoryExpenseToReport:
                 amount_original=expense.amount_original,
                 currency=expense.currency,
                 rate_at_operation=expense.rate_at_operation,
-                amount_kzt=expense.amount_kzt,
+                amount_base=expense.amount_base,
                 category=expense.category,
                 description=expense.description,
                 period=expense.period,
@@ -178,10 +178,10 @@ class AddMandatoryExpenseToReport:
             )
             self._repository.save(record)
             logging.info(
-                "Mandatory expense added to report date=%s wallet_id=%s amount_kzt=%s category=%s",
+                "Mandatory expense added to report date=%s wallet_id=%s amount_base=%s category=%s",
                 date,
                 wallet_id,
-                record.amount_kzt,
+                record.amount_base,
                 record.category,
             )
             return True
@@ -269,7 +269,7 @@ class ApplyMandatoryAutoPayments:
                 amount_original=template.amount_original,
                 currency=template.currency,
                 rate_at_operation=template.rate_at_operation,
-                amount_kzt=template.amount_kzt,
+                amount_base=template.amount_base,
                 category=template.category,
                 description=template.description,
                 period=template.period,

@@ -135,7 +135,7 @@ def test_import_without_wallet_id_requires_explicit_wallet_for_full_backup():
         "amount_original": 10.0,
         "currency": "KZT",
         "rate_at_operation": 1.0,
-        "amount_kzt": 10.0,
+        "amount_base": 10.0,
     }
     record, _, error = parse_import_row(
         row,
@@ -177,6 +177,6 @@ def test_net_worth_is_sum_of_active_wallet_balances_and_recalculates():
 
 def test_net_worth_uses_repository_asset_total_capability_when_available():
     repo, _, _ = _repo_with_wallet(initial=10.0)
-    repo.get_total_assets_kzt = lambda currency, active_only=True: 7.0  # type: ignore[method-assign]
+    repo.get_total_assets_base = lambda currency, active_only=True: 7.0  # type: ignore[method-assign]
 
     assert CalculateNetWorth(typed_repo(repo), CurrencyService()).execute_fixed() == 17.0

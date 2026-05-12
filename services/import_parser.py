@@ -108,7 +108,7 @@ def parse_transfer_row(
         amount_original = to_money_float(abs(to_decimal(amount_original)))
         currency = "KZT"
         rate_at_operation = 1.0
-        amount_kzt = amount_original
+        amount_base = amount_original
     else:
         amount_original = as_float(row_lc.get("amount_original"), None)
         if amount_original is None:
@@ -121,7 +121,7 @@ def parse_transfer_row(
         if not _validate_currency(currency):
             return None, None, next_transfer_id, f"{row_label}: invalid currency '{currency}'"
         rate_at_operation = as_float(row_lc.get("rate_at_operation"), None)
-        amount_kzt = as_float(row_lc.get("amount_kzt"), None)
+        amount_base = as_float(row_lc.get("amount_base"), None)
 
     if policy == ImportPolicy.CURRENT_RATE:
         if get_rate is None:
@@ -133,7 +133,7 @@ def parse_transfer_row(
             )
         try:
             rate_at_operation = to_rate_float(get_rate(currency))
-            amount_kzt = to_money_float(
+            amount_base = to_money_float(
                 quantize_money(amount_original) * to_decimal(rate_at_operation)
             )
         except Exception as exc:
@@ -151,8 +151,8 @@ def parse_transfer_row(
             next_transfer_id,
             f"{row_label}: missing required field 'rate_at_operation'",
         )
-    if amount_kzt is None:
-        return None, None, next_transfer_id, f"{row_label}: missing required field 'amount_kzt'"
+    if amount_base is None:
+        return None, None, next_transfer_id, f"{row_label}: missing required field 'amount_base'"
 
     transfer_id = parse_optional_strict_int(row_lc.get("transfer_id")) or 0
     if transfer_id <= 0:
@@ -171,7 +171,7 @@ def parse_transfer_row(
             amount_original=amount_original,
             currency=currency,
             rate_at_operation=to_rate_float(rate_at_operation),
-            amount_kzt=to_money_float(amount_kzt),
+            amount_base=to_money_float(amount_base),
             description=description,
         )
     except Exception as exc:
@@ -184,7 +184,7 @@ def parse_transfer_row(
         amount_original=amount_original,
         currency=currency,
         rate_at_operation=to_rate_float(rate_at_operation),
-        amount_kzt=to_money_float(amount_kzt),
+        amount_base=to_money_float(amount_base),
         category=category,
         description=description,
     )
@@ -195,7 +195,7 @@ def parse_transfer_row(
         amount_original=amount_original,
         currency=currency,
         rate_at_operation=to_rate_float(rate_at_operation),
-        amount_kzt=to_money_float(amount_kzt),
+        amount_base=to_money_float(amount_base),
         category=category,
         description=description,
     )
@@ -419,7 +419,7 @@ def _transfer_rows_from_aggregates(
                 "amount_original": item.get("amount_original"),
                 "currency": item.get("currency", "KZT"),
                 "rate_at_operation": item.get("rate_at_operation"),
-                "amount_kzt": item.get("amount_kzt"),
+                "amount_base": item.get("amount_base"),
                 "from_wallet_id": item.get("from_wallet_id"),
                 "to_wallet_id": item.get("to_wallet_id"),
             }

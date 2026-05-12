@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.currency_support import convert_money_to_kzt
+from app.repository_protocols import SqlQueryRepository
+from services.currency_support import convert_money_to_base
 from services.sqlite_money_sql import minor_amount_expr, money_expr, signed_minor_amount_expr
 
 
@@ -44,7 +44,7 @@ class TimelineService:
     records + wallets.initial_balance. Never writes to the database.
     """
 
-    def __init__(self, repository: SQLiteRecordRepository, currency_service=None) -> None:
+    def __init__(self, repository: SqlQueryRepository, currency_service=None) -> None:
         self._repo = repository
         self._currency = currency_service
 
@@ -54,7 +54,7 @@ class TimelineService:
 
         Calculation:
           base = SUM(wallets.initial_balance) for active wallets
-          monthly signed delta = SUM(CASE type WHEN 'income' THEN amount_kzt ELSE -amount_kzt END)
+          monthly signed delta = SUM(CASE type WHEN 'income' THEN amount_base ELSE -amount_base END)
           running balance = base + cumulative signed delta
 
         Transfer records are included: expense (sender) and income (receiver) net to zero
@@ -75,7 +75,7 @@ class TimelineService:
             FROM (
                 SELECT
                     strftime('%Y-%m', date) AS month,
-                    SUM({signed_minor_amount_expr("amount_kzt")}) AS signed_delta
+                    SUM({signed_minor_amount_expr("amount_base")}) AS signed_delta
                 FROM records
                 GROUP BY strftime('%Y-%m', date)
             )
@@ -119,10 +119,10 @@ class TimelineService:
             SELECT
                 strftime('%Y-%m', date) AS month,
                 COALESCE(SUM(CASE type WHEN 'income'
-                    THEN {minor_amount_expr("amount_kzt")} ELSE 0 END), 0.0)
+                    THEN {minor_amount_expr("amount_base")} ELSE 0 END), 0.0)
                 AS income,
                 COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense')
-                    THEN {minor_amount_expr("amount_kzt")} ELSE 0 END), 0.0)
+                    THEN {minor_amount_expr("amount_base")} ELSE 0 END), 0.0)
                 AS expenses
             FROM records
             WHERE {date_filter}
@@ -163,12 +163,12 @@ class TimelineService:
                     COALESCE(SUM(
                         CASE type
                         WHEN 'income'
-                            THEN {minor_amount_expr("amount_kzt")} ELSE 0 END), 0.0)
+                            THEN {minor_amount_expr("amount_base")} ELSE 0 END), 0.0)
                         AS monthly_income,
                     COALESCE(SUM(
                         CASE
                         WHEN type IN ('expense', 'mandatory_expense')
-                            THEN {minor_amount_expr("amount_kzt")} ELSE 0 END), 0.0)
+                            THEN {minor_amount_expr("amount_base")} ELSE 0 END), 0.0)
                         AS monthly_expenses
                 FROM records
                 WHERE transfer_id IS NULL
@@ -194,5 +194,5 @@ class TimelineService:
         )
         total = 0.0
         for row in rows:
-            total += convert_money_to_kzt(float(row[0]), str(row[1]), self._currency)
+            total += convert_money_to_base(float(row[0]), str(row[1]), self._currency)
         return round(total, 2)

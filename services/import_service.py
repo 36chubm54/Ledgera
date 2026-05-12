@@ -167,7 +167,7 @@ class ImportService:
                         "to_wallet_id": transfer.to_wallet_id,
                         "transfer_date": str(transfer.date),
                         "amount": to_money_float(transfer.amount_original),
-                        "amount_kzt": to_money_float(transfer.amount_kzt),
+                        "amount_base": to_money_float(transfer.amount_base),
                         "currency": str(transfer.currency).upper(),
                         "rate_at_operation": to_rate_float(transfer.rate_at_operation),
                         "description": str(transfer.description or ""),
@@ -742,7 +742,7 @@ class ImportService:
             parsed_records=parsed_records,
             transfer_rows=cast(list[TransferRow], transfer_rows),
             counters=counters,
-            fixed_amount_kzt_fn=self._fixed_amount_kzt,
+            fixed_amount_base_fn=self._fixed_amount_base,
             fixed_rate_fn=self._fixed_rate,
             normalize_description_fn=self._normalize_mandatory_description,
             split_transfer_pair_fn=lambda linked, label: self._split_transfer_pair(
@@ -755,7 +755,7 @@ class ImportService:
         apply_mandatory_templates(
             self._finance_service,
             templates,
-            fixed_amount_kzt_fn=self._fixed_amount_kzt,
+            fixed_amount_base_fn=self._fixed_amount_base,
             fixed_rate_fn=self._fixed_rate,
             normalize_description_fn=self._normalize_mandatory_description,
         )
@@ -765,7 +765,7 @@ class ImportService:
             self._finance_service,
             parsed=parsed,
             policy=self._policy,
-            fixed_amount_kzt_fn=self._fixed_amount_kzt,
+            fixed_amount_base_fn=self._fixed_amount_base,
             fixed_rate_fn=self._fixed_rate,
             normalize_description_fn=self._normalize_mandatory_description,
             logger=logger,
@@ -816,12 +816,12 @@ class ImportService:
     def _normalize_mandatory_description(description: str, category: str) -> str:
         return normalize_mandatory_description(description, category)
 
-    def _fixed_amount_kzt(self, amount_kzt: float | None) -> float | None:
+    def _fixed_amount_base(self, amount_base: float | None) -> float | None:
         if self._policy == ImportPolicy.CURRENT_RATE:
             return None
-        if amount_kzt is None:
+        if amount_base is None:
             return None
-        return to_money_float(amount_kzt)
+        return to_money_float(amount_base)
 
     def _fixed_rate(self, rate_at_operation: float | None) -> float | None:
         if self._policy == ImportPolicy.CURRENT_RATE:

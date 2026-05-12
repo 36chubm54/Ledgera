@@ -12,7 +12,7 @@ from typing import Any, Protocol, cast
 
 from gui.i18n import tr
 from gui.tooltip import Tooltip
-from gui.ui_helpers import attach_treeview_scrollbars, show_error
+from gui.ui_helpers import attach_treeview_scrollbars, enable_treeview_column_autosize, show_error
 from gui.ui_theme import (
     PAD_LG,
     PAD_SM,
@@ -50,7 +50,12 @@ class AnalyticsTabBindings:
     toggle_tag_mode: Callable[[], None]
 
 
-def _draw_net_worth_line(canvas: tk.Canvas, data: list) -> None:
+def _draw_net_worth_line(
+    canvas: tk.Canvas,
+    data: list,
+    *,
+    format_amount: Callable[[float], str] | None = None,
+) -> None:
     canvas.delete("all")
     palette = get_palette()
     canvas.configure(bg=palette.surface_elevated, highlightbackground=palette.border_soft)
@@ -118,10 +123,11 @@ def _draw_net_worth_line(canvas: tk.Canvas, data: list) -> None:
                 font=("Segoe UI", 8),
             )
 
+    y_label = format_amount or (lambda value: f"{value:,.0f}")
     canvas.create_text(
         pad["left"] - 4,
         pad["top"],
-        text=f"{max_v:,.0f}",
+        text=y_label(float(max_v)),
         fill=palette.chart_empty,
         font=("Segoe UI", 8),
         anchor="e",
@@ -129,14 +135,19 @@ def _draw_net_worth_line(canvas: tk.Canvas, data: list) -> None:
     canvas.create_text(
         pad["left"] - 4,
         h - pad["bottom"],
-        text=f"{min_v:,.0f}",
+        text=y_label(float(min_v)),
         fill=palette.chart_empty,
         font=("Segoe UI", 8),
         anchor="e",
     )
 
 
-def _draw_breakdown_pie(canvas: tk.Canvas, data: list) -> None:
+def _draw_breakdown_pie(
+    canvas: tk.Canvas,
+    data: list,
+    *,
+    format_amount: Callable[[float], str] | None = None,
+) -> None:
     """Draw a pie chart for category or tag breakdown data."""
     canvas.delete("all")
     palette = get_palette()
@@ -151,21 +162,21 @@ def _draw_breakdown_pie(canvas: tk.Canvas, data: list) -> None:
             font=("Segoe UI", 11),
         )
         return
-    total = sum(float(getattr(item, "total_kzt", 0.0)) for item in data)
+    total = sum(float(getattr(item, "total_base", 0.0)) for item in data)
     if total <= 0:
         return
 
     rows = list(data)
     show_other_legend = False
     if len(rows) > 10:
-        other_total = sum(float(getattr(item, "total_kzt", 0.0)) for item in rows[9:])
+        other_total = sum(float(getattr(item, "total_base", 0.0)) for item in rows[9:])
         rows = rows[:9]
         if other_total > 0:
             show_other_legend = True
             rows.append(
                 {
                     "label": tr("common.other", "Прочие"),
-                    "total_kzt": other_total,
+                    "total_base": other_total,
                     "color": palette.chart_empty,
                 }
             )
@@ -179,10 +190,10 @@ def _draw_breakdown_pie(canvas: tk.Canvas, data: list) -> None:
     angle = 90.0
     for i, item in enumerate(rows):
         if isinstance(item, dict):
-            value = float(item.get("total_kzt", 0.0))
+            value = float(item.get("total_base", 0.0))
             color = str(item.get("color", "") or palette.chart_empty)
         else:
-            value = float(getattr(item, "total_kzt", 0.0))
+            value = float(getattr(item, "total_base", 0.0))
             color = str(
                 getattr(item, "color", "") or palette.chart_series[i % len(palette.chart_series)]
             )
@@ -293,9 +304,31 @@ def build_analytics_tab(
     dashboard_right.grid(row=0, column=1, sticky="nw", padx=(24, 0))
 
     font = ("Segoe UI", 12, "bold")
+
+    def display_code() -> str:
+        getter = getattr(context.controller, "get_display_currency_code", None)
+        if callable(getter):
+            return str(getter())
+        getter = getattr(context.controller, "get_display_currency", None)
+        if callable(getter):
+            return str(getter())
+        return "KZT"
+
+    def format_display_amount(amount: float, precision: int = 0) -> str:
+        formatter = getattr(context.controller, "format_display_amount", None)
+        if callable(formatter):
+            return str(formatter(amount, precision=precision))
+        return f"{float(amount):,.{precision}f}"
+
+    def format_display_money(amount: float, precision: int = 0) -> str:
+        formatter = getattr(context.controller, "format_display_money", None)
+        if callable(formatter):
+            return str(formatter(amount, precision=precision))
+        return f"{format_display_amount(amount, precision=precision)} {display_code()}"
+
     net_worth_label = ttk.Label(
         dashboard_left,
-        text=tr("analytics.net_worth", "Чистый капитал:  {amount} KZT", amount="—"),
+        text=tr("analytics.net_worth", "Чистый капитал:  {amount}", amount="—"),
         font=font,
     )
     net_worth_label.grid(row=0, column=0, sticky="w")
@@ -434,11 +467,12 @@ def build_analytics_tab(
     enable_treeview_zebra(spending_tree)
     spending_tree.grid(row=1, column=0, sticky="nsew", pady=(6, 14))
     spending_tree.heading("category", text=tr("analytics.category", "Категория"))
-    spending_tree.heading("total", text=tr("analytics.total_kzt", "Сумма KZT"))
+    spending_tree.heading("total", text=tr("common.amount", "Сумма"))
     spending_tree.heading("count", text=tr("common.count_short", "#"))
     spending_tree.column("category", width=200, minwidth=200)
     spending_tree.column("total", width=120, minwidth=120, anchor="e")
     spending_tree.column("count", width=60, minwidth=60, anchor="center")
+    enable_treeview_column_autosize(spending_tree, columns=("category",), max_width=360)
     attach_treeview_scrollbars(
         category_breakdown_frame, spending_tree, row=1, column=0, horizontal=False, pady=0
     )
@@ -457,11 +491,12 @@ def build_analytics_tab(
     enable_treeview_zebra(income_tree)
     income_tree.grid(row=3, column=0, sticky="nsew", pady=(6, 0))
     income_tree.heading("category", text=tr("analytics.category", "Категория"))
-    income_tree.heading("total", text=tr("analytics.total_kzt", "Сумма KZT"))
+    income_tree.heading("total", text=tr("common.amount", "Сумма"))
     income_tree.heading("count", text=tr("common.count_short", "#"))
     income_tree.column("category", width=200, minwidth=200)
     income_tree.column("total", width=120, minwidth=120, anchor="e")
     income_tree.column("count", width=60, minwidth=60, anchor="center")
+    enable_treeview_column_autosize(income_tree, columns=("category",), max_width=360)
     attach_treeview_scrollbars(
         category_breakdown_frame, income_tree, row=3, column=0, horizontal=False, pady=0
     )
@@ -485,11 +520,12 @@ def build_analytics_tab(
     enable_treeview_zebra(tag_tree)
     tag_tree.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
     tag_tree.heading("tag", text=tr("common.tags", "Теги"))
-    tag_tree.heading("total", text=tr("analytics.total_kzt", "Сумма KZT"))
+    tag_tree.heading("total", text=tr("common.amount", "Сумма"))
     tag_tree.heading("count", text=tr("common.count_short", "#"))
     tag_tree.column("tag", width=100, minwidth=100)
     tag_tree.column("total", width=90, minwidth=90, anchor="e")
     tag_tree.column("count", width=50, minwidth=50, anchor="center")
+    enable_treeview_column_autosize(tag_tree, columns=("tag",), max_width=320)
     attach_treeview_scrollbars(
         tag_breakdown_frame, tag_tree, row=1, column=0, horizontal=False, pady=0
     )
@@ -545,7 +581,6 @@ def build_analytics_tab(
     monthly_tree.column("expenses", width=120, minwidth=120, anchor="e")
     monthly_tree.column("cashflow", width=120, minwidth=120, anchor="e")
     monthly_tree.column("savings", width=70, minwidth=70, anchor="e")
-
     monthly_tree.tag_configure("positive", foreground=palette.chart_income)
     monthly_tree.tag_configure("negative", foreground=palette.chart_expense)
 
@@ -588,8 +623,16 @@ def build_analytics_tab(
     def _redraw_canvases() -> None:
         nonlocal redraw_job
         redraw_job = None
-        _draw_net_worth_line(timeline_canvas, last_timeline_data)
-        _draw_breakdown_pie(category_canvas, last_breakdown_data)
+        _draw_net_worth_line(
+            timeline_canvas,
+            last_timeline_data,
+            format_amount=lambda value: format_display_amount(value, precision=0),
+        )
+        _draw_breakdown_pie(
+            category_canvas,
+            last_breakdown_data,
+            format_amount=lambda value: format_display_amount(value, precision=0),
+        )
 
     def _refresh_analytics() -> None:
         nonlocal last_timeline_data, last_breakdown_data
@@ -622,7 +665,7 @@ def build_analytics_tab(
                 context.controller.get_average_monthly_income(year, up_to_date=end)
             )
             year_income = float(context.controller.get_year_income(year, up_to_date=end))
-            year_income_usd = float(context.controller.convert_kzt_to_usd(year_income))
+            year_income_usd = float(context.controller.convert_base_to_usd(year_income))
             year_expense = float(context.controller.get_year_expense(year, up_to_date=end))
             avg_monthly_expenses = float(
                 context.controller.get_average_monthly_expenses(start, end)
@@ -632,8 +675,8 @@ def build_analytics_tab(
             net_worth_label.config(
                 text=tr(
                     "analytics.net_worth",
-                    "Чистый капитал:  {amount} KZT",
-                    amount=f"{net_worth:,.0f}",
+                    "Чистый капитал:  {amount}",
+                    amount=format_display_money(net_worth, precision=0),
                 )
             )
             savings_rate_label.config(
@@ -647,24 +690,25 @@ def build_analytics_tab(
             burn_rate_label.config(
                 text=tr(
                     "analytics.burn_rate_value",
-                    "Темп расходов:  {value} KZT/день",
-                    value=f"{burn_rate:,.0f}",
+                    "Темп расходов:  {value}/{unit}",
+                    value=format_display_amount(burn_rate, precision=0),
+                    unit=tr("analytics.day_unit", "день"),
                 )
             )
             avg_monthly_income_label.config(
                 text=tr(
                     "analytics.avg_income_value",
-                    "Средний доход в месяц ({year}):  {value} KZT",
+                    "Средний доход в месяц ({year}):  {value}",
                     year=year,
-                    value=f"{avg_monthly_income:,.0f}",
+                    value=format_display_money(avg_monthly_income, precision=0),
                 )
             )
             year_income_label.config(
                 text=tr(
                     "analytics.year_income_value",
-                    "Доход за {year} год:  {value} KZT",
+                    "Доход за {year} год:  {value}",
                     year=year,
-                    value=f"{year_income:,.0f}",
+                    value=format_display_money(year_income, precision=0),
                 )
             )
             year_income_usd_label.config(
@@ -678,43 +722,47 @@ def build_analytics_tab(
             avg_monthly_expenses_label.config(
                 text=tr(
                     "analytics.avg_expenses_value",
-                    "Средние расходы в месяц:  {value} KZT",
-                    value=f"{avg_monthly_expenses:,.0f}",
+                    "Средние расходы в месяц:  {value}",
+                    value=format_display_money(avg_monthly_expenses, precision=0),
                 )
             )
             year_expense_label.config(
                 text=tr(
                     "analytics.year_expense_value",
-                    "Расход за {year} год:  {value} KZT",
+                    "Расход за {year} год:  {value}",
                     year=year,
-                    value=f"{year_expense:,.0f}",
+                    value=format_display_money(year_expense, precision=0),
                 )
             )
             day_cost_label.config(
                 text=tr(
                     "analytics.cost_day_value",
-                    "Стоимость дня:  {value} KZT",
-                    value=f"{float(day_cost):,.0f}",
+                    "Стоимость дня:  {value}",
+                    value=format_display_money(float(day_cost), precision=0),
                 )
             )
             hour_cost_label.config(
                 text=tr(
                     "analytics.cost_hour_value",
-                    "Стоимость часа:  {value} KZT",
-                    value=f"{float(hour_cost):,.2f}",
+                    "Стоимость часа:  {value}",
+                    value=format_display_money(float(hour_cost), precision=2),
                 )
             )
             minute_cost_label.config(
                 text=tr(
                     "analytics.cost_minute_value",
-                    "Стоимость минуты:  {value} KZT",
-                    value=f"{float(minute_cost):,.2f}",
+                    "Стоимость минуты:  {value}",
+                    value=format_display_money(float(minute_cost), precision=2),
                 )
             )
 
             timeline_data = context.controller.get_net_worth_timeline()
             last_timeline_data = list(timeline_data) if timeline_data else []
-            _draw_net_worth_line(timeline_canvas, last_timeline_data)
+            _draw_net_worth_line(
+                timeline_canvas,
+                last_timeline_data,
+                format_amount=lambda value: format_display_amount(value, precision=0),
+            )
 
             is_tags_mode = bool(breakdown_by_tags_var.get())
             _apply_breakdown_mode()
@@ -727,7 +775,7 @@ def build_analytics_tab(
                     "end",
                     values=(
                         getattr(item, "category", ""),
-                        f"{float(getattr(item, 'total_kzt', 0.0)):,.0f}",
+                        format_display_amount(float(getattr(item, "total_base", 0.0)), precision=0),
                         int(getattr(item, "record_count", 0)),
                     ),
                 )
@@ -740,7 +788,7 @@ def build_analytics_tab(
                     "end",
                     values=(
                         getattr(item, "category", ""),
-                        f"{float(getattr(item, 'total_kzt', 0.0)):,.0f}",
+                        format_display_amount(float(getattr(item, "total_base", 0.0)), precision=0),
                         int(getattr(item, "record_count", 0)),
                     ),
                 )
@@ -758,14 +806,18 @@ def build_analytics_tab(
                     "end",
                     values=(
                         display_tag_name(getattr(item, "tag", "")),
-                        f"{float(getattr(item, 'total_kzt', 0.0)):,.0f}",
+                        format_display_amount(float(getattr(item, "total_base", 0.0)), precision=0),
                         int(getattr(item, "record_count", 0)),
                     ),
                     tags=((row_tag,) if row_tag else ()),
                 )
 
             last_breakdown_data = list(tag_data) if is_tags_mode else list(spending_data)
-            _draw_breakdown_pie(category_canvas, last_breakdown_data)
+            _draw_breakdown_pie(
+                category_canvas,
+                last_breakdown_data,
+                format_amount=lambda value: format_display_amount(value, precision=0),
+            )
 
             monthly_data = context.controller.get_monthly_summary(start_date=start, end_date=end)
             monthly_tree.delete(*monthly_tree.get_children())
@@ -777,9 +829,9 @@ def build_analytics_tab(
                     "end",
                     values=(
                         getattr(item, "month", ""),
-                        f"{float(getattr(item, 'income', 0.0)):,.0f}",
-                        f"{float(getattr(item, 'expenses', 0.0)):,.0f}",
-                        f"{cashflow:,.0f}",
+                        format_display_amount(float(getattr(item, "income", 0.0)), precision=0),
+                        format_display_amount(float(getattr(item, "expenses", 0.0)), precision=0),
+                        format_display_amount(cashflow, precision=0),
                         f"{float(getattr(item, 'savings_rate', 0.0)):.1f}%",
                     ),
                     tags=(tag,),

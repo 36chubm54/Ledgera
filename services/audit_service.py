@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
+from app.repository_protocols import AuditRepositoryProtocol
 from domain.audit import AuditFinding, AuditReport, AuditSeverity
 from domain.validation import ensure_not_future, parse_ymd
-from infrastructure.sqlite_repository import SQLiteRecordRepository
 from utils.money import (
     money_diff,
     quantize_money,
@@ -17,7 +17,7 @@ from utils.money import (
 
 
 class AuditService:
-    def __init__(self, repository: SQLiteRecordRepository) -> None:
+    def __init__(self, repository: AuditRepositoryProtocol) -> None:
         self._repo = repository
         self._wallet_rows: list[dict[str, Any]] = []
         self._transfer_rows: list[dict[str, Any]] = []
@@ -90,7 +90,7 @@ class AuditService:
                 amount_original,
                 currency,
                 rate_at_operation,
-                amount_kzt,
+                amount_base,
                 category
             FROM records
             ORDER BY id
@@ -99,16 +99,16 @@ class AuditService:
             record_id = int(row["id"])
             amount_original = to_money_float(row["amount_original"] or 0.0)
             rate_at_operation = to_rate_float(row["rate_at_operation"] or 0.0)
-            amount_kzt = to_money_float(row["amount_kzt"] or 0.0)
+            amount_base = to_money_float(row["amount_base"] or 0.0)
 
             expected = quantize_money(amount_original) * to_decimal(rate_at_operation)
-            delta = quantize_money(amount_kzt) - quantize_money(expected)
+            delta = quantize_money(amount_base) - quantize_money(expected)
             if abs(delta) > to_decimal("0.01"):
                 self._record_amount_consistency_findings.append(
                     AuditFinding(
                         check="amount_consistency",
                         severity=AuditSeverity.WARNING,
-                        message=f"Record id={record_id} has inconsistent amount_kzt.",
+                        message=f"Record id={record_id} has inconsistent amount_base.",
                         detail=f"delta {float(delta):.2f} KZT",
                     )
                 )
@@ -122,13 +122,13 @@ class AuditService:
                         detail=f"amount_original={amount_original}",
                     )
                 )
-            if amount_kzt <= 0:
+            if amount_base <= 0:
                 self._record_amount_positivity_findings.append(
                     AuditFinding(
                         check="amount_positivity",
                         severity=AuditSeverity.ERROR,
-                        message=f"Record id={record_id} has non-positive amount_kzt.",
-                        detail=f"amount_kzt={amount_kzt}",
+                        message=f"Record id={record_id} has non-positive amount_base.",
+                        detail=f"amount_base={amount_base}",
                     )
                 )
 
@@ -183,7 +183,7 @@ class AuditService:
                         "amount_original": amount_original,
                         "currency": str(row["currency"]),
                         "rate_at_operation": rate_at_operation,
-                        "amount_kzt": amount_kzt,
+                        "amount_base": amount_base,
                         "category": str(row["category"] or ""),
                     }
                 )
@@ -319,10 +319,10 @@ class AuditService:
             ):
                 mismatches.append("rate_at_operation mismatch")
             if (
-                abs(money_diff(transfer["amount_kzt"], expense["amount_kzt"])) > 0
-                or abs(money_diff(transfer["amount_kzt"], income["amount_kzt"])) > 0
+                abs(money_diff(transfer["amount_base"], expense["amount_base"])) > 0
+                or abs(money_diff(transfer["amount_base"], income["amount_base"])) > 0
             ):
-                mismatches.append("amount_kzt mismatch")
+                mismatches.append("amount_base mismatch")
             if mismatches:
                 findings.append(
                     AuditFinding(
@@ -437,13 +437,13 @@ class AuditService:
                         detail=f"amount_original={transfer['amount_original']}",
                     )
                 )
-            if float(transfer["amount_kzt"]) <= 0:
+            if float(transfer["amount_base"]) <= 0:
                 findings.append(
                     AuditFinding(
                         check="amount_positivity",
                         severity=AuditSeverity.ERROR,
-                        message=f"Transfer id={transfer['id']} has non-positive amount_kzt.",
-                        detail=f"amount_kzt={transfer['amount_kzt']}",
+                        message=f"Transfer id={transfer['id']} has non-positive amount_base.",
+                        detail=f"amount_base={transfer['amount_base']}",
                     )
                 )
 
@@ -460,15 +460,15 @@ class AuditService:
                         detail=f"amount_original={expense['amount_original']}",
                     )
                 )
-            if float(expense["amount_kzt"]) <= 0:
+            if float(expense["amount_base"]) <= 0:
                 findings.append(
                     AuditFinding(
                         check="amount_positivity",
                         severity=AuditSeverity.ERROR,
                         message=(
-                            f"Mandatory expense id={expense['id']} has non-positive amount_kzt."
+                            f"Mandatory expense id={expense['id']} has non-positive amount_base."
                         ),
-                        detail=f"amount_kzt={expense['amount_kzt']}",
+                        detail=f"amount_base={expense['amount_base']}",
                     )
                 )
 
@@ -1063,7 +1063,7 @@ class AuditService:
     def _read_mandatory_expense_rows(self) -> list[dict[str, Any]]:
         rows = self._repo.query_all(
             """
-            SELECT id, amount_original, amount_kzt, category, description, date, auto_pay
+            SELECT id, amount_original, amount_base, category, description, date, auto_pay
             FROM mandatory_expenses
             ORDER BY id
             """
@@ -1085,7 +1085,7 @@ class AuditService:
                 amount_original,
                 currency,
                 rate_at_operation,
-                amount_kzt
+                amount_base
             FROM transfers
             ORDER BY id
             """

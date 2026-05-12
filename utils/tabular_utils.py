@@ -49,8 +49,8 @@ def record_export_rows(
         if source is None or target is None:
             continue
         amount_orig = source.amount_original
-        amount_kzt = source.amount_kzt
-        if amount_orig is None or amount_kzt is None:
+        amount_base = source.amount_base
+        if amount_orig is None or amount_base is None:
             continue
         transfer_map[transfer_id] = Transfer(
             id=transfer_id,
@@ -60,7 +60,7 @@ def record_export_rows(
             amount_original=amount_orig,
             currency=source.currency,
             rate_at_operation=source.rate_at_operation,
-            amount_kzt=amount_kzt,
+            amount_base=amount_base,
             description=str(source.description or ""),
         )
 
@@ -86,7 +86,7 @@ def record_export_rows(
                     "amount_original": transfer.amount_original,
                     "currency": transfer.currency,
                     "rate_at_operation": transfer.rate_at_operation,
-                    "amount_kzt": transfer.amount_kzt,
+                    "amount_base": transfer.amount_base,
                     "description": transfer.description,
                     "tags": "",
                     "period": "",
@@ -109,7 +109,7 @@ def record_export_rows(
                 "amount_original": record.amount_original,
                 "currency": record.currency,
                 "rate_at_operation": record.rate_at_operation,
-                "amount_kzt": record.amount_kzt,
+                "amount_base": record.amount_base,
                 "description": str(getattr(record, "description", "") or ""),
                 "tags": format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
                 "period": getattr(record, "period", "")
@@ -135,7 +135,7 @@ def record_export_rows(
                 "amount_original": transfer.amount_original,
                 "currency": transfer.currency,
                 "rate_at_operation": transfer.rate_at_operation,
-                "amount_kzt": transfer.amount_kzt,
+                "amount_base": transfer.amount_base,
                 "description": transfer.description,
                 "tags": "",
                 "period": "",
@@ -154,11 +154,12 @@ def mandatory_expense_export_rows(
         {
             "type": "mandatory_expense",
             "date": expense.date.isoformat() if isinstance(expense.date, dt_date) else expense.date,
+            "wallet_id": expense.wallet_id,
             "category": expense.category,
             "amount_original": expense.amount_original,
             "currency": expense.currency,
             "rate_at_operation": expense.rate_at_operation,
-            "amount_kzt": expense.amount_kzt,
+            "amount_base": expense.amount_base,
             "description": expense.description,
             "period": expense.period,
         }

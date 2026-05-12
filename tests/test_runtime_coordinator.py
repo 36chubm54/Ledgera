@@ -4,7 +4,7 @@ from concurrent.futures import Future
 from datetime import datetime
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -25,13 +25,13 @@ class _FakeOwner:
 
 
 class _FakeVar:
-    def __init__(self, value: bool = False) -> None:
+    def __init__(self, value: bool | str = False) -> None:
         self.value = value
 
-    def get(self) -> bool:
+    def get(self):
         return self.value
 
-    def set(self, value: bool) -> None:
+    def set(self, value) -> None:
         self.value = value
 
 
@@ -49,6 +49,14 @@ class _FakeLabel:
         raise KeyError(key)
 
 
+class _FakeCombo:
+    def __init__(self) -> None:
+        self.kwargs: dict[str, object] = {}
+
+    def config(self, **kwargs: object) -> None:
+        self.kwargs.update(kwargs)
+
+
 class _FakeChartApp:
     def __init__(self) -> None:
         self.chart_month_menu = object()
@@ -57,13 +65,14 @@ class _FakeChartApp:
         self.pie_month_var = object()
         self.chart_year_menu = object()
         self.chart_year_var = object()
+        self.expense_pie_canvas = object()
+        self.expense_legend_canvas = object()
+        self.expense_legend_frame = object()
+        self.daily_bar_canvas = object()
+        self.monthly_bar_canvas = object()
         self._chart_refresh_suspended = False
-        self._update_month_options = Mock()
-        self._update_pie_month_options = Mock(side_effect=RuntimeError("chart refresh failed"))
-        self._update_year_options = Mock()
-        self._draw_expense_pie = Mock()
-        self._draw_daily_bars = Mock()
-        self._draw_monthly_bars = Mock()
+        self.repository = SimpleNamespace(load_all=Mock(return_value=[]))
+        self.controller = SimpleNamespace(format_display_money=Mock(return_value="0.00"))
 
 
 class _FakeStatusController:
@@ -79,6 +88,12 @@ class _FakeStatusController:
     def load_online_mode_preference(self) -> bool:
         return False
 
+    def get_display_currency(self) -> str:
+        return "KZT"
+
+    def get_available_display_currencies(self) -> list[str]:
+        return ["EUR", "KZT", "USD"]
+
 
 class _FakeStatusOwner:
     def __init__(self) -> None:
@@ -86,6 +101,8 @@ class _FakeStatusOwner:
         self._online_var = _FakeVar(False)
         self._currency_status_label = _FakeLabel()
         self._price_status_label = _FakeLabel("")
+        self._display_currency_var = _FakeVar("KZT")
+        self._display_currency_combo = _FakeCombo()
         self._online_toggle_running = False
         self._run_background = Mock()
         self._scheduled: list[tuple[str, int, object]] = []
@@ -93,6 +110,9 @@ class _FakeStatusOwner:
     def _schedule_after(self, key: str, delay_ms: int, callback):
         self._scheduled.append((key, delay_ms, callback))
         return "job"
+
+    def _refresh_display_currency_views(self) -> None:
+        return None
 
 
 def test_run_background_surfaces_on_success_errors_without_raw_callback_crash():
@@ -130,8 +150,12 @@ def test_run_background_surfaces_on_success_errors_without_raw_callback_crash():
 def test_refresh_charts_always_releases_suspension_flag_on_failure():
     app = _FakeChartApp()
 
-    with pytest.raises(RuntimeError, match="chart refresh failed"):
-        FinancialApp._refresh_charts(cast(FinancialApp, app), records=[])
+    with patch(
+        "gui.tkinter_gui.refresh_owner_infographics",
+        side_effect=RuntimeError("chart refresh failed"),
+    ):
+        with pytest.raises(RuntimeError, match="chart refresh failed"):
+            FinancialApp._refresh_charts(cast(FinancialApp, app), records=[])
 
     assert app._chart_refresh_suspended is False
 

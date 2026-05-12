@@ -26,7 +26,7 @@ class Record(ABC):
     amount_original: float | None = None
     currency: str = "KZT"
     rate_at_operation: float = 1.0
-    amount_kzt: float | None = None
+    amount_base: float | None = None
     category: str = "General"
     description: str = ""
     tags: tuple[str, ...] = field(default_factory=tuple)
@@ -54,21 +54,21 @@ class Record(ABC):
         if self.amount_original is None and amount is not None:
             object.__setattr__(self, "amount_original", to_money_float(amount))
 
-        if self.amount_kzt is None:
+        if self.amount_base is None:
             if amount is not None:
-                object.__setattr__(self, "amount_kzt", to_money_float(amount))
+                object.__setattr__(self, "amount_base", to_money_float(amount))
             elif self.amount_original is not None:
-                object.__setattr__(self, "amount_kzt", to_money_float(self.amount_original))
+                object.__setattr__(self, "amount_base", to_money_float(self.amount_original))
             else:
-                object.__setattr__(self, "amount_kzt", 0.0)
+                object.__setattr__(self, "amount_base", 0.0)
 
-        if self.amount_original is None and self.amount_kzt is not None:
-            object.__setattr__(self, "amount_original", to_money_float(self.amount_kzt))
+        if self.amount_original is None and self.amount_base is not None:
+            object.__setattr__(self, "amount_original", to_money_float(self.amount_base))
 
         if self.amount_original is not None:
             object.__setattr__(self, "amount_original", to_money_float(self.amount_original))
-        if self.amount_kzt is not None:
-            object.__setattr__(self, "amount_kzt", to_money_float(self.amount_kzt))
+        if self.amount_base is not None:
+            object.__setattr__(self, "amount_base", to_money_float(self.amount_base))
         object.__setattr__(self, "rate_at_operation", to_rate_float(self.rate_at_operation))
 
         if not self.currency:
@@ -102,31 +102,31 @@ class Record(ABC):
 
         object.__setattr__(self, "tags", normalize_tag_names(tuple(self.tags or ())))
 
-    def with_updated_amount_kzt(self, new_amount_kzt: float) -> "Record":
+    def with_updated_amount_base(self, new_amount_base: float) -> "Record":
         amount_original = quantize_money(self.amount_original or 0.0)
         if amount_original == 0:
-            raise ValueError("Cannot update amount_kzt when amount_original is zero")
-        updated_amount_kzt = to_money_float(new_amount_kzt)
-        new_rate = to_rate_float(quantize_money(updated_amount_kzt) / amount_original)
+            raise ValueError("Cannot update amount_base when amount_original is zero")
+        updated_amount_base = to_money_float(new_amount_base)
+        new_rate = to_rate_float(quantize_money(updated_amount_base) / amount_original)
         return replace(
             self,
-            amount_kzt=updated_amount_kzt,
+            amount_base=updated_amount_base,
             rate_at_operation=new_rate,
         )
 
     def signed_amount(self) -> float:
         """Backward-compatible alias."""
-        return self.signed_amount_kzt()
+        return self.signed_amount_base()
 
     @property
     def amount(self) -> float:
         """Backward-compatible alias."""
-        if self.amount_kzt is None:
+        if self.amount_base is None:
             return 0.0
-        return float(self.amount_kzt)
+        return float(self.amount_base)
 
     @abstractmethod
-    def signed_amount_kzt(self) -> float:
+    def signed_amount_base(self) -> float:
         raise NotImplementedError
 
     @property
@@ -140,10 +140,10 @@ class IncomeRecord(Record):
     def type(self) -> str:
         return "income"
 
-    def signed_amount_kzt(self) -> float:
-        if self.amount_kzt is None:
+    def signed_amount_base(self) -> float:
+        if self.amount_base is None:
             return 0.0
-        return self.amount_kzt
+        return self.amount_base
 
 
 class ExpenseRecord(Record):
@@ -151,10 +151,10 @@ class ExpenseRecord(Record):
     def type(self) -> str:
         return "expense"
 
-    def signed_amount_kzt(self) -> float:
-        if self.amount_kzt is None:
+    def signed_amount_base(self) -> float:
+        if self.amount_base is None:
             return 0.0
-        return -abs(self.amount_kzt)
+        return -abs(self.amount_base)
 
 
 @dataclass(frozen=True)
@@ -164,17 +164,17 @@ class MandatoryExpenseRecord(Record):
     period: Literal["daily", "weekly", "monthly", "yearly"] = "monthly"
     auto_pay: bool = False
 
-    def with_updated_amount_kzt(self, new_amount_kzt: float) -> "MandatoryExpenseRecord":
-        if new_amount_kzt <= 0:
-            raise ValueError("amount_kzt must be positive")
-        updated_amount_kzt = to_money_float(new_amount_kzt)
+    def with_updated_amount_base(self, new_amount_base: float) -> "MandatoryExpenseRecord":
+        if new_amount_base <= 0:
+            raise ValueError("amount_base must be positive")
+        updated_amount_base = to_money_float(new_amount_base)
         if self.amount_original and self.amount_original > 0:
             new_rate = to_rate_float(
-                quantize_money(updated_amount_kzt) / quantize_money(self.amount_original)
+                quantize_money(updated_amount_base) / quantize_money(self.amount_original)
             )
         else:
             new_rate = to_rate_float(self.rate_at_operation)
-        return replace(self, amount_kzt=updated_amount_kzt, rate_at_operation=new_rate)
+        return replace(self, amount_base=updated_amount_base, rate_at_operation=new_rate)
 
     def with_updated_date(self, new_date: str) -> "MandatoryExpenseRecord":
         normalized_date = (new_date or "").strip()
@@ -200,7 +200,7 @@ class MandatoryExpenseRecord(Record):
     def type(self) -> str:
         return "mandatory_expense"
 
-    def signed_amount_kzt(self) -> float:
-        if self.amount_kzt is None:
+    def signed_amount_base(self) -> float:
+        if self.amount_base is None:
             return 0.0
-        return -abs(self.amount_kzt)
+        return -abs(self.amount_base)

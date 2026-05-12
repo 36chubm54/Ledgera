@@ -104,7 +104,7 @@ def parse_import_row(
 
     if row_type == "initial_balance":
         balance = as_float(
-            row_lc.get("amount_original", row_lc.get("amount_kzt", row_lc.get("amount"))),
+            row_lc.get("amount_original", row_lc.get("amount_base", row_lc.get("amount"))),
             None,
         )
         if balance is None:
@@ -153,7 +153,7 @@ def parse_import_row(
         amount_original = to_money_float(abs(to_decimal(amount)))
         currency = "KZT"
         rate_at_operation = 1.0
-        amount_kzt = amount_original
+        amount_base = amount_original
     else:
         amount_original = as_float(row_lc.get("amount_original"), None)
         if amount_original is None:
@@ -162,7 +162,9 @@ def parse_import_row(
         if not _validate_currency(currency):
             return None, None, f"{row_label}: invalid currency '{currency}'"
         rate_at_operation = as_float(row_lc.get("rate_at_operation"), None)
-        amount_kzt = as_float(row_lc.get("amount_kzt"), None)
+        amount_base = as_float(row_lc.get("amount_base"), None)
+        if amount_base is None:
+            amount_base = as_float(row_lc.get("amount_kzt"), None)
 
         if policy == ImportPolicy.CURRENT_RATE:
             if get_rate is None:
@@ -173,7 +175,7 @@ def parse_import_row(
                 )
             try:
                 rate_at_operation = to_rate_float(get_rate(currency))
-                amount_kzt = to_money_float(
+                amount_base = to_money_float(
                     quantize_money(amount_original) * to_decimal(rate_at_operation)
                 )
             except Exception as exc:
@@ -189,12 +191,12 @@ def parse_import_row(
                 None,
                 f"{row_label}: missing required field 'rate_at_operation'",
             )
-        if amount_kzt is None:
-            return None, None, f"{row_label}: missing required field 'amount_kzt'"
+        if amount_base is None:
+            return None, None, f"{row_label}: missing required field 'amount_base'"
 
     amount_original_value = to_money_float(amount_original)
     rate_value = to_rate_float(rate_at_operation)
-    amount_kzt_value = to_money_float(amount_kzt)
+    amount_base_value = to_money_float(amount_base)
 
     if amount_original_value < 0:
         return None, None, f"{row_label}: amount_original must be >= 0"
@@ -226,7 +228,7 @@ def parse_import_row(
         "amount_original": amount_original_value,
         "currency": currency,
         "rate_at_operation": rate_value,
-        "amount_kzt": amount_kzt_value,
+        "amount_base": amount_base_value,
         "category": category,
         "description": description,
         "tags": (),
@@ -261,7 +263,7 @@ def parse_import_row(
 
     if row_type == "expense":
         common["amount_original"] = abs(common["amount_original"])
-        common["amount_kzt"] = abs(common["amount_kzt"])
+        common["amount_base"] = abs(common["amount_base"])
         return ExpenseRecord(**common), None, None
 
     try:
@@ -270,7 +272,7 @@ def parse_import_row(
         return None, None, f"{row_label}: invalid mandatory period '{period}'"
 
     common["amount_original"] = abs(common["amount_original"])
-    common["amount_kzt"] = abs(common["amount_kzt"])
+    common["amount_base"] = abs(common["amount_base"])
     return (
         MandatoryExpenseRecord(
             **common,

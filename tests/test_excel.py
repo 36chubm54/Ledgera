@@ -238,6 +238,7 @@ def test_mandatory_xlsx_roundtrip():
     expenses = [
         MandatoryExpenseRecord(
             date="2026-03-09",
+            wallet_id=7,
             _amount_init=10.0,
             category="Sub",
             description="d1",
@@ -246,6 +247,7 @@ def test_mandatory_xlsx_roundtrip():
         ),
         MandatoryExpenseRecord(
             date="",
+            wallet_id=9,
             _amount_init=20.5,
             category="Svc",
             description="d2",
@@ -261,7 +263,9 @@ def test_mandatory_xlsx_roundtrip():
         assert len(imported) == 2
         assert imported[0].amount == 10.0
         assert str(imported[0].date) == "2026-03-09"
+        assert imported[0].wallet_id == 7
         assert imported[0].auto_pay is True
+        assert imported[1].wallet_id == 9
         assert imported[1].period == "yearly"
     finally:
         os.unlink(tmp_path)
@@ -271,6 +275,7 @@ def test_mandatory_csv_roundtrip():
     expenses = [
         MandatoryExpenseRecord(
             date="2026-03-21",
+            wallet_id=7,
             _amount_init=5.0,
             category="A",
             description="x",
@@ -286,6 +291,7 @@ def test_mandatory_csv_roundtrip():
         assert len(imported) == 1
         assert imported[0].amount == 5.0
         assert str(imported[0].date) == "2026-03-21"
+        assert imported[0].wallet_id == 7
         assert imported[0].auto_pay is True
         assert imported[0].period == "daily"
     finally:
@@ -458,7 +464,7 @@ def test_export_records_to_xlsx_preserves_record_positions_with_transfers() -> N
             amount_original=50.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=50.0,
+            amount_base=50.0,
             category="Food",
         ),
         ExpenseRecord(
@@ -469,7 +475,7 @@ def test_export_records_to_xlsx_preserves_record_positions_with_transfers() -> N
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             category="Transfer",
             description="Move",
         ),
@@ -481,7 +487,7 @@ def test_export_records_to_xlsx_preserves_record_positions_with_transfers() -> N
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             category="Transfer",
             description="Move",
         ),
@@ -492,7 +498,7 @@ def test_export_records_to_xlsx_preserves_record_positions_with_transfers() -> N
             amount_original=100.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=100.0,
+            amount_base=100.0,
             category="Salary",
         ),
     ]
@@ -505,7 +511,7 @@ def test_export_records_to_xlsx_preserves_record_positions_with_transfers() -> N
             amount_original=25.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=25.0,
+            amount_base=25.0,
             description="Move",
         )
     ]

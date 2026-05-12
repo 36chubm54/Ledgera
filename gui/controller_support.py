@@ -10,6 +10,8 @@ from domain.wallets import Wallet
 from utils.money import to_money_float
 from utils.tag_utils import format_tags_inline, normalize_tag_names
 
+DEFAULT_BOOTSTRAP_CURRENCY = "KZT"
+
 
 @dataclass(frozen=True)
 class RecordListItem:
@@ -23,13 +25,31 @@ class RecordListItem:
     category: str
     amount_original: float
     currency: str
-    amount_kzt: float
+    amount_base: float
     wallet_label: str
     tags: tuple[str, ...]
     tags_text: str
     description_text: str
     extra: str
+    extra_amount_base: float | None
     label: str
+
+
+def _normalize_currency_code(
+    currency: str | None, *, fallback: str = DEFAULT_BOOTSTRAP_CURRENCY
+) -> str:
+    normalized = str(currency or "").strip().upper()
+    return normalized or fallback
+
+
+def _base_currency_from_wallets(
+    wallets: Iterable[Wallet], *, fallback: str = DEFAULT_BOOTSTRAP_CURRENCY
+) -> str:
+    for wallet in wallets:
+        normalized = _normalize_currency_code(wallet.currency, fallback="")
+        if normalized:
+            return normalized
+    return fallback
 
 
 def rebuild_transfers(records: Iterable[Record]) -> list[Transfer]:
@@ -58,9 +78,9 @@ def rebuild_transfers(records: Iterable[Record]) -> list[Transfer]:
                 to_wallet_id=target.wallet_id,
                 date=source.date,
                 amount_original=to_money_float(source.amount_original or 0.0),
-                currency=str(source.currency or "KZT").upper(),
+                currency=_normalize_currency_code(source.currency),
                 rate_at_operation=source.rate_at_operation,
-                amount_kzt=to_money_float(source.amount_kzt or 0.0),
+                amount_base=to_money_float(source.amount_base or 0.0),
                 description=str(source.description or ""),
             )
         )
@@ -79,7 +99,7 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
 
     for repository_index, record in plain:
         amount_original = to_money_float(record.amount_original or 0.0)
-        amount_kzt = to_money_float(record.amount_kzt or 0.0)
+        amount_base = to_money_float(record.amount_base or 0.0)
         if isinstance(record, IncomeRecord):
             record_type = "Income"
             kind = "income"
@@ -90,19 +110,19 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
             record_type = "Expense"
             kind = "expense"
         date_value = record.date if isinstance(record.date, str) else record.date.isoformat()
-        currency = str(record.currency or "KZT").upper()
+        currency = _normalize_currency_code(record.currency)
         category = str(getattr(record, "category", "") or "")
         wallet_label = f"W{int(getattr(record, 'wallet_id', 0) or 0)}"
         description_text = str(getattr(record, "description", "") or "").strip()
         signature = (
             f"{record.date}|{record_type}|{record.category}|"
-            f"{amount_original}|{record.currency}|{amount_kzt}|{repository_index}"
+            f"{amount_original}|{record.currency}|{amount_base}|{repository_index}"
         )
         record_id = sha1(signature.encode("utf-8")).hexdigest()[:12]
         label = (
             f"[{repository_index}] {record.date} - {record_type} - {record.category} - "
             f"{amount_original:.2f} {currency} "
-            f"(={amount_kzt:.2f} KZT)"
+            f"(base={amount_base:.2f})"
         )
         items.append(
             RecordListItem(
@@ -116,12 +136,13 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
                 category=category,
                 amount_original=amount_original,
                 currency=currency,
-                amount_kzt=amount_kzt,
+                amount_base=amount_base,
                 wallet_label=wallet_label,
                 tags=normalize_tag_names(tuple(getattr(record, "tags", ()) or ())),
                 tags_text=format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
                 description_text=description_text,
                 extra="",
+                extra_amount_base=None,
                 label=label,
             )
         )
@@ -131,31 +152,31 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
         source = next((r for _, r in grouped if not isinstance(r, IncomeRecord)), grouped[0][1])
         target = next((r for _, r in grouped if isinstance(r, IncomeRecord)), grouped[0][1])
         commission = sum(
-            to_money_float(r.amount_kzt or 0.0)
+            to_money_float(r.amount_base or 0.0)
             for _, r in grouped
             if r.category == "Commission" and not isinstance(r, IncomeRecord)
         )
         signature = f"transfer|{transfer_id}|{repository_index}"
         record_id = sha1(signature.encode("utf-8")).hexdigest()[:12]
         amount_original = to_money_float(source.amount_original or 0.0)
-        amount_kzt = to_money_float(source.amount_kzt or 0.0)
+        amount_base = to_money_float(source.amount_base or 0.0)
         date_value = source.date if isinstance(source.date, str) else source.date.isoformat()
-        currency = str(source.currency or "KZT").upper()
+        currency = _normalize_currency_code(source.currency)
         wallet_label = f"W{int(source.wallet_id)} -> W{int(target.wallet_id)}"
         description = str(getattr(source, "description", "") or "").strip()
-        extra = f"Commission: {commission:.2f} KZT" if commission > 0 else ""
+        extra = f"Commission (base): {commission:.2f}" if commission > 0 else ""
         category = f"Transfer #{transfer_id}"
         if description:
             category = f"{category} | {description}"
         label = (
             f"[{repository_index}] {date_value} - Transfer #{transfer_id} - "
-            f"{amount_original:.2f} {currency} (={amount_kzt:.2f} KZT) "
+            f"{amount_original:.2f} {currency} (base={amount_base:.2f}) "
             f"W{source.wallet_id} -> W{target.wallet_id}"
         )
         if description:
             label += f" | {description}"
         if commission > 0:
-            label += f" | Commission: {commission:.2f} KZT"
+            label += f" | Commission (base): {commission:.2f}"
         items.append(
             RecordListItem(
                 record_id=record_id,
@@ -168,12 +189,13 @@ def build_list_items(records: Iterable[Record]) -> list[RecordListItem]:
                 category=category,
                 amount_original=amount_original,
                 currency=currency,
-                amount_kzt=amount_kzt,
+                amount_base=amount_base,
                 wallet_label=wallet_label,
                 tags=(),
                 tags_text="",
                 description_text=description,
                 extra=extra,
+                extra_amount_base=commission if commission > 0 else None,
                 label=label,
             )
         )
@@ -215,11 +237,11 @@ def wallets_with_system_initial_balance(
         )
         return updated_wallets
 
-    base_currency = updated_wallets[0].currency if updated_wallets else "KZT"
+    base_currency = _base_currency_from_wallets(updated_wallets)
     system_wallet = Wallet(
         id=1,
         name="Main wallet",
-        currency=str(base_currency or "KZT").upper(),
+        currency=_normalize_currency_code(base_currency),
         initial_balance=to_money_float(initial_balance),
         system=True,
         allow_negative=False,

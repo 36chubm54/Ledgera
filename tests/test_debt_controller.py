@@ -47,13 +47,13 @@ def test_controller_exposes_debt_flow_end_to_end(tmp_path: Path) -> None:
         debt = controller.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=300.0,
+            amount_base=300.0,
             created_at="2026-03-01",
         )
         payment = controller.register_debt_payment(
             debt_id=debt.id,
             wallet_id=2,
-            amount_kzt=100.0,
+            amount_base=100.0,
             payment_date="2026-03-02",
         )
 
@@ -86,7 +86,7 @@ def test_controller_net_worth_includes_open_debt_liability(tmp_path: Path) -> No
         controller.create_debt(
             contact_name="Alice",
             wallet_id=2,
-            amount_kzt=300.0,
+            amount_base=300.0,
             created_at="2026-03-01",
         )
         assert controller.net_worth_fixed() == baseline
@@ -101,13 +101,13 @@ def test_controller_can_filter_debts_by_wallet_via_linked_records(tmp_path: Path
         cash_debt = controller.create_debt(
             contact_name="Cash debt",
             wallet_id=2,
-            amount_kzt=300.0,
+            amount_base=300.0,
             created_at="2026-03-01",
         )
         main_debt = controller.create_debt(
             contact_name="Main debt",
             wallet_id=1,
-            amount_kzt=150.0,
+            amount_base=150.0,
             created_at="2026-03-02",
         )
 

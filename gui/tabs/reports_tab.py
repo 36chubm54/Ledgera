@@ -14,7 +14,12 @@ from gui.logging_utils import log_ui_error
 from gui.record_colors import KIND_TO_FOREGROUND, foreground_for_kind
 from gui.tabs.reports_controller import ReportsController
 from gui.tooltip import Tooltip
-from gui.ui_helpers import attach_treeview_scrollbars, show_error, show_info
+from gui.ui_helpers import (
+    attach_treeview_scrollbars,
+    enable_treeview_column_autosize,
+    show_error,
+    show_info,
+)
 from gui.ui_theme import PAD_LG, create_card_section, enable_treeview_zebra
 from services.report_service import ReportFilters, build_category_group_rows
 from utils.csv_utils import report_to_csv
@@ -71,9 +76,7 @@ class ReportsFrame(ttk.Frame):
         for column in (1, 3, 5, 7):
             top_filters.grid_columnconfigure(column, weight=1, uniform="reports_filters")
 
-        ttk.Label(top_filters, text=tr("common.from", "С даты:")).grid(
-            row=0, column=0, sticky="w"
-        )
+        ttk.Label(top_filters, text=tr("common.from", "С даты:")).grid(row=0, column=0, sticky="w")
         ttk.Entry(top_filters, textvariable=self.period_start_var, width=16).grid(
             row=0, column=1, sticky="ew", padx=(6, 16)
         )
@@ -127,9 +130,7 @@ class ReportsFrame(ttk.Frame):
 
         self._group_status_var = tk.StringVar(value="")
         self.group_status_label = ttk.Label(group_frame, textvariable=self._group_status_var)
-        self.group_status_label.grid(
-            row=0, column=1, sticky="w", padx=(12, 0)
-        )
+        self.group_status_label.grid(row=0, column=1, sticky="w", padx=(12, 0))
 
         # Hint for grouped view
         self._group_status_tooltip = Tooltip(
@@ -184,6 +185,14 @@ class ReportsFrame(ttk.Frame):
         export_menu.add_command(label="XLSX", command=lambda: self._export("xlsx"))
         export_menu.add_command(label="PDF", command=lambda: self._export("pdf"))
         self.export_button["menu"] = export_menu
+        self._export_tooltip = Tooltip(
+            self.export_button,
+            tr(
+                "reports.export.tooltip",
+                "Экспорт отчётов использует суммы в валюте базы.\n"
+                "Файл может отличаться от текущего отображения в выбранной валюте показа.",
+            ),
+        )
 
     def _build_body(self) -> None:
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL, style="Reports.TPanedwindow")
@@ -247,12 +256,17 @@ class ReportsFrame(ttk.Frame):
         self.operations_tree.heading("type", text=tr("common.type_short", "Тип"))
         self.operations_tree.heading("category", text=tr("common.category", "Категория"))
         self.operations_tree.heading("tags", text=tr("common.tags", "Теги"))
-        self.operations_tree.heading("amount", text=tr("reports.amount_kzt", "Сумма (KZT)"))
+        self.operations_tree.heading("amount", text=tr("common.amount", "Сумма"))
         self.operations_tree.column("date", width=100, minwidth=100, stretch=False, anchor="w")
         self.operations_tree.column("type", width=200, minwidth=200, stretch=False, anchor="w")
         self.operations_tree.column("category", width=260, minwidth=220, stretch=False, anchor="w")
         self.operations_tree.column("tags", width=220, minwidth=160, stretch=True, anchor="w")
         self.operations_tree.column("amount", width=100, minwidth=100, anchor="e")
+        enable_treeview_column_autosize(
+            self.operations_tree,
+            columns=("category", "tags"),
+            max_width=420,
+        )
         self.operations_tree.grid(row=0, column=0, sticky="nsew")
         attach_treeview_scrollbars(
             self.operations_container,
@@ -359,6 +373,8 @@ class ReportsFrame(ttk.Frame):
         result = self._last_result
         if result is None:
             return
+        currency_code = self._context.controller.get_display_currency_code()
+        fmt_money = self._context.controller.format_display_money
         summary = result.summary
         wallet_specific = result.filters.wallet_id is not None
         self._summary_labels["net_worth_fixed"].config(
@@ -375,24 +391,24 @@ class ReportsFrame(ttk.Frame):
                 else tr("reports.summary.net_worth_current", "Чистый капитал (текущий):")
             )
         )
-        self._summary_values["net_worth_fixed"].config(
-            text=f"{_fmt_kzt(summary.net_worth_fixed)} KZT"
+        self.operations_tree.heading("amount", text=currency_code)
+        self.monthly_tree.heading(
+            "income",
+            text=tr("reports.income", "Доход") + f" ({currency_code})",
         )
-        self._summary_values["net_worth_current"].config(
-            text=f"{_fmt_kzt(summary.net_worth_current)} KZT"
+        self.monthly_tree.heading(
+            "expense", text=tr("reports.expense", "Расход") + f" ({currency_code})"
         )
-        self._summary_values["initial_balance"].config(
-            text=f"{_fmt_kzt(summary.initial_balance)} KZT"
-        )
-        self._summary_values["records_total"].config(
-            text=f"{_fmt_kzt(summary.records_total_fixed)} KZT"
-        )
+        self._summary_values["net_worth_fixed"].config(text=fmt_money(summary.net_worth_fixed))
+        self._summary_values["net_worth_current"].config(text=fmt_money(summary.net_worth_current))
+        self._summary_values["initial_balance"].config(text=fmt_money(summary.initial_balance))
+        self._summary_values["records_total"].config(text=fmt_money(summary.records_total_fixed))
         if self.totals_mode_var.get() == "current":
             final_value = summary.final_balance_current
         else:
             final_value = summary.final_balance_fixed
-        self._summary_values["final_balance"].config(text=f"{_fmt_kzt(final_value)} KZT")
-        self._summary_values["fx_difference"].config(text=f"{_fmt_kzt(summary.fx_difference)} KZT")
+        self._summary_values["final_balance"].config(text=fmt_money(final_value))
+        self._summary_values["fx_difference"].config(text=fmt_money(summary.fx_difference))
         if summary.active_tag:
             self._group_status_var.set(
                 tr("reports.filter.tag", "Фильтр по тегу: {tag}", tag=summary.active_tag)
@@ -436,7 +452,7 @@ class ReportsFrame(ttk.Frame):
                         self._display_type_label(row.type_label),
                         self._display_category_label(row.category),
                         row.tags_text,
-                        f"{row.amount_kzt:.2f}",
+                        self._context.controller.format_display_amount(row.amount_base),
                     ),
                     tags=tags,
                 )
@@ -457,7 +473,7 @@ class ReportsFrame(ttk.Frame):
                         self._display_type_label(row.type_label),
                         self._display_category_label(row.category),
                         row.tags_text,
-                        f"{row.amount_kzt:.2f}",
+                        self._context.controller.format_display_amount(row.amount_base),
                     ),
                     tags=tags,
                 )
@@ -478,7 +494,7 @@ class ReportsFrame(ttk.Frame):
                     tr("reports.group.ops", "Опер.: {count}", count=row.operations_count),
                     category,
                     "",
-                    f"{row.total_kzt:.2f}",
+                    self._context.controller.format_display_amount(row.total_base),
                 ),
             )
 
@@ -490,7 +506,13 @@ class ReportsFrame(ttk.Frame):
             return
         for row in result.monthly:
             self.monthly_tree.insert(
-                "", "end", values=(row.month, f"{row.income:.2f}", f"{row.expense:.2f}")
+                "",
+                "end",
+                values=(
+                    row.month,
+                    self._context.controller.format_display_amount(row.income),
+                    self._context.controller.format_display_amount(row.expense),
+                ),
             )
 
     def _refresh_category_sources(self) -> None:
@@ -598,7 +620,7 @@ class ReportsFrame(ttk.Frame):
                 from gui.exporters import export_grouped_report
 
                 grouped_rows = [
-                    (row.category, row.operations_count, row.total_kzt)
+                    (row.category, row.operations_count, row.total_base)
                     for row in build_category_group_rows(result.operations)
                 ]
                 export_grouped_report(
@@ -631,7 +653,20 @@ class ReportsFrame(ttk.Frame):
                         debts=self._context.controller.get_debts(result.filters.wallet_id),
                     )
             show_info(
-                tr("reports.export.success", "Экспортировано в {filepath}", filepath=filepath),
+                "\n\n".join(
+                    [
+                        tr(
+                            "reports.export.success",
+                            "Экспортировано в {filepath}",
+                            filepath=filepath,
+                        ),
+                        tr(
+                            "reports.export.note",
+                            "Экспорт использует суммы в валюте базы и может отличаться "
+                            "от текущего отображения в валюте показа.",
+                        ),
+                    ]
+                ),
                 title=tr("common.done", "Готово"),
             )
             open_in_file_manager(os.path.dirname(filepath))
@@ -641,11 +676,3 @@ class ReportsFrame(ttk.Frame):
                 tr("reports.export.error", "Не удалось экспортировать: {error}", error=error),
                 title=tr("common.error", "Ошибка"),
             )
-
-
-def _fmt_kzt(value: float) -> str:
-    # 1 000 000.00 style (space-grouped).
-    try:
-        return f"{float(value):,.2f}".replace(",", " ")
-    except (TypeError, ValueError):
-        return "0.00"

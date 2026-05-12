@@ -97,8 +97,8 @@ def budgets_from_payload(
         scope_value = str(item.get("scope_value", category) or category).strip()
         start_date = str(item.get("start_date", "") or "").strip()
         end_date = str(item.get("end_date", "") or "").strip()
-        limit_kzt = as_float(item.get("limit_kzt"), None)
-        limit_kzt_minor = parse_optional_strict_int(item.get("limit_kzt_minor"))
+        limit_base = as_float(item.get("limit_base"), None)
+        limit_base_minor = parse_optional_strict_int(item.get("limit_base_minor"))
         if not category:
             if strict:
                 raise ValueError(f"Budget #{budget_id} has empty category")
@@ -115,15 +115,15 @@ def budgets_from_payload(
             if strict:
                 raise ValueError(f"Budget #{budget_id} is missing start_date/end_date")
             continue
-        if limit_kzt is None:
+        if limit_base is None:
             if strict:
-                raise ValueError(f"Budget #{budget_id} has invalid limit_kzt")
+                raise ValueError(f"Budget #{budget_id} has invalid limit_base")
             continue
-        if limit_kzt_minor is None:
-            limit_kzt_minor = int(round(to_money_float(limit_kzt) * 100))
-        if limit_kzt_minor <= 0:
+        if limit_base_minor is None:
+            limit_base_minor = int(round(to_money_float(limit_base) * 100))
+        if limit_base_minor <= 0:
             if strict:
-                raise ValueError(f"Budget #{budget_id} must have positive limit_kzt_minor")
+                raise ValueError(f"Budget #{budget_id} must have positive limit_base_minor")
             continue
         seen_ids.add(budget_id)
         budgets.append(
@@ -132,8 +132,8 @@ def budgets_from_payload(
                 category=category,
                 start_date=start_date,
                 end_date=end_date,
-                limit_kzt=to_money_float(limit_kzt),
-                limit_kzt_minor=int(limit_kzt_minor),
+                limit_base=to_money_float(limit_base),
+                limit_base_minor=int(limit_base_minor),
                 include_mandatory=bool(item.get("include_mandatory", False)),
                 scope_type=scope_type,
                 scope_value=scope_value,

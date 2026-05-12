@@ -53,14 +53,14 @@ date,type,wallet_id,category,amount_original,currency
         assert summary[1] == 0
         assert len(records) == 1
         assert records[0].rate_at_operation == 500.0
-        assert records[0].amount_kzt == 50000.0
+        assert records[0].amount_base == 50000.0
     finally:
         os.unlink(path)
 
 
 def test_current_rate_policy_overrides_existing_fx_fields():
     csv_content = """
-date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_kzt
+date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base
 2025-01-01,income,1,Salary,100,USD,450,45000
 """
     with tempfile.NamedTemporaryFile(
@@ -76,7 +76,7 @@ date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_k
         )
         assert summary[0] == 1
         assert records[0].rate_at_operation == 500.0
-        assert records[0].amount_kzt == 50000.0
+        assert records[0].amount_base == 50000.0
     finally:
         os.unlink(path)
 
@@ -96,14 +96,14 @@ def test_legacy_policy_imports_old_amount_column():
         assert isinstance(records[0], ExpenseRecord)
         assert records[0].currency == "KZT"
         assert records[0].rate_at_operation == 1.0
-        assert records[0].amount_kzt == 2500.0
+        assert records[0].amount_base == 2500.0
     finally:
         os.unlink(path)
 
 
 def test_import_validation_skips_invalid_rows():
     csv_content = """
-date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_kzt
+date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base
 bad-date,income,1,Salary,10,USD,500,5000
 2025-01-02,expense,1,Food,-5,KZT,1,5
 2025-01-03,income,1,Salary,10,USDX,500,5000
@@ -132,7 +132,7 @@ def test_full_backup_roundtrip():
             amount_original=100.0,
             currency="USD",
             rate_at_operation=500.0,
-            amount_kzt=50000.0,
+            amount_base=50000.0,
             category="Salary",
         )
     ]
@@ -142,7 +142,7 @@ def test_full_backup_roundtrip():
             amount_original=50.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=50.0,
+            amount_base=50.0,
             category="Mandatory",
             description="Rent",
             period="monthly",
@@ -192,7 +192,7 @@ def test_full_backup_export_preserves_persisted_tag_colors() -> None:
             amount_original=30.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=30.0,
+            amount_base=30.0,
             category="Food",
             tags=("food",),
         )
@@ -232,7 +232,7 @@ def test_technical_backup_preserves_mandatory_date() -> None:
             amount_original=75.0,
             currency="KZT",
             rate_at_operation=1.0,
-            amount_kzt=75.0,
+            amount_base=75.0,
             category="Mandatory",
             description="Phone",
             period="monthly",
@@ -278,7 +278,7 @@ def test_snapshot_checksum_mismatch_raises_integrity_error() -> None:
             amount_original=10.0,
             currency="USD",
             rate_at_operation=500.0,
-            amount_kzt=5000.0,
+            amount_base=5000.0,
             category="Salary",
         )
     ]
@@ -518,8 +518,8 @@ def test_full_backup_export_includes_budgets() -> None:
                     category="Food",
                     start_date="2026-03-01",
                     end_date="2026-03-31",
-                    limit_kzt=150000.0,
-                    limit_kzt_minor=15000000,
+                    limit_base=150000.0,
+                    limit_base_minor=15000000,
                     include_mandatory=True,
                 )
             ],
@@ -528,7 +528,7 @@ def test_full_backup_export_includes_budgets() -> None:
         with open(path, encoding="utf-8") as fp:
             payload = json.load(fp)
         assert payload["budgets"][0]["category"] == "Food"
-        assert payload["budgets"][0]["limit_kzt_minor"] == 15000000
+        assert payload["budgets"][0]["limit_base_minor"] == 15000000
         assert payload["budgets"][0]["include_mandatory"] is True
     finally:
         os.unlink(path)

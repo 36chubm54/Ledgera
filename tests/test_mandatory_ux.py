@@ -3,7 +3,9 @@ from __future__ import annotations
 import tkinter as tk
 from datetime import date
 from pathlib import Path
+from tkinter import ttk
 from typing import cast
+from unittest.mock import patch
 
 import pytest
 
@@ -18,6 +20,65 @@ from infrastructure.sqlite_repository import SQLiteRecordRepository
 
 def _schema_path() -> str:
     return str(Path(__file__).resolve().parents[1] / "db" / "schema.sql")
+
+
+def _find_treeview(parent: tk.Misc, *, column: str) -> ttk.Treeview:
+    found: ttk.Treeview | None = None
+
+    def _walk(node: tk.Misc) -> None:
+        nonlocal found
+        for child in node.winfo_children():
+            if isinstance(child, ttk.Treeview) and column in child.cget("columns"):
+                found = child
+                return
+            _walk(child)
+            if found is not None:
+                return
+
+    _walk(parent)
+    if found is None:
+        raise AssertionError(f"Treeview with column {column!r} not found")
+    return found
+
+
+def _find_buttons(parent: tk.Misc, text: str) -> list[tk.Button | ttk.Button]:
+    found: list[tk.Button | ttk.Button] = []
+
+    def _walk(node: tk.Misc) -> None:
+        for child in node.winfo_children():
+            if isinstance(child, (tk.Button, ttk.Button)):
+                try:
+                    if child.cget("text") == text:
+                        found.append(child)
+                except Exception:
+                    pass
+            _walk(child)
+
+    _walk(parent)
+    return found
+
+
+def _find_entry_by_value(parent: tk.Misc, value: str) -> tk.Entry | ttk.Entry:
+    found: tk.Entry | ttk.Entry | None = None
+
+    def _walk(node: tk.Misc) -> None:
+        nonlocal found
+        for child in node.winfo_children():
+            if isinstance(child, (tk.Entry, ttk.Entry)):
+                try:
+                    if child.get() == value:
+                        found = child
+                        return
+                except Exception:
+                    pass
+            _walk(child)
+            if found is not None:
+                return
+
+    _walk(parent)
+    if found is None:
+        raise AssertionError(f"Entry with value {value!r} not found")
+    return found
 
 
 def test_create_mandatory_without_date(tmp_path: Path) -> None:
@@ -57,23 +118,23 @@ def test_create_mandatory_with_date(tmp_path: Path) -> None:
         repo.close()
 
 
-def test_with_updated_amount_kzt_recalculates_rate() -> None:
+def test_with_updated_amount_base_recalculates_rate() -> None:
     expense = MandatoryExpenseRecord(
         amount_original=10.0,
         currency="USD",
         rate_at_operation=500.0,
-        amount_kzt=5000.0,
+        amount_base=5000.0,
         category="Mandatory",
         description="Rent",
         period="monthly",
     )
 
-    updated = expense.with_updated_amount_kzt(6000.0)
+    updated = expense.with_updated_amount_base(6000.0)
 
     assert updated is not expense
-    assert updated.amount_kzt == 6000.0
+    assert updated.amount_base == 6000.0
     assert updated.rate_at_operation == 600.0
-    assert expense.amount_kzt == 5000.0
+    assert expense.amount_base == 5000.0
 
 
 def test_with_updated_date_empty_disables_auto_pay() -> None:
@@ -82,7 +143,7 @@ def test_with_updated_date_empty_disables_auto_pay() -> None:
         amount_original=10.0,
         currency="KZT",
         rate_at_operation=1.0,
-        amount_kzt=10.0,
+        amount_base=10.0,
         category="Mandatory",
         description="Rent",
         period="monthly",
@@ -100,7 +161,7 @@ def test_with_updated_date_value_enables_auto_pay() -> None:
         amount_original=10.0,
         currency="KZT",
         rate_at_operation=1.0,
-        amount_kzt=10.0,
+        amount_base=10.0,
         category="Mandatory",
         description="Rent",
         period="monthly",
@@ -112,7 +173,7 @@ def test_with_updated_date_value_enables_auto_pay() -> None:
     assert updated.auto_pay is True
 
 
-def test_update_mandatory_amount_kzt_persists(tmp_path: Path) -> None:
+def test_update_mandatory_amount_base_persists(tmp_path: Path) -> None:
     db_path = tmp_path / "mandatory_amount_update.db"
     repo = SQLiteRecordRepository(str(db_path), schema_path=_schema_path())
     try:
@@ -122,14 +183,14 @@ def test_update_mandatory_amount_kzt_persists(tmp_path: Path) -> None:
             category="Mandatory",
             description="Rent",
             period="monthly",
-            amount_kzt=5000.0,
+            amount_base=5000.0,
             rate_at_operation=500.0,
         )
         expense = repo.load_mandatory_expenses()[0]
-        RecordService(repo).update_mandatory_amount_kzt(expense.id, 6000.0)
+        RecordService(repo).update_mandatory_amount_base(expense.id, 6000.0)
 
         stored = repo.get_mandatory_expense_by_id(expense.id)
-        assert stored.amount_kzt == 6000.0
+        assert stored.amount_base == 6000.0
         assert stored.rate_at_operation == 600.0
     finally:
         repo.close()
@@ -156,7 +217,7 @@ def test_update_mandatory_date_persists(tmp_path: Path) -> None:
         repo.close()
 
 
-def test_update_mandatory_amount_kzt_negative_raises(tmp_path: Path) -> None:
+def test_update_mandatory_amount_base_negative_raises(tmp_path: Path) -> None:
     db_path = tmp_path / "mandatory_amount_invalid.db"
     repo = SQLiteRecordRepository(str(db_path), schema_path=_schema_path())
     try:
@@ -169,7 +230,7 @@ def test_update_mandatory_amount_kzt_negative_raises(tmp_path: Path) -> None:
         )
         expense = repo.load_mandatory_expenses()[0]
         with pytest.raises(ValueError):
-            RecordService(repo).update_mandatory_amount_kzt(expense.id, -1.0)
+            RecordService(repo).update_mandatory_amount_base(expense.id, -1.0)
     finally:
         repo.close()
 
@@ -265,6 +326,79 @@ def test_settings_tab_builds_with_current_treeview_anchors(tmp_path: Path) -> No
 
         build_settings_tab(parent, context, {"CSV": {"ext": ".csv", "desc": "CSV"}})
         root.update_idletasks()
+    finally:
+        root.destroy()
+        repo.close()
+
+
+def test_settings_tab_edit_mandatory_accepts_grouped_amount_input(tmp_path: Path) -> None:
+    db_path = tmp_path / "settings_mandatory_edit.db"
+    repo = SQLiteRecordRepository(str(db_path), schema_path=_schema_path())
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        repo.save_initial_balance(0.0)
+        CreateMandatoryExpense(repo, CurrencyService(use_online=False)).execute(
+            amount=100.0,
+            currency="KZT",
+            wallet_id=1,
+            category="Mandatory",
+            description="Rent",
+            period="monthly",
+            amount_base=5000.0,
+            rate_at_operation=50.0,
+        )
+        controller = FinancialController(repo, CurrencyService(use_online=False))
+        parent = tk.Frame(root)
+        parent.pack()
+        context = cast(
+            SettingsTabContext,
+            type(
+                "Ctx",
+                (),
+                {
+                    "controller": controller,
+                    "repository": repo,
+                    "refresh_operation_wallet_menu": None,
+                    "refresh_transfer_wallet_menus": None,
+                    "refresh_wallets": None,
+                    "_refresh_list": lambda self: None,
+                    "_refresh_charts": lambda self: None,
+                    "_refresh_budgets": lambda self: None,
+                    "_refresh_all": lambda self: None,
+                    "_run_background": lambda self, task, **kwargs: kwargs.get(
+                        "on_success", lambda *_: None
+                    )(task()),
+                },
+            )(),
+        )
+
+        build_settings_tab(parent, context, {"CSV": {"ext": ".csv", "desc": "CSV"}})
+        root.update()
+
+        mand_tree = _find_treeview(parent, column="autopay")
+        mand_tree.selection_set("0")
+
+        with (
+            patch("gui.tabs.settings_tab.messagebox.showerror"),
+            patch("gui.tabs.settings_tab.messagebox.showinfo"),
+        ):
+            edit_buttons = _find_buttons(parent, "Редактировать")
+            assert edit_buttons
+            edit_buttons[-1].invoke()
+            root.update()
+
+            amount_entry = _find_entry_by_value(parent, "5000.0")
+            amount_entry.delete(0, tk.END)
+            amount_entry.insert(0, "15,000")
+
+            save_buttons = _find_buttons(parent, "Сохранить")
+            assert save_buttons
+            save_buttons[-1].invoke()
+            root.update()
+
+        stored = repo.load_mandatory_expenses()[0]
+        assert stored.amount_base == 15000.0
     finally:
         root.destroy()
         repo.close()
