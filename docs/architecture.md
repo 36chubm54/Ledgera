@@ -114,6 +114,13 @@ Export uses:
 - `utils/excel_utils.py`
 - `utils/pdf_utils.py`
 
+Current report/export contract:
+
+- statement-style report views and exported statement rows are ordered newest first
+- export headers are localized through shared report-export i18n helpers
+- base-amount columns explicitly include the actual base code, for example `Amount (KZT)` / `Сумма (KZT)`
+- localized statement exports must stay compatible with the generic import parser, not only with direct `report_from_*` helpers
+
 Current tag-specific behavior:
 
 - `services/report_service.py` builds tag-aware grouped export payloads
@@ -145,6 +152,8 @@ Important details:
 - JSON full backups can contain extended runtime entities such as budgets, debts, assets, goals, and distribution payloads
 - partial `JSON` imports are section-aware and should not treat omitted sections as implicit deletion
 - debt-aware imports must preserve `records.related_debt_id` and `debt_payments.record_id` links across normalization and bulk replace paths
+- JSON repositories are compatibility backends: they preserve record-tag assignments during full restore, but standalone tag metadata rollback is not a first-class runtime contract there the way it is in SQLite
+- generic CSV/XLSX import is expected to accept localized report exports as statement files and strip presentation rows such as report titles, opening balance, subtotals, and final balance
 - compatibility logic in `storage/sqlite_storage.py` protects older SQLite databases during schema initialization
 - rollback-safe import orchestration lives in `app.import_support.py`
 - payload parsing, replacement, execution, and mandatory-template paths are split across `services/import_*_support.py`
@@ -340,6 +349,7 @@ This subsystem is responsible for:
 Current implementation note:
 
 - `gui/tkinter_gui.py` is now treated as a composition shell, while `gui/shell/*` owns most shell-specific lifecycle, status, notebook, refresh, preferences, records, and startup orchestration
+- keep new feature details out of `gui/tkinter_gui.py`: tab-specific and shell-policy behavior should continue to land in `gui/tabs/*` or `gui/shell/*`
 
 ### 4.10 Hotkeys
 

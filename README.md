@@ -2,7 +2,7 @@
 
 Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, тегами, бюджетами, долгами, активами и целями.
 
-Текущая beta-версия `v2.0.0-beta.1` завершает alpha-цикл миграции валютной модели и переводит проект в стадию стабилизации: значения в БД хранятся как `amount_base` / `limit_base` в `base_currency`, `display_currency` управляет только отображением в UI, а shell/runtime orchestration уже вынесен из основных entry-point модулей в более узкие helpers.
+Текущая beta-версия `v2.0.0-beta.2` продолжает stabilization-линейку `2.0.0`: значения в БД хранятся как `amount_base` / `limit_base` в `base_currency`, `display_currency` управляет только отображением в UI, экспортируемые отчёты локализуются и сохраняют import-safe контракт, выписка и statement-export идут в порядке `newest first`, а shell/runtime orchestration уже вынесен из основных entry-point модулей в более узкие helpers с более строгими repository capability guards.
 
 ## 🚀 Быстрый старт
 
@@ -54,6 +54,7 @@ python main.py
 - Двухуровневая валютная модель: `base_currency` для хранения и `display_currency` для отображения
 - Теги операций: свободный ввод, нормализация, автоподсказки, цветовая индикация и sidecar-отображение в журнале
 - Отчёты с fixed-rate и current-rate итогами, grouped view, tag filters и экспортом в `CSV` / `XLSX` / `PDF`
+- Выписка в `Reports` и экспортируемые statement-файлы показывают записи от новых к старым (`newest first`)
 - Финансовая аналитика: `net worth`, cashflow, category breakdown, tag coverage, monthly summary
 - Бюджеты по категориям и тегам с live progress, pace tracking и forecast-status
 - Учёт долгов и ссуд с историей погашений и write-off сценариями
@@ -78,6 +79,8 @@ python main.py
 - `display_currency` меняет только представление сумм в работающем приложении и переключается из status bar
 - Бизнес-расчёты продолжают работать в базовой валюте; UI-конвертация выполняется через `CurrencyService.to_display(...)`
 - По умолчанию селектор отображения ограничен whitelist-ом `KZT` / `USD` / `EUR` / `RUB`, даже если кэш курсов содержит больше кодов
+- Экспортируемые отчёты локализуются по текущему языку UI, а колонки базовых сумм явно показывают код базы, например `Сумма (KZT)`
+- Локализованные report `CSV` / `XLSX` exports остаются import-safe для generic import pipeline приложения
 
 ## 🖥️ Вкладки приложения
 
@@ -239,6 +242,7 @@ pytest --cov=. --cov-report=term-missing
 - Legacy `JSON` без `tags` / `record_tags` по-прежнему поддерживается и трактуется как payload без тегов
 - Если секция `debts` явно отсутствует, pipeline старается сохранить существующие `related_debt_id` связи; если секция есть, ссылки нормализуются только по допустимым debt IDs
 - `CSV` / `XLSX` import по-прежнему идёт через create-path и не использует bulk replace; `related_debt_id` и `tags` теперь корректно прокидываются и там
+- Generic import parser понимает и локализованные report `CSV` / `XLSX` exports: title rows, opening balance и subtotal/final rows не принимаются за обычные операции
 - Import orchestration вынесен в `app.import_support`, а service-слой разделён на focused `services/import_*_support.py` helpers
 - `v1.10.1` усиливает раннюю валидацию import payload: битые ссылочные связи, дубликаты `wallet.id`, несколько `system` wallets и невалидные/дублированные `distribution_snapshots` теперь отсекаются раньше
 
@@ -248,6 +252,7 @@ pytest --cov=. --cov-report=term-missing
 - Базовый low-level parser: `import_full_backup_from_json(...)`
 - `import_backup(...)` оставлен только как deprecated compatibility wrapper
 - Snapshot backup и startup-export paths включают теги и их связи с операциями
+- Для JSON backend standalone tag metadata во время rollback/import считается compatibility-слоем; полноценный runtime-контракт для tag metadata остаётся у SQLite backend
 - JSON export и backup-copy paths записываются atomically через temporary file + `fsync` + `os.replace`
 - `backup.export_to_json(...)` теперь поднимает `BackupExportError`, чтобы bootstrap/UI различали export-failure и другие startup-проблемы
 - При ошибке сохранения JSON repository пишет `.error` snapshot с несохранённым payload и поднимает `RepositorySaveError`

@@ -2,7 +2,7 @@
 
 Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals.
 
-The current `v2.0.0-beta.1` build closes the alpha migration cycle and moves the project into stabilization: SQLite stores normalized values as `amount_base` / `limit_base` in `base_currency`, `display_currency` controls presentation only, and shell/runtime orchestration has already been pushed out of the main entry-point modules into narrower helpers.
+The current `v2.0.0-beta.2` build continues the `2.0.0` stabilization line: SQLite stores normalized values as `amount_base` / `limit_base` in `base_currency`, `display_currency` controls presentation only, exported reports are now localized while staying import-safe, statement views and statement exports use newest-first ordering, and shell/runtime orchestration has already been pushed out of the main entry-point modules into narrower helpers with stricter repository capability guards.
 
 ## 🚀 Quick Start
 
@@ -54,6 +54,7 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 - Two-layer multicurrency model with persisted `base_currency` and runtime-only `display_currency`
 - Operation tags with free-form entry, normalization, suggestions, color coding, and sidecar display in the journal
 - Reports with fixed-rate and current-rate totals, grouped view, tag filters, and `CSV` / `XLSX` / `PDF` export
+- Statement views in `Reports` and exported statement files now list records newest first
 - Financial analytics: `net worth`, cashflow, category breakdown, tag coverage, and monthly summary
 - Category and tag budgets with live progress, pace tracking, and forecast status
 - Debt and loan tracking with repayment history and write-off flows
@@ -77,6 +78,8 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 - `display_currency` affects only UI presentation and can be switched at runtime from the status bar
 - Business calculations continue to operate on base amounts; UI conversion is done on demand through `CurrencyService.to_display(...)`
 - By default, the display selector is limited to the whitelist `KZT` / `USD` / `EUR` / `RUB`, even if cached rates contain more currency codes
+- Exported reports are localized to the current UI language, and base-amount columns explicitly show the real base code, for example `Amount (KZT)`
+- Localized report `CSV` / `XLSX` exports remain import-safe for the app's generic import pipeline
 
 ## 🖥️ Application Tabs
 
@@ -238,6 +241,7 @@ pytest --cov=. --cov-report=term-missing
 - Legacy `JSON` payloads without `tags` / `record_tags` are still accepted and treated as tag-less data
 - If the `debts` section is explicitly absent, the pipeline tries to preserve existing `related_debt_id` links; if the section is present, links are normalized only against allowed debt IDs
 - `CSV` / `XLSX` imports still use the create-path instead of bulk replace, and both `related_debt_id` and `tags` are now propagated there
+- The generic import parser also understands localized report `CSV` / `XLSX` exports, so title rows, opening balance, and subtotal/final rows are not misread as normal operations
 - Import orchestration now lives in `app.import_support`, while the service layer is split into focused `services/import_*_support.py` helpers
 - `v1.10.1` adds stricter early payload validation: broken references, duplicate `wallet.id`, multiple `system` wallets, and invalid/duplicate `distribution_snapshots` are rejected earlier in the import pipeline
 
@@ -247,6 +251,7 @@ pytest --cov=. --cov-report=term-missing
 - Main low-level parser: `import_full_backup_from_json(...)`
 - `import_backup(...)` remains only as a deprecated compatibility wrapper
 - Snapshot backups and startup-export paths now include tags and record-tag links
+- For the JSON backend, standalone tag metadata during rollback/import is treated as a compatibility layer; the full runtime contract for tag metadata remains SQLite-backed
 - JSON export and backup-copy paths are written atomically through a temporary file plus `fsync` and `os.replace`
 - `backup.export_to_json(...)` now raises `BackupExportError` so bootstrap and the GUI can distinguish export failures from other startup issues
 - On JSON repository save failure, an `.error` snapshot of the unsaved payload is written and `RepositorySaveError` is raised
