@@ -2,7 +2,7 @@
 
 Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals.
 
-The current `v2.0.0-beta.2` build continues the `2.0.0` stabilization line: SQLite stores normalized values as `amount_base` / `limit_base` in `base_currency`, `display_currency` controls presentation only, exported reports are now localized while staying import-safe, statement views and statement exports use newest-first ordering, and shell/runtime orchestration has already been pushed out of the main entry-point modules into narrower helpers with stricter repository capability guards.
+The current `v2.0.0-beta.3` build continues the `2.0.0` stabilization line: SQLite stores normalized values as `amount_base` / `limit_base` in `base_currency`, `display_currency` controls presentation only, first-run currency setup now goes through a dedicated wizard before the initial usable startup, `Settings` now use the same runtime currency/provider contract, exported reports are localized while staying import-safe, statement views and statement exports use newest-first ordering, and shell/runtime orchestration has already been pushed out of the main entry-point modules into narrower helpers with stricter repository capability guards.
 
 ## 🚀 Quick Start
 
@@ -77,7 +77,10 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 - `base_currency` defines the persisted normalized values in SQLite (`amount_base`, `limit_base`) and is stored in `schema_meta`
 - `display_currency` affects only UI presentation and can be switched at runtime from the status bar
 - Business calculations continue to operate on base amounts; UI conversion is done on demand through `CurrencyService.to_display(...)`
+- `base_currency` is chosen only during first-run setup, then SQLite `schema_meta` remains the source of truth
 - By default, the display selector is limited to the whitelist `KZT` / `USD` / `EUR` / `RUB`, even if cached rates contain more currency codes
+- `Settings -> Currency and rates` can update `display_currency`, provider mode, primary/fallback provider, `exchange_rate_api_key`, `auto_update`, and `update_interval_minutes`, but not post-startup `base_currency`
+- `auto_update` is now active behavior instead of passive metadata: when online mode is enabled, rates refresh automatically according to `update_interval_minutes`
 - Exported reports are localized to the current UI language, and base-amount columns explicitly show the real base code, for example `Amount (KZT)`
 - Localized report `CSV` / `XLSX` exports remain import-safe for the app's generic import pipeline
 
@@ -292,7 +295,7 @@ Rates are provided through `CurrencyService` and an ordered provider chain:
 
 Useful configuration points:
 
-- `currency_config.json` — `provider_mode`, `fallback_provider`, `commercial_fallback_provider`, `display_currency_whitelist`
+- `currency_config.json` — `provider_mode`, `fallback_provider`, `commercial_fallback_provider`, `display_currency_whitelist`, `auto_update`, `update_interval_minutes`
 - env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` — runtime override for `exchange_rate_api_key`
 
 ## 📄 License

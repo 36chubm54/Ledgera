@@ -405,6 +405,8 @@ Configuration model:
 - otherwise `provider_mode` chooses between `fallback_provider` and `commercial_fallback_provider`
 - `exchange_rate_api_key` can come from `currency_config.json` or env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY`
 - `display_currency_whitelist` constrains which codes appear in the status-bar switcher
+- `auto_update` and `update_interval_minutes` control recurring rate refresh while online mode is enabled
+- first-run setup may seed the initial provider/display config through a dedicated GUI wizard, but `base_currency` remains a bootstrap-only choice that is persisted into SQLite `schema_meta`
 
 Aggregation rules:
 

@@ -7,6 +7,27 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [2.0.0-beta.3] - 2026-05-13
+
+### Changed
+
+- Added a first-run currency setup wizard before the initial usable startup and kept `base_currency` ownership with SQLite after bootstrap
+- Aligned `Settings -> Валюта и курсы` with the same runtime currency/provider contract used by the first-run wizard
+- Turned `auto_update` into active runtime behavior driven by `update_interval_minutes` instead of passive config metadata
+
+### Fixed
+
+- Preserved inactive fallback-provider settings when editing the active provider mode at runtime
+- Applied provider/API-key changes immediately in online runtime instead of waiting for the next scheduled refresh
+- Validated user-entered `update_interval_minutes` strictly in the setup wizard and `Settings`
+- Fixed the `Settings` currency section so the read-only base currency code is shown reliably
+
+### Testing
+
+- Added targeted coverage for first-run setup, main startup, runtime currency config, auto-update, and Tk-based `Settings` currency UX
+
+---
+
 ## [2.0.0-beta.2] - 2026-05-12
 
 ### Changed
@@ -32,6 +53,25 @@ This project adheres to Semantic Versioning.
 - Full release gate is green: `pyright` passes and the full `pytest` suite passes before beta cut
 
 ---
+
+## [2.0.0-beta.1] - 2026-05-11
+
+### Changed
+
+- Promoted the completed `amount_base` / `limit_base` storage contract from alpha migration work into the first beta release line
+- Locked the two-layer currency model into stabilization mode: `base_currency` remains the persisted accounting layer while `display_currency` stays UI-only
+- Carried forward the repository capability protocol cleanup and shell/runtime extraction as the baseline architecture for beta
+
+### Fixed
+
+- Preserved compatibility with pre-precision SQLite schemas by backfilling missing legacy `*_minor` columns before startup rename migration
+- Preserved imports from pre-rename CSV/XLSX full-backup files by falling back from `amount_base` to legacy `amount_kzt`
+- Preserved legacy JSON repository records and transfers that still store normalized amounts under `amount_kzt`
+- Restored transfer reconstruction during CSV full import so valid linked transfer pairs no longer fail integrity checks
+
+### Testing
+
+- Full release gate is green: `pyright` passes and the full `pytest` suite passes before beta cut
 
 ## [2.0.0-alpha.2] - 2026-05-10
 

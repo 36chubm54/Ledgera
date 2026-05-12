@@ -2,7 +2,7 @@
 
 Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, тегами, бюджетами, долгами, активами и целями.
 
-Текущая beta-версия `v2.0.0-beta.2` продолжает stabilization-линейку `2.0.0`: значения в БД хранятся как `amount_base` / `limit_base` в `base_currency`, `display_currency` управляет только отображением в UI, экспортируемые отчёты локализуются и сохраняют import-safe контракт, выписка и statement-export идут в порядке `newest first`, а shell/runtime orchestration уже вынесен из основных entry-point модулей в более узкие helpers с более строгими repository capability guards.
+Текущая beta-версия `v2.0.0-beta.3` продолжает stabilization-линейку `2.0.0`: значения в БД хранятся как `amount_base` / `limit_base` в `base_currency`, `display_currency` управляет только отображением в UI, first-run currency setup теперь проходит через отдельный wizard перед первым стартом, `Settings` синхронизированы с тем же runtime currency/provider contract, экспортируемые отчёты локализуются и сохраняют import-safe контракт, выписка и statement-export идут в порядке `newest first`, а shell/runtime orchestration уже вынесен из основных entry-point модулей в более узкие helpers с более строгими repository capability guards.
 
 ## 🚀 Быстрый старт
 
@@ -78,7 +78,10 @@ python main.py
 - `base_currency` определяет, как нормализованные значения хранятся в SQLite (`amount_base`, `limit_base`), и записывается в `schema_meta`
 - `display_currency` меняет только представление сумм в работающем приложении и переключается из status bar
 - Бизнес-расчёты продолжают работать в базовой валюте; UI-конвертация выполняется через `CurrencyService.to_display(...)`
+- `base_currency` выбирается только при первом запуске через setup wizard, затем источником истины остаётся SQLite `schema_meta`
 - По умолчанию селектор отображения ограничен whitelist-ом `KZT` / `USD` / `EUR` / `RUB`, даже если кэш курсов содержит больше кодов
+- `Settings -> Валюта и курсы` позволяет менять `display_currency`, provider mode, primary/fallback provider, `exchange_rate_api_key`, `auto_update` и `update_interval_minutes`, но не post-startup `base_currency`
+- `auto_update` больше не является декоративным флагом: при включённом online mode курсы обновляются автоматически по `update_interval_minutes`
 - Экспортируемые отчёты локализуются по текущему языку UI, а колонки базовых сумм явно показывают код базы, например `Сумма (KZT)`
 - Локализованные report `CSV` / `XLSX` exports остаются import-safe для generic import pipeline приложения
 
@@ -293,7 +296,7 @@ python migrate_json_to_sqlite.py --json-path data.json --sqlite-path finance.db
 
 Полезные config points:
 
-- `currency_config.json` — `provider_mode`, `fallback_provider`, `commercial_fallback_provider`, `display_currency_whitelist`
+- `currency_config.json` — `provider_mode`, `fallback_provider`, `commercial_fallback_provider`, `display_currency_whitelist`, `auto_update`, `update_interval_minutes`
 - env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` — runtime override для `exchange_rate_api_key`
 
 ## 📄 Лицензия

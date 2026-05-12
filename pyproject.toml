@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "financial-accounting"
-version = "2.0.0-beta.2"
+version = "2.0.0-beta.3"
+description = "Financial accounting system"
 requires-python = ">=3.11"
 dependencies = [
     "requests==2.32.5",
