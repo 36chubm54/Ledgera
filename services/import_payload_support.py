@@ -98,7 +98,11 @@ def budgets_from_payload(
         start_date = str(item.get("start_date", "") or "").strip()
         end_date = str(item.get("end_date", "") or "").strip()
         limit_base = as_float(item.get("limit_base"), None)
+        if limit_base is None:
+            limit_base = as_float(item.get("limit_kzt"), None)
         limit_base_minor = parse_optional_strict_int(item.get("limit_base_minor"))
+        if limit_base_minor is None:
+            limit_base_minor = parse_optional_strict_int(item.get("limit_kzt_minor"))
         if not category:
             if strict:
                 raise ValueError(f"Budget #{budget_id} has empty category")

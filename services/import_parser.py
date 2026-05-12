@@ -122,6 +122,8 @@ def parse_transfer_row(
             return None, None, next_transfer_id, f"{row_label}: invalid currency '{currency}'"
         rate_at_operation = as_float(row_lc.get("rate_at_operation"), None)
         amount_base = as_float(row_lc.get("amount_base"), None)
+        if amount_base is None:
+            amount_base = as_float(row_lc.get("amount_kzt"), None)
 
     if policy == ImportPolicy.CURRENT_RATE:
         if get_rate is None:

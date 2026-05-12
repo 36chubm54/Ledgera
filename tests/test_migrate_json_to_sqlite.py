@@ -500,6 +500,69 @@ def test_migration_moves_budgets_from_full_backup_json(tmp_path) -> None:
     sqlite_storage.close()
 
 
+def test_migration_moves_legacy_budget_limit_kzt_from_full_backup_json(tmp_path) -> None:
+    json_path = tmp_path / "backup_with_legacy_budgets.json"
+    sqlite_path = tmp_path / "records.db"
+    schema_path = Path(__file__).resolve().parents[1] / "db" / "schema.sql"
+
+    payload = {
+        "wallets": [
+            {
+                "id": 1,
+                "name": "Main wallet",
+                "currency": "KZT",
+                "initial_balance": 1000.0,
+                "system": True,
+                "allow_negative": False,
+                "is_active": True,
+            }
+        ],
+        "records": [],
+        "mandatory_expenses": [],
+        "budgets": [
+            {
+                "id": 1,
+                "category": "Food",
+                "start_date": "2026-03-01",
+                "end_date": "2026-03-31",
+                "limit_kzt": 1500.0,
+                "limit_kzt_minor": 150000,
+                "include_mandatory": True,
+            }
+        ],
+        "transfers": [],
+    }
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    args = Namespace(
+        json_path=str(json_path),
+        sqlite_path=str(sqlite_path),
+        schema_path=str(schema_path),
+        dry_run=False,
+    )
+
+    code = run_migration(args)
+    assert code == 0
+
+    sqlite_storage = SQLiteStorage(str(sqlite_path))
+    sqlite_storage.initialize_schema(str(schema_path))
+    budget_row = _query_one(
+        sqlite_storage,
+        """
+        SELECT category, start_date, end_date, limit_base_minor, include_mandatory
+        FROM budgets
+        ORDER BY id
+        LIMIT 1
+        """,
+    )
+    assert budget_row[0] == "Food"
+    assert budget_row[1] == "2026-03-01"
+    assert budget_row[2] == "2026-03-31"
+    assert budget_row[3] == 150000
+    assert budget_row[4] == 1
+    sqlite_storage.close()
+
+
 def test_migration_rejects_invalid_distribution_structure_in_backup(tmp_path) -> None:
     json_path = tmp_path / "backup_invalid_distribution.json"
     sqlite_path = tmp_path / "records.db"

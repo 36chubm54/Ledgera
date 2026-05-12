@@ -217,6 +217,31 @@ def test_parse_import_file_reads_budgets_from_json(tmp_path: Path) -> None:
     assert parsed.budgets[0]["include_mandatory"] is True
 
 
+def test_parse_transfer_row_accepts_legacy_amount_kzt_for_full_backup() -> None:
+    rows, transfer, next_transfer_id, error = import_parser.parse_transfer_row(
+        {
+            "date": "2026-03-05",
+            "from_wallet_id": "1",
+            "to_wallet_id": "2",
+            "amount_original": "10",
+            "currency": "USD",
+            "rate_at_operation": "500",
+            "amount_kzt": "5000",
+        },
+        row_label="row 1",
+        policy=ImportPolicy.FULL_BACKUP,
+        get_rate=None,
+        next_transfer_id=1,
+        wallet_ids={1, 2},
+    )
+
+    assert error is None
+    assert rows is not None
+    assert transfer is not None
+    assert transfer.amount_base == pytest.approx(5000.0)
+    assert next_transfer_id == 2
+
+
 def test_parse_import_file_reads_debts_from_json(tmp_path: Path) -> None:
     payload = {
         "wallets": [],
