@@ -15,7 +15,6 @@ from gui.tabs.reports_controller import ReportsController
 from gui.tabs.reports_layout import ReportsUiHandles, build_reports_layout
 from gui.tabs.reports_render import (
     apply_group_ui_state,
-    apply_table_ui_state,
     refresh_category_sources,
     refresh_monthly_table,
     refresh_operations_table,
@@ -170,9 +169,6 @@ class ReportsFrame(ttk.Frame):
             return
         self._group_drill_category = category
         self._apply_group_ui_state()
-
-    def _apply_table_ui_state(self) -> None:
-        apply_table_ui_state(self, self._ui)
 
     def _export(self, fmt: str) -> None:
         result = self._last_result

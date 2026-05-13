@@ -181,7 +181,3 @@ def apply_group_ui_state(owner: Any, ui: ReportsUiHandles) -> None:
             else tr("reports.grouped_hint", "Сгруппированный вид (двойной щелчок по категории) ⓘ")
         )
     refresh_operations_table(owner, ui)
-
-
-def apply_table_ui_state(_owner: Any, ui: ReportsUiHandles) -> None:
-    ui.operations_container.grid()
