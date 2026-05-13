@@ -15,6 +15,7 @@ from gui.helpers import open_in_file_manager
 from gui.i18n import tr
 from gui.logging_utils import log_ui_error
 from gui.tabs.settings_support import show_audit_report_dialog
+from gui.tooltip import Tooltip
 from gui.ui_dialogs import messagebox_compat as messagebox
 from gui.ui_helpers import attach_treeview_scrollbars, enable_treeview_column_autosize
 from gui.ui_theme import (
@@ -31,6 +32,14 @@ class WalletsSectionBindings:
     refresh_wallets: Callable[[], None]
 
 
+@dataclass(slots=True)
+class WalletFormFields:
+    name_entry: ttk.Entry
+    currency_entry: ttk.Entry
+    initial_entry: ttk.Entry
+    allow_negative_var: tk.BooleanVar
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,23 +51,28 @@ class MessageBoxLike(Protocol):
     def askyesno(self, title: str, message: str) -> bool: ...
 
 
-def build_wallets_section(
-    left_panel: tk.Frame | ttk.Frame,
+def refresh_wallet_related_ui(context: Any) -> None:
+    if context.refresh_transfer_wallet_menus is not None:
+        try:
+            context.refresh_transfer_wallet_menus()
+        except tk.TclError:
+            pass
+
+    if context.refresh_operation_wallet_menu is not None:
+        try:
+            context.refresh_operation_wallet_menu()
+        except tk.TclError:
+            pass
+
+
+def _create_wallet_form(
+    parent: tk.Misc,
     *,
-    context: Any,
     base_currency_code: str,
-    messagebox_module: MessageBoxLike = messagebox,
-) -> WalletsSectionBindings:
-    pad_x = PAD_SM
-    pad_y = PAD_XS
-
-    wallets_card = create_card_section(left_panel, tr("settings.wallets", "Кошельки"))
-    wallets_card.grid(row=0, column=0, sticky="nsew", pady=(0, PAD_LG))
-    wallets_frame = wallets_card.winfo_children()[-1]
-    wallets_frame.grid_columnconfigure(0, weight=1)
-    wallets_frame.grid_rowconfigure(1, weight=1)
-
-    form = ttk.Frame(wallets_frame)
+    pad_x: int,
+    pad_y: int,
+) -> WalletFormFields:
+    form = ttk.Frame(parent)
     form.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=pad_y)
     form.grid_columnconfigure(1, weight=1)
 
@@ -92,8 +106,20 @@ def build_wallets_section(
         sticky="w",
         pady=2,
     )
+    return WalletFormFields(
+        name_entry=wallet_name_entry,
+        currency_entry=wallet_currency_entry,
+        initial_entry=wallet_initial_entry,
+        allow_negative_var=wallet_allow_negative_var,
+    )
 
-    list_frame = ttk.Frame(wallets_frame)
+
+def _build_wallet_tree(
+    parent: tk.Misc,
+    *,
+    pad_x: int,
+) -> tuple[ttk.Treeview, ttk.Scrollbar | None, ttk.Scrollbar | None]:
+    list_frame = ttk.Frame(parent)
     list_frame.grid(row=1, column=0, sticky="nsew", padx=pad_x)
     list_frame.grid_rowconfigure(0, weight=1)
     list_frame.grid_columnconfigure(0, weight=1)
@@ -142,11 +168,17 @@ def build_wallets_section(
         wallet_tree.column(col, width=width, minwidth=minwidth, stretch=stretch, anchor=anchor)  # type: ignore[arg-type]
     enable_treeview_column_autosize(wallet_tree, columns=("name",), max_width=320)
     wallet_tree.grid(row=0, column=0, sticky="nsew")
-
     wallet_scroll, wallet_xscroll = attach_treeview_scrollbars(
         list_frame, wallet_tree, row=0, column=0, horizontal=True
     )
+    return wallet_tree, wallet_scroll, wallet_xscroll
 
+
+def _bind_wallet_scrolling(
+    wallet_tree: ttk.Treeview,
+    wallet_scroll: ttk.Scrollbar | None,
+    wallet_xscroll: ttk.Scrollbar | None,
+) -> None:
     def _wallet_scroll_units(delta: int, *, multiplier: int = 12) -> int:
         if delta == 0:
             return 0
@@ -198,6 +230,87 @@ def build_wallets_section(
             widget.bind("<Shift-Button-4>", _on_wallet_shift_button4, add="+")
             widget.bind("<Shift-Button-5>", _on_wallet_shift_button5, add="+")
 
+
+def _build_wallet_actions(
+    parent: tk.Misc,
+    *,
+    pad_x: int,
+    pad_y: int,
+    on_delete: Callable[[], None],
+    on_refresh: Callable[[], None],
+    on_close: Callable[[], None] | None,
+) -> None:
+    wallet_actions = ttk.Frame(parent)
+    wallet_actions.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=pad_y)
+    wallet_actions.grid_columnconfigure(0, weight=1)
+    wallet_actions.grid_columnconfigure(1, weight=1)
+    if on_close is not None:
+        wallet_actions.grid_columnconfigure(2, weight=1)
+
+    ttk.Button(
+        wallet_actions,
+        text=tr("settings.wallets.delete", "Удалить кошелек"),
+        command=on_delete,
+    ).grid(
+        row=0,
+        column=0,
+        sticky="ew",
+        padx=(0, 4),
+    )
+    ttk.Button(
+        wallet_actions,
+        text=tr("common.refresh", "Обновить"),
+        command=on_refresh,
+    ).grid(
+        row=0,
+        column=1,
+        sticky="ew",
+        padx=(4, 0),
+    )
+    if on_close is not None:
+        ttk.Button(
+            wallet_actions,
+            text=tr("common.close", "Закрыть"),
+            command=on_close,
+        ).grid(
+            row=0,
+            column=2,
+            sticky="ew",
+            padx=(8, 0),
+        )
+
+
+def build_wallets_section(
+    parent_panel: tk.Frame | ttk.Frame,
+    *,
+    context: Any,
+    base_currency_code: str,
+    messagebox_module: MessageBoxLike = messagebox,
+    use_card: bool = True,
+    row_index: int = 0,
+    on_close: Callable[[], None] | None = None,
+) -> WalletsSectionBindings:
+    pad_x = PAD_SM
+    pad_y = PAD_XS
+
+    if use_card:
+        wallets_card = create_card_section(parent_panel, tr("settings.wallets", "Кошельки"))
+        wallets_card.grid(row=row_index, column=0, sticky="nsew", pady=(0, PAD_LG))
+        wallets_frame = wallets_card.winfo_children()[-1]
+    else:
+        wallets_frame = ttk.Frame(parent_panel)
+        wallets_frame.grid(row=row_index, column=0, sticky="nsew")
+    wallets_frame.grid_columnconfigure(0, weight=1)
+    wallets_frame.grid_rowconfigure(1, weight=1)
+    form_fields = _create_wallet_form(
+        wallets_frame,
+        base_currency_code=base_currency_code,
+        pad_x=pad_x,
+        pad_y=pad_y,
+    )
+    wallet_tree, wallet_scroll, wallet_xscroll = _build_wallet_tree(wallets_frame, pad_x=pad_x)
+    _bind_wallet_scrolling(wallet_tree, wallet_scroll, wallet_xscroll)
+
     def refresh_wallets() -> None:
         for iid in wallet_tree.get_children():
             wallet_tree.delete(iid)
@@ -219,26 +332,15 @@ def build_wallets_section(
                     tr("common.yes", "Да") if wallet.is_active else tr("common.no", "Нет"),
                 ),
             )
-
-        if context.refresh_transfer_wallet_menus is not None:
-            try:
-                context.refresh_transfer_wallet_menus()
-            except tk.TclError:
-                pass
-
-        if context.refresh_operation_wallet_menu is not None:
-            try:
-                context.refresh_operation_wallet_menu()
-            except tk.TclError:
-                pass
+        refresh_wallet_related_ui(context)
 
     context.refresh_wallets = refresh_wallets
 
     def create_wallet() -> None:
         try:
-            initial_balance = float(wallet_initial_entry.get().strip() or "0")
+            initial_balance = float(form_fields.initial_entry.get().strip() or "0")
         except ValueError:
-            messagebox.showerror(
+            messagebox_module.showerror(
                 tr("common.error", "Ошибка"),
                 tr(
                     "settings.wallets.error.initial_balance",
@@ -249,12 +351,12 @@ def build_wallets_section(
 
         name = ""
         try:
-            name = wallet_name_entry.get().strip()
+            name = form_fields.name_entry.get().strip()
             wallet = context.controller.create_wallet(
                 name=name,
-                currency=(wallet_currency_entry.get() or base_currency_code).strip(),
+                currency=(form_fields.currency_entry.get() or base_currency_code).strip(),
                 initial_balance=initial_balance,
-                allow_negative=wallet_allow_negative_var.get(),
+                allow_negative=form_fields.allow_negative_var.get(),
             )
             messagebox_module.showinfo(
                 tr("common.done", "Готово"),
@@ -265,9 +367,9 @@ def build_wallets_section(
                     wallet_name=wallet.name,
                 ),
             )
-            wallet_name_entry.delete(0, tk.END)
-            wallet_initial_entry.delete(0, tk.END)
-            wallet_initial_entry.insert(0, "0")
+            form_fields.name_entry.delete(0, tk.END)
+            form_fields.initial_entry.delete(0, tk.END)
+            form_fields.initial_entry.insert(0, "0")
             refresh_wallets()
         except (DomainError, ValueError, TypeError, RuntimeError) as error:
             log_ui_error(logger, "UI_SETTINGS_CREATE_WALLET_FAILED", error, name=name)
@@ -281,7 +383,7 @@ def build_wallets_section(
             )
 
     ttk.Button(
-        form,
+        form_fields.name_entry.master,
         text=tr("settings.wallets.create", "Создать кошелек"),
         style="Primary.TButton",
         command=create_wallet,
@@ -324,53 +426,35 @@ def build_wallets_section(
         except (DomainError, ValueError, TypeError, RuntimeError) as error:
             log_ui_error(logger, "UI_SETTINGS_DELETE_WALLET_FAILED", error, wallet_id=wallet_id)
             messagebox_module.showerror(tr("common.error", "Ошибка"), str(error))
-
-    wallet_actions = ttk.Frame(wallets_frame)
-    wallet_actions.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=pad_y)
-    wallet_actions.grid_columnconfigure(0, weight=1)
-    wallet_actions.grid_columnconfigure(1, weight=1)
-
-    ttk.Button(
-        wallet_actions,
-        text=tr("settings.wallets.delete", "Удалить кошелек"),
-        command=delete_wallet,
-    ).grid(
-        row=0,
-        column=0,
-        sticky="ew",
-        padx=(0, 4),
-    )
-    ttk.Button(
-        wallet_actions,
-        text=tr("common.refresh", "Обновить"),
-        command=refresh_wallets,
-    ).grid(
-        row=0,
-        column=1,
-        sticky="ew",
-        padx=(4, 0),
+    _build_wallet_actions(
+        wallets_frame,
+        pad_x=pad_x,
+        pad_y=pad_y,
+        on_delete=delete_wallet,
+        on_refresh=refresh_wallets,
+        on_close=on_close,
     )
 
     return WalletsSectionBindings(refresh_wallets=refresh_wallets)
 
 
 def build_currency_section(
-    right_panel: tk.Frame | ttk.Frame,
+    parent_panel: tk.Frame | ttk.Frame,
     *,
     context: Any,
     messagebox_module: MessageBoxLike = messagebox,
+    row_index: int = 0,
 ) -> None:
     pad_x = PAD_SM
     pad_y = PAD_XS
 
     currency_card = create_card_section(
-        right_panel,
+        parent_panel,
         tr("settings.currency.title", "Валюта и курсы"),
     )
-    currency_card.grid(row=0, column=0, sticky="ew", pady=(0, PAD_LG))
+    currency_card.grid(row=row_index, column=0, sticky="ew", pady=(0, PAD_LG))
     currency_frame = currency_card.winfo_children()[-1]
     currency_frame.grid_columnconfigure(1, weight=1)
-    currency_frame.grid_columnconfigure(3, weight=1)
 
     runtime_config = context.controller.get_runtime_currency_config()
     provider_names = context.controller.get_supported_currency_provider_names()
@@ -403,15 +487,26 @@ def build_currency_section(
         currency_frame,
         text=tr("settings.currency.base_currency", "Базовая валюта:"),
     ).grid(row=0, column=0, sticky="w", padx=pad_x, pady=pad_y)
+    base_currency_frame = ttk.Frame(currency_frame)
+    base_currency_frame.grid(row=0, column=1, sticky="w", padx=(0, pad_x), pady=pad_y)
     ttk.Label(
-        currency_frame,
+        base_currency_frame,
         text=base_currency_text,
-    ).grid(row=0, column=1, sticky="w", padx=(0, pad_x), pady=pad_y)
+    ).grid(row=0, column=0, sticky="w")
+    base_currency_info = ttk.Label(base_currency_frame, text="ⓘ")
+    base_currency_info.grid(row=0, column=1, sticky="w", padx=(PAD_XS, 0))
+    Tooltip(
+        base_currency_info,
+        tr(
+            "settings.currency.base_currency_note",
+            "Базовая валюта доступна только при первом запуске приложения.",
+        ),
+    )
 
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.display_currency", "Валюта отображения:"),
-    ).grid(row=0, column=2, sticky="w", padx=pad_x, pady=pad_y)
+    ).grid(row=1, column=0, sticky="w", padx=pad_x, pady=pad_y)
     display_currency_combo = ttk.Combobox(
         currency_frame,
         textvariable=display_currency_var,
@@ -419,12 +514,12 @@ def build_currency_section(
         state="readonly",
         width=18,
     )
-    display_currency_combo.grid(row=0, column=3, sticky="ew", padx=(0, pad_x), pady=pad_y)
+    display_currency_combo.grid(row=1, column=1, sticky="ew", padx=(0, pad_x), pady=pad_y)
 
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.provider_mode", "Режим провайдера:"),
-    ).grid(row=1, column=0, sticky="w", padx=pad_x, pady=pad_y)
+    ).grid(row=2, column=0, sticky="w", padx=pad_x, pady=pad_y)
     provider_mode_combo = ttk.Combobox(
         currency_frame,
         textvariable=provider_mode_var,
@@ -432,12 +527,12 @@ def build_currency_section(
         state="readonly",
         width=18,
     )
-    provider_mode_combo.grid(row=1, column=1, sticky="ew", padx=(0, pad_x), pady=pad_y)
+    provider_mode_combo.grid(row=2, column=1, sticky="ew", padx=(0, pad_x), pady=pad_y)
 
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.primary_provider", "Основной провайдер:"),
-    ).grid(row=1, column=2, sticky="w", padx=pad_x, pady=pad_y)
+    ).grid(row=3, column=0, sticky="w", padx=pad_x, pady=pad_y)
     primary_provider_combo = ttk.Combobox(
         currency_frame,
         textvariable=primary_provider_var,
@@ -445,12 +540,12 @@ def build_currency_section(
         state="readonly",
         width=18,
     )
-    primary_provider_combo.grid(row=1, column=3, sticky="ew", padx=(0, pad_x), pady=pad_y)
+    primary_provider_combo.grid(row=3, column=1, sticky="ew", padx=(0, pad_x), pady=pad_y)
 
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.fallback_provider", "Резервный провайдер:"),
-    ).grid(row=2, column=0, sticky="w", padx=pad_x, pady=pad_y)
+    ).grid(row=4, column=0, sticky="w", padx=pad_x, pady=pad_y)
     fallback_provider_combo = ttk.Combobox(
         currency_frame,
         textvariable=fallback_provider_var,
@@ -458,43 +553,34 @@ def build_currency_section(
         state="readonly",
         width=18,
     )
-    fallback_provider_combo.grid(row=2, column=1, sticky="ew", padx=(0, pad_x), pady=pad_y)
+    fallback_provider_combo.grid(row=4, column=1, sticky="ew", padx=(0, pad_x), pady=pad_y)
 
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.exchange_api_key", "API key ExchangeRate:"),
-    ).grid(row=2, column=2, sticky="w", padx=pad_x, pady=pad_y)
+    ).grid(row=5, column=0, sticky="w", padx=pad_x, pady=pad_y)
     ttk.Entry(
         currency_frame,
         textvariable=exchange_api_key_var,
         width=24,
-    ).grid(row=2, column=3, sticky="ew", padx=(0, pad_x), pady=pad_y)
+    ).grid(row=5, column=1, sticky="ew", padx=(0, pad_x), pady=pad_y)
 
     ttk.Checkbutton(
         currency_frame,
         text=tr("settings.currency.auto_update", "Автообновление курсов"),
         variable=auto_update_var,
-    ).grid(row=3, column=0, columnspan=2, sticky="w", padx=pad_x, pady=(pad_y, 0))
+    ).grid(row=6, column=0, columnspan=2, sticky="w", padx=pad_x, pady=(pad_y, 0))
 
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.update_interval", "Интервал обновления (мин):"),
-    ).grid(row=4, column=0, sticky="w", padx=pad_x, pady=(pad_y, 0))
+    ).grid(row=7, column=0, sticky="w", padx=pad_x, pady=(pad_y, 0))
     ttk.Entry(
         currency_frame,
         textvariable=update_interval_var,
-        width=12,
-    ).grid(row=4, column=1, sticky="w", padx=(0, pad_x), pady=(pad_y, 0))
+        width=24,
+    ).grid(row=7, column=1, sticky="ew", padx=(0, pad_x), pady=pad_y)
 
-    ttk.Label(
-        currency_frame,
-        text=tr(
-            "settings.currency.base_currency_note",
-            "Базовая валюта доступна только при первом запуске приложения.",
-        ),
-        wraplength=440,
-        justify="left",
-    ).grid(row=3, column=2, rowspan=2, columnspan=2, sticky="w", padx=pad_x, pady=(pad_y, 0))
 
     def _refresh_provider_choices(*_args: object) -> None:
         available = context.controller.get_supported_currency_provider_names()
@@ -555,7 +641,7 @@ def build_currency_section(
     _refresh_provider_choices()
 
     buttons = ttk.Frame(currency_frame)
-    buttons.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(PAD_SM, 0))
+    buttons.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(PAD_SM, 0))
     buttons.grid_columnconfigure(0, weight=1)
     ttk.Button(
         buttons,
@@ -573,12 +659,13 @@ def build_backup_section(
     refresh_wallets: Callable[[], None],
     refresh_mandatory: Callable[[], None],
     messagebox_module: MessageBoxLike = messagebox,
+    row_index: int = 2,
 ) -> None:
     pad_x = PAD_SM
     pad_y = PAD_XS
 
     backup_card = create_card_section(left_panel, tr("settings.backup", "Резервная копия (JSON)"))
-    backup_card.grid(row=2, column=0, sticky="ew")
+    backup_card.grid(row=row_index, column=0, sticky="ew")
     backup_frame = backup_card.winfo_children()[-1]
     backup_frame.grid_columnconfigure(0, weight=1)
     backup_frame.grid_columnconfigure(1, weight=1)
@@ -772,12 +859,13 @@ def build_audit_section(
     parent: tk.Frame | ttk.Frame,
     context: Any,
     messagebox_module: MessageBoxLike = messagebox,
+    row_index: int = 3,
 ) -> None:
     pad_x = PAD_SM
     pad_y = PAD_XS
 
     audit_card = create_card_section(left_panel, tr("settings.audit", "Финансовый аудит"))
-    audit_card.grid(row=3, column=0, sticky="ew", pady=(PAD_LG, 0))
+    audit_card.grid(row=row_index, column=0, sticky="ew", pady=(PAD_LG, 0))
     audit_frame = audit_card.winfo_children()[-1]
     audit_frame.grid_columnconfigure(0, weight=1)
 

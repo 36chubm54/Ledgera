@@ -15,6 +15,7 @@ from app.use_cases import ApplyMandatoryAutoPayments, CreateMandatoryExpense
 from domain.records import MandatoryExpenseRecord
 from gui.controllers import FinancialController
 from gui.tabs.settings_tab import SettingsTabContext, build_settings_tab
+from gui.tabs.wallet_manager import create_wallet_manager_dialog
 from infrastructure.sqlite_repository import SQLiteRecordRepository
 
 
@@ -342,6 +343,12 @@ def test_settings_tab_builds_with_current_treeview_anchors(tmp_path: Path) -> No
     root.withdraw()
     try:
         controller = FinancialController(repo, CurrencyService(use_online=False))
+        controller.create_wallet(
+            name="Cash",
+            currency="KZT",
+            initial_balance=0.0,
+            allow_negative=False,
+        )
         parent = tk.Frame(root)
         parent.pack()
         context = cast(
@@ -368,6 +375,8 @@ def test_settings_tab_builds_with_current_treeview_anchors(tmp_path: Path) -> No
 
         build_settings_tab(parent, context, {"CSV": {"ext": ".csv", "desc": "CSV"}})
         root.update_idletasks()
+        manage_buttons = _find_buttons(parent, "Управление кошельками...")
+        assert manage_buttons
     finally:
         root.destroy()
         repo.close()
@@ -427,6 +436,11 @@ def test_settings_tab_currency_section_saves_runtime_config(tmp_path: Path) -> N
 
             base_currency_labels = _find_labels(parent, "KZT")
             assert base_currency_labels
+            assert _find_labels(parent, "ⓘ")
+            assert not _find_labels(
+                parent,
+                "Базовая валюта доступна только при первом запуске приложения.",
+            )
 
             display_combo = _find_combobox_by_values(
                 parent,
@@ -461,6 +475,158 @@ def test_settings_tab_currency_section_saves_runtime_config(tmp_path: Path) -> N
             assert saved["display_currency"] == "USD"
             assert saved["provider_mode"] == "commercial"
             assert saved["update_interval_minutes"] == 60
+    finally:
+        root.destroy()
+        repo.close()
+
+
+def test_settings_tab_wallet_opener_invokes_wallet_manager(tmp_path: Path) -> None:
+    db_path = tmp_path / "settings_wallet_opener.db"
+    repo = SQLiteRecordRepository(str(db_path), schema_path=_schema_path())
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        controller = FinancialController(repo, CurrencyService(use_online=False))
+        parent = tk.Frame(root)
+        parent.pack()
+        context = cast(
+            SettingsTabContext,
+            type(
+                "Ctx",
+                (),
+                {
+                    "controller": controller,
+                    "repository": repo,
+                    "refresh_operation_wallet_menu": None,
+                    "refresh_transfer_wallet_menus": None,
+                    "refresh_wallets": None,
+                    "_refresh_list": lambda self: None,
+                    "_refresh_charts": lambda self: None,
+                    "_refresh_budgets": lambda self: None,
+                    "_refresh_all": lambda self: None,
+                    "_run_background": lambda self, task, **kwargs: kwargs.get(
+                        "on_success", lambda *_: None
+                    )(task()),
+                },
+            )(),
+        )
+        build_settings_tab(parent, context, {"CSV": {"ext": ".csv", "desc": "CSV"}})
+        root.update()
+
+        with patch("gui.tabs.settings_tab.show_wallet_manager_dialog") as open_dialog:
+            manage_buttons = _find_buttons(parent, "Управление кошельками...")
+            assert manage_buttons
+            manage_buttons[0].invoke()
+            root.update()
+
+        open_dialog.assert_called_once()
+    finally:
+        root.destroy()
+        repo.close()
+
+
+def test_wallet_manager_dialog_builds_and_handles_wallet_crud(tmp_path: Path) -> None:
+    db_path = tmp_path / "wallet_manager_dialog.db"
+    repo = SQLiteRecordRepository(str(db_path), schema_path=_schema_path())
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        controller = FinancialController(repo, CurrencyService(use_online=False))
+        parent = tk.Frame(root)
+        parent.pack()
+        context = cast(
+            SettingsTabContext,
+            type(
+                "Ctx",
+                (),
+                {
+                    "controller": controller,
+                    "repository": repo,
+                    "refresh_operation_wallet_menu": None,
+                    "refresh_transfer_wallet_menus": None,
+                    "refresh_wallets": None,
+                    "_refresh_list": lambda self: None,
+                    "_refresh_charts": lambda self: None,
+                    "_refresh_budgets": lambda self: None,
+                    "_refresh_all": lambda self: None,
+                    "_run_background": lambda self, task, **kwargs: kwargs.get(
+                        "on_success", lambda *_: None
+                    )(task()),
+                },
+            )(),
+        )
+
+        build_settings_tab(parent, context, {"CSV": {"ext": ".csv", "desc": "CSV"}})
+        root.update()
+
+        dialog = create_wallet_manager_dialog(parent, context=context, base_currency_code="KZT")
+        root.update()
+
+        assert isinstance(dialog, tk.Toplevel)
+        assert bool(dialog.winfo_exists())
+        wallet_tree = _find_treeview(dialog, column="allow_negative")
+
+        name_entry = _find_entry_by_value(dialog, "")
+        currency_entry = _find_entry_by_value(dialog, "KZT")
+        initial_entry = _find_entry_by_value(dialog, "0")
+
+        name_entry.insert(0, "Reserve")
+        currency_entry.delete(0, tk.END)
+        currency_entry.insert(0, "USD")
+        initial_entry.delete(0, tk.END)
+        initial_entry.insert(0, "0")
+
+        with (
+            patch("gui.tabs.wallet_manager.messagebox.showerror"),
+            patch("gui.tabs.wallet_manager.messagebox.showinfo"),
+        ):
+            create_buttons = _find_buttons(dialog, "Создать кошелек")
+            assert create_buttons
+            create_buttons[0].invoke()
+            root.update()
+
+        values_after_create = [
+            tuple(wallet_tree.item(iid, "values")) for iid in wallet_tree.get_children()
+        ]
+        assert any(row[1] == "Reserve" and row[2] == "USD" for row in values_after_create)
+
+        controller.create_wallet(
+            name="Spare",
+            currency="EUR",
+            initial_balance=10.0,
+            allow_negative=False,
+        )
+        refresh_buttons = _find_buttons(dialog, "Обновить")
+        assert refresh_buttons
+        refresh_buttons[0].invoke()
+        root.update()
+        values_after_refresh = [
+            tuple(wallet_tree.item(iid, "values")) for iid in wallet_tree.get_children()
+        ]
+        assert any(row[1] == "Spare" and row[2] == "EUR" for row in values_after_refresh)
+
+        reserve_iid = next(
+            iid
+            for iid in wallet_tree.get_children()
+            if wallet_tree.item(iid, "values")[1] == "Reserve"
+        )
+        wallet_tree.selection_set(reserve_iid)
+
+        with (
+            patch("gui.tabs.wallet_manager.messagebox.showerror"),
+            patch("gui.tabs.wallet_manager.messagebox.showinfo"),
+        ):
+            delete_buttons = _find_buttons(dialog, "Удалить кошелек")
+            assert delete_buttons
+            delete_buttons[0].invoke()
+            root.update()
+
+        assert not any(
+            wallet.name == "Reserve" and wallet.is_active for wallet in controller.load_wallets()
+        )
+
+        dialog.destroy()
+        root.update()
     finally:
         root.destroy()
         repo.close()
