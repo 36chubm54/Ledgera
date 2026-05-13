@@ -179,7 +179,7 @@ def _show_hotkey_help(app: Any) -> None:
 
     rows = [
         (
-            "Alt+1..8",
+            "Alt+1..9",
             tr("hotkeys.scope.global", "Глобально"),
             tr("hotkeys.action.switch_tab", "Переключить вкладку"),
         ),
@@ -212,11 +212,6 @@ def _show_hotkey_help(app: Any) -> None:
             "End",
             tr("tabs.operations", "Операции"),
             tr("hotkeys.action.operations.end", "Последняя запись"),
-        ),
-        (
-            "Ctrl+E",
-            tr("tabs.operations", "Операции"),
-            tr("hotkeys.action.operations.expense", "Тип -> Расход"),
         ),
         (
             "Del",
@@ -274,6 +269,26 @@ def _show_hotkey_help(app: Any) -> None:
             "F2",
             tr("tabs.budget", "Бюджет"),
             tr("hotkeys.action.budget.edit", "Редактировать бюджет"),
+        ),
+        (
+            "Enter",
+            tr("tab.mandatory", "Обязательные"),
+            tr("hotkeys.action.mandatory.add", "Создать обязательный расход"),
+        ),
+        (
+            "F2",
+            tr("tab.mandatory", "Обязательные"),
+            tr("hotkeys.action.mandatory.edit", "Редактировать обязательный расход"),
+        ),
+        (
+            "Del",
+            tr("tab.mandatory", "Обязательные"),
+            tr("hotkeys.action.mandatory.delete", "Удалить обязательный расход"),
+        ),
+        (
+            "Ctrl+Enter",
+            tr("tab.mandatory", "Обязательные"),
+            tr("hotkeys.action.mandatory.add_to_records", "Добавить в записи"),
         ),
         ("Enter", tr("tabs.debts", "Долги"), tr("hotkeys.action.debts.add", "Добавить долг")),
         ("Ctrl+P", tr("tabs.debts", "Долги"), tr("hotkeys.action.debts.pay", "Погасить долг")),
@@ -364,7 +379,7 @@ def register_hotkeys(app: Any) -> None:
     def _allow_operations_shell_hotkeys() -> bool:
         return not (_active_tab(app) == "operations" and _operations_inline_editor_active(app))
 
-    for index, tab_key in enumerate(getattr(app, "_tab_order", [])[:8], start=1):
+    for index, tab_key in enumerate(getattr(app, "_tab_order", [])[:9], start=1):
         _bind(
             f"<Alt-Key-{index}>",
             lambda _event, key=tab_key: _guarded_tab_action(lambda: _switch_to(key)),
@@ -408,6 +423,13 @@ def register_hotkeys(app: Any) -> None:
                         getattr(_tab_binding("_budget_bindings", "budget"), "delete_budget", None)
                     )
                     or _call_action(
+                        getattr(
+                            _tab_binding("_mandatory_bindings", "mandatory"),
+                            "delete_mandatory",
+                            None,
+                        )
+                    )
+                    or _call_action(
                         getattr(_tab_binding("_debt_bindings", "debts"), "delete_debt", None)
                     )
                 ),
@@ -445,6 +467,13 @@ def register_hotkeys(app: Any) -> None:
                     or _call_action(
                         getattr(_tab_binding("_budget_bindings", "budget"), "edit_budget", None)
                     )
+                    or _call_action(
+                        getattr(
+                            _tab_binding("_mandatory_bindings", "mandatory"),
+                            "edit_mandatory",
+                            None,
+                        )
+                    )
                 ),
                 block_on_entry=True,
             )
@@ -466,10 +495,43 @@ def register_hotkeys(app: Any) -> None:
                         getattr(_tab_binding("_budget_bindings", "budget"), "add_budget", None)
                     )
                     or _call_action(
+                        getattr(
+                            _tab_binding("_mandatory_bindings", "mandatory"),
+                            "add_mandatory",
+                            None,
+                        )
+                    )
+                    or _call_action(
                         getattr(_tab_binding("_debt_bindings", "debts"), "add_debt", None)
                     )
                 )
             )
+        ),
+    )
+    _bind(
+        "<Control-Return>",
+        lambda _event: _guarded_tab_action(
+            lambda: _call_action(
+                getattr(
+                    _tab_binding("_mandatory_bindings", "mandatory"),
+                    "add_to_records",
+                    None,
+                )
+            ),
+            block_on_entry=True,
+        ),
+    )
+    _bind(
+        "<Control-KP_Enter>",
+        lambda _event: _guarded_tab_action(
+            lambda: _call_action(
+                getattr(
+                    _tab_binding("_mandatory_bindings", "mandatory"),
+                    "add_to_records",
+                    None,
+                )
+            ),
+            block_on_entry=True,
         ),
     )
 

@@ -37,6 +37,7 @@ class _FakeApp:
             "budget",
             "debts",
             "distribution",
+            "mandatory",
             "settings",
         ]
         self._tab_widgets = {key: object() for key in self._tab_order}
@@ -58,7 +59,17 @@ class _FakeApp:
         )
         self._reports_tab = SimpleNamespace(_on_generate=MagicMock(), _export=MagicMock())
         self._analytics_bindings = SimpleNamespace(refresh=MagicMock(), toggle_tag_mode=MagicMock())
-        self._budget_bindings = SimpleNamespace(add_budget=MagicMock(), delete_budget=MagicMock())
+        self._budget_bindings = SimpleNamespace(
+            add_budget=MagicMock(),
+            edit_budget=MagicMock(),
+            delete_budget=MagicMock(),
+        )
+        self._mandatory_bindings = SimpleNamespace(
+            add_mandatory=MagicMock(),
+            edit_mandatory=MagicMock(),
+            add_to_records=MagicMock(),
+            delete_mandatory=MagicMock(),
+        )
         self._debt_bindings = SimpleNamespace(
             pay_debt=MagicMock(),
             write_off_debt=MagicMock(),
@@ -100,6 +111,15 @@ def _key_event(
     return SimpleNamespace(keysym=keysym, char=char, keycode=keycode, state=state)
 
 
+def _make_tk_root_or_skip(reason: str) -> tk.Tk:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"{reason}: {exc}")
+    root.withdraw()
+    return root
+
+
 def test_active_tab_returns_selected_tab_key() -> None:
     app = _make_app()
     app._notebook.select(app._tab_widgets["reports"])
@@ -107,11 +127,7 @@ def test_active_tab_returns_selected_tab_key() -> None:
 
 
 def test_focus_is_entry_recognizes_input_widgets() -> None:
-    try:
-        app = tk.Tk()
-    except tk.TclError as exc:
-        pytest.skip(f"Tk runtime unavailable for focus test: {exc}")
-    app.withdraw()
+    app = _make_tk_root_or_skip("Tk runtime unavailable for focus test")
     try:
         entry = ttk.Entry(app)
         combo = ttk.Combobox(app)
@@ -135,6 +151,14 @@ def test_alt_binding_switches_tabs() -> None:
     app._notebook.select(app._tab_widgets["infographics"])
     _trigger_global_binding(app, "<Alt-Key-3>")
     assert _active_tab(app) == "reports"
+
+
+def test_alt_binding_switches_to_last_bound_tab() -> None:
+    app = _make_app()
+    register_hotkeys(app)
+    app._notebook.select(app._tab_widgets["infographics"])
+    _trigger_global_binding(app, "<Alt-Key-9>")
+    assert _active_tab(app) == "mandatory"
 
 
 def test_f5_calls_all_refresh_hooks() -> None:
@@ -172,8 +196,7 @@ def test_ctrl_i_works_with_russian_layout_letter() -> None:
 
 
 def test_delete_does_not_run_when_focus_is_entry() -> None:
-    root = tk.Tk()
-    root.withdraw()
+    root = _make_tk_root_or_skip("Tk runtime unavailable for delete focus test")
     app = _make_app()
     try:
         register_hotkeys(app)
@@ -243,9 +266,40 @@ def test_ctrl_w_writes_off_debt_only_on_debts_tab_without_text_focus() -> None:
     app._debt_bindings.write_off_debt.assert_called_once()
 
 
+def test_mandatory_tab_hotkeys_call_template_actions() -> None:
+    app = _make_app()
+    register_hotkeys(app)
+    app._focus_widget = SimpleNamespace(winfo_toplevel=lambda: app)
+    app._notebook.select(app._tab_widgets["mandatory"])
+
+    _trigger_global_binding(app, "<Return>")
+    _trigger_global_binding(app, "<F2>")
+    _trigger_global_binding(app, "<Delete>")
+    _trigger_global_binding(app, "<Control-Return>")
+
+    app._mandatory_bindings.add_mandatory.assert_called_once()
+    app._mandatory_bindings.edit_mandatory.assert_called_once()
+    app._mandatory_bindings.delete_mandatory.assert_called_once()
+    app._mandatory_bindings.add_to_records.assert_called_once()
+
+
+def test_mandatory_delete_hotkey_is_blocked_when_focus_is_entry() -> None:
+    root = _make_tk_root_or_skip("Tk runtime unavailable for mandatory delete focus test")
+    app = _make_app()
+    try:
+        register_hotkeys(app)
+        entry = ttk.Entry(root)
+        app._shell = root
+        app._focus_widget = entry
+        app._notebook.select(app._tab_widgets["mandatory"])
+        _trigger_global_binding(app, "<Delete>")
+        app._mandatory_bindings.delete_mandatory.assert_not_called()
+    finally:
+        root.destroy()
+
+
 def test_ctrl_r_refreshes_analytics_even_when_entry_has_focus() -> None:
-    root = tk.Tk()
-    root.withdraw()
+    root = _make_tk_root_or_skip("Tk runtime unavailable for analytics refresh focus test")
     app = _make_app()
     try:
         register_hotkeys(app)
@@ -279,8 +333,7 @@ def test_ctrl_t_toggles_analytics_tag_mode_only_on_analytics_tab() -> None:
 
 
 def test_ctrl_t_toggles_analytics_tag_mode_even_when_entry_has_focus() -> None:
-    root = tk.Tk()
-    root.withdraw()
+    root = _make_tk_root_or_skip("Tk runtime unavailable for analytics tag focus test")
     app = _make_app()
     try:
         register_hotkeys(app)
@@ -297,8 +350,7 @@ def test_ctrl_t_toggles_analytics_tag_mode_even_when_entry_has_focus() -> None:
 
 
 def test_enter_does_not_fire_when_modal_dialog_has_focus() -> None:
-    root = tk.Tk()
-    root.withdraw()
+    root = _make_tk_root_or_skip("Tk runtime unavailable for modal hotkey test")
     app = _make_app()
     try:
         dialog = tk.Toplevel(root)
@@ -332,8 +384,7 @@ def test_shell_operations_hotkeys_are_blocked_while_inline_editor_is_active() ->
 
 
 def test_show_hotkey_help_populates_expected_rows() -> None:
-    app = tk.Tk()
-    app.withdraw()
+    app = _make_tk_root_or_skip("Tk runtime unavailable for hotkey help test")
     try:
         _show_hotkey_help(app)
         app.update()
@@ -345,7 +396,11 @@ def test_show_hotkey_help_populates_expected_rows() -> None:
         ]
         assert len(trees) == 1
         tree = trees[0]
-        assert len(tree.get_children()) == 25
+        rows = [tuple(tree.item(item_id, "values")) for item_id in tree.get_children()]
+        assert len(rows) == 28
+        assert rows.count(("Ctrl+E", "Операции", "Тип -> Расход")) == 1
+        assert ("Alt+1..9", "Глобально", "Переключить вкладку") in rows
+        assert ("Ctrl+Enter", "Обязательные", "Добавить в записи") in rows
     finally:
         if getattr(app, "_hotkey_help_dialog", None) is not None:
             try:
