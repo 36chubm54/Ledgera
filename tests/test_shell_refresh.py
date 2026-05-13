@@ -113,6 +113,7 @@ def test_owner_refresh_wrappers_delegate_to_expected_callbacks() -> None:
         _analytics_bindings=SimpleNamespace(refresh=lambda: called.append("analytics")),
         _dashboard_bindings=SimpleNamespace(refresh=lambda: called.append("dashboard")),
         _budget_bindings=SimpleNamespace(refresh=lambda: called.append("budget")),
+        _mandatory_bindings=SimpleNamespace(refresh=lambda: called.append("mandatory")),
         _debt_bindings=SimpleNamespace(refresh=lambda: called.append("debt")),
         _distribution_bindings=SimpleNamespace(refresh=lambda: called.append("distribution")),
         _settings_bindings=SimpleNamespace(refresh=lambda: called.append("settings")),

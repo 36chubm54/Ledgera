@@ -14,6 +14,7 @@ from app.services import CurrencyService
 from app.use_cases import ApplyMandatoryAutoPayments, CreateMandatoryExpense
 from domain.records import MandatoryExpenseRecord
 from gui.controllers import FinancialController
+from gui.tabs.mandatory_tab import MandatoryTabContext, build_mandatory_tab
 from gui.tabs.settings_tab import SettingsTabContext, build_settings_tab
 from gui.tabs.wallet_manager import create_wallet_manager_dialog
 from infrastructure.sqlite_repository import SQLiteRecordRepository
@@ -632,7 +633,7 @@ def test_wallet_manager_dialog_builds_and_handles_wallet_crud(tmp_path: Path) ->
         repo.close()
 
 
-def test_settings_tab_edit_mandatory_accepts_grouped_amount_input(tmp_path: Path) -> None:
+def test_mandatory_tab_edit_accepts_grouped_amount_input(tmp_path: Path) -> None:
     db_path = tmp_path / "settings_mandatory_edit.db"
     repo = SQLiteRecordRepository(str(db_path), schema_path=_schema_path())
     root = tk.Tk()
@@ -653,7 +654,7 @@ def test_settings_tab_edit_mandatory_accepts_grouped_amount_input(tmp_path: Path
         parent = tk.Frame(root)
         parent.pack()
         context = cast(
-            SettingsTabContext,
+            MandatoryTabContext,
             type(
                 "Ctx",
                 (),
@@ -663,6 +664,7 @@ def test_settings_tab_edit_mandatory_accepts_grouped_amount_input(tmp_path: Path
                     "refresh_operation_wallet_menu": None,
                     "refresh_transfer_wallet_menus": None,
                     "refresh_wallets": None,
+                    "refresh_mandatory": None,
                     "_refresh_list": lambda self: None,
                     "_refresh_charts": lambda self: None,
                     "_refresh_budgets": lambda self: None,
@@ -674,15 +676,15 @@ def test_settings_tab_edit_mandatory_accepts_grouped_amount_input(tmp_path: Path
             )(),
         )
 
-        build_settings_tab(parent, context, {"CSV": {"ext": ".csv", "desc": "CSV"}})
+        build_mandatory_tab(parent, context, {"CSV": {"ext": ".csv", "desc": "CSV"}})
         root.update()
 
         mand_tree = _find_treeview(parent, column="autopay")
         mand_tree.selection_set("0")
 
         with (
-            patch("gui.tabs.settings_tab.messagebox.showerror"),
-            patch("gui.tabs.settings_tab.messagebox.showinfo"),
+            patch("gui.tabs.mandatory_tab.messagebox.showerror"),
+            patch("gui.tabs.mandatory_tab.messagebox.showinfo"),
         ):
             edit_buttons = _find_buttons(parent, "Редактировать")
             assert edit_buttons

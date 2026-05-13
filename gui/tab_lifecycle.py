@@ -8,6 +8,7 @@ from gui.tabs.budget_tab import BudgetTabContext
 from gui.tabs.dashboard_tab import DashboardTabContext
 from gui.tabs.debts_tab import DebtsTabContext
 from gui.tabs.distribution_tab import DistributionTabContext
+from gui.tabs.mandatory_tab import MandatoryTabContext
 from gui.tabs.operations_tab import OperationsTabContext
 from gui.tabs.reports_tab import ReportsTabContext
 from gui.tabs.settings_tab import SettingsTabContext
@@ -22,6 +23,7 @@ TAB_ORDER = [
     "budget",
     "debts",
     "distribution",
+    "mandatory",
     "settings",
 ]
 
@@ -34,6 +36,7 @@ def create_tab_frames(notebook: ttk.Notebook) -> dict[str, ttk.Frame]:
         "analytics": ttk.Frame(notebook),
         "dashboard": ttk.Frame(notebook),
         "budget": ttk.Frame(notebook),
+        "mandatory": ttk.Frame(notebook),
         "debts": ttk.Frame(notebook),
         "distribution": ttk.Frame(notebook),
         "settings": ttk.Frame(notebook),
@@ -62,6 +65,7 @@ class TabBuildContext(Protocol):
     tab_analytics: ttk.Frame
     tab_dashboard: ttk.Frame
     tab_budget: ttk.Frame
+    tab_mandatory: ttk.Frame
     tab_debts: ttk.Frame
     tab_distribution: ttk.Frame
     tab_settings: ttk.Frame
@@ -85,10 +89,12 @@ class TabBuildContext(Protocol):
     _analytics_bindings: Any
     _dashboard_bindings: Any
     _budget_bindings: Any
+    _mandatory_bindings: Any
     _debt_bindings: Any
     _distribution_bindings: Any
     _settings_bindings: Any
     refresh_wallets: Any
+    refresh_mandatory: Any
 
     def bind_all(
         self, sequence: str | None = None, func: Any | None = None, add: str | None = None
@@ -187,6 +193,16 @@ def build_tab(app: Any, tab_key: str) -> bool:
 
         app._budget_bindings = build_budget_tab(app.tab_budget, context=cast(BudgetTabContext, app))
         app.refresh_budgets = app._budget_bindings.refresh
+        return True
+    if tab_key == "mandatory":
+        from gui.tabs.mandatory_tab import build_mandatory_tab
+
+        app._mandatory_bindings = build_mandatory_tab(
+            app.tab_mandatory,
+            context=cast(MandatoryTabContext, app),
+            import_formats=app._import_formats,
+        )
+        app.refresh_mandatory = app._mandatory_bindings.refresh
         return True
     if tab_key == "debts":
         from gui.tabs.debts_tab import build_debts_tab

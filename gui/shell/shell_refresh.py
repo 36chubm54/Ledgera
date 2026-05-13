@@ -67,6 +67,7 @@ def refresh_owner_theme_surfaces(owner: Any, *, refresh_tree_zebra: Callable[[],
             owner._analytics_bindings,
             owner._dashboard_bindings,
             owner._debt_bindings,
+            owner._mandatory_bindings,
         ),
     )
 
@@ -103,6 +104,7 @@ def refresh_owner_display_currency_views(owner: Any) -> None:
             owner._analytics_bindings,
             owner._dashboard_bindings,
             owner._budget_bindings,
+            owner._mandatory_bindings,
             owner._debt_bindings,
             owner._distribution_bindings,
             owner._settings_bindings,

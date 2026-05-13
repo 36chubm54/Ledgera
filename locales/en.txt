@@ -36,6 +36,7 @@ tab.dashboard=Dashboard
 tab.budget=Budget
 tab.debts=Debts
 tab.distribution=Distribution
+tab.mandatory=Recurring
 tab.settings=Settings
 
 # Common

@@ -41,6 +41,7 @@ def reset_tab_bindings_state(owner: Any, *, hide_records_tooltip: Callable[[], N
     owner.refresh_operation_wallet_menu = None
     owner.refresh_transfer_wallet_menus = None
     owner.refresh_wallets = None
+    owner.refresh_mandatory = None
     owner.refresh_budgets = None
     owner.refresh_all = None
     owner._operations_bindings = None
@@ -48,6 +49,7 @@ def reset_tab_bindings_state(owner: Any, *, hide_records_tooltip: Callable[[], N
     owner._analytics_bindings = None
     owner._dashboard_bindings = None
     owner._budget_bindings = None
+    owner._mandatory_bindings = None
     owner._debt_bindings = None
     owner._distribution_bindings = None
     owner._settings_bindings = None

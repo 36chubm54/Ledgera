@@ -1,4 +1,4 @@
-"""Settings tab — runtime settings, backup, audit and mandatory expenses."""
+"""Settings tab — runtime settings, backup and audit."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from tkinter import ttk
 from typing import Any, Protocol
 
 from gui.i18n import tr
-from gui.tabs.settings_mandatory_section import build_mandatory_section
 from gui.tabs.settings_sections import (
     build_audit_section,
     build_backup_section,
@@ -27,6 +26,7 @@ class SettingsTabContext(Protocol):
     refresh_operation_wallet_menu: Callable[[], None] | None
     refresh_transfer_wallet_menus: Callable[[], None] | None
     refresh_wallets: Callable[[], None] | None
+    refresh_mandatory: Callable[[], None] | None
 
     def _refresh_list(self) -> None: ...
 
@@ -62,23 +62,21 @@ def build_settings_tab(
             return str(getter() or "").strip().upper() or "KZT"
         return "KZT"
 
-    parent.grid_columnconfigure(0, weight=3, uniform="settings")
-    parent.grid_columnconfigure(1, weight=5, uniform="settings")
+    parent.grid_columnconfigure(0, weight=1)
     parent.grid_rowconfigure(0, weight=1)
 
     left_panel = ttk.Frame(parent)
-    left_panel.grid(row=0, column=0, sticky="nsew", padx=(PAD_XL, PAD_SM), pady=PAD_LG)
+    left_panel.grid(row=0, column=0, sticky="nsew", padx=PAD_XL, pady=PAD_LG)
     left_panel.grid_columnconfigure(0, weight=1)
-
-    right_panel = ttk.Frame(parent)
-    right_panel.grid(row=0, column=1, sticky="nsew", padx=(PAD_SM, PAD_XL), pady=PAD_LG)
-    right_panel.grid_rowconfigure(0, weight=1)
-    right_panel.grid_columnconfigure(0, weight=1)
 
     base_currency_code = _base_currency_code()
 
     def refresh_wallets() -> None:
         refresh_wallet_related_ui(context)
+
+    def refresh_mandatory() -> None:
+        if context.refresh_mandatory is not None:
+            context.refresh_mandatory()
 
     context.refresh_wallets = refresh_wallets
 
@@ -114,15 +112,6 @@ def build_settings_tab(
         messagebox_module=messagebox,
         row_index=1,
     )
-    refresh_mandatory = build_mandatory_section(
-        right_panel,
-        context=context,
-        import_formats=import_formats,
-        refresh_wallets=refresh_wallets,
-        base_currency_code=base_currency_code,
-        messagebox_module=messagebox,
-        row_index=0,
-    )
     build_backup_section(
         left_panel,
         parent=parent,
@@ -140,5 +129,4 @@ def build_settings_tab(
         row_index=3,
     )
 
-    refresh_mandatory()
-    return SettingsTabBindings(refresh=refresh_mandatory)
+    return SettingsTabBindings(refresh=lambda: None)

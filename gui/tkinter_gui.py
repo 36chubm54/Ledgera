@@ -86,6 +86,7 @@ class FinancialApp(tk.Tk):
     _analytics_bindings: Any | None
     _dashboard_bindings: Any | None
     _budget_bindings: Any | None
+    _mandatory_bindings: Any | None
     _debt_bindings: Any | None
     _distribution_bindings: Any | None
     _operations_bindings: Any | None
@@ -113,6 +114,7 @@ class FinancialApp(tk.Tk):
     refresh_operation_wallet_menu: Callable[[], None] | None
     refresh_transfer_wallet_menus: Callable[[], None] | None
     refresh_wallets: Callable[[], None] | None
+    refresh_mandatory: Callable[[], None] | None
     refresh_budgets: Callable[[], None] | None
     refresh_all: Callable[[], None] | None
     pie_month_var: tk.StringVar | None

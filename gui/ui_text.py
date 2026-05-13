@@ -17,6 +17,7 @@ def get_tab_titles() -> dict[str, str]:
         "budget": tr("tab.budget", "Бюджет"),
         "debts": tr("tab.debts", "Долги"),
         "distribution": tr("tab.distribution", "Распределение"),
+        "mandatory": tr("tab.mandatory", "Обязательные"),
         "settings": tr("tab.settings", "Настройки"),
     }
 

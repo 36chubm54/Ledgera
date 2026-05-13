@@ -36,6 +36,7 @@ tab.dashboard=Дашборд
 tab.budget=Бюджет
 tab.debts=Долги
 tab.distribution=Распределение
+tab.mandatory=Обязательные
 tab.settings=Настройки
 
 # Common

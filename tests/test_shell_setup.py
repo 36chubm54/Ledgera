@@ -27,6 +27,7 @@ def test_attach_tab_aliases_assigns_named_tab_attributes() -> None:
         "analytics": object(),
         "dashboard": object(),
         "budget": object(),
+        "mandatory": object(),
         "debts": object(),
         "distribution": object(),
         "settings": object(),
@@ -35,5 +36,6 @@ def test_attach_tab_aliases_assigns_named_tab_attributes() -> None:
     attach_tab_aliases(owner, tabs)
 
     assert owner.tab_infographics is tabs["infographics"]
+    assert owner.tab_mandatory is tabs["mandatory"]
     assert owner.tab_distribution is tabs["distribution"]
     assert owner.tab_settings is tabs["settings"]

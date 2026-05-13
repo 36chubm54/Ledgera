@@ -13,6 +13,7 @@ def initialize_shell_state(owner: Any, *, after_jobs: Mapping[str, str]) -> None
     owner._analytics_bindings = None
     owner._dashboard_bindings = None
     owner._budget_bindings = None
+    owner._mandatory_bindings = None
     owner._debt_bindings = None
     owner._distribution_bindings = None
     owner._operations_bindings = None
@@ -24,6 +25,7 @@ def initialize_shell_state(owner: Any, *, after_jobs: Mapping[str, str]) -> None
     owner.refresh_operation_wallet_menu = None
     owner.refresh_transfer_wallet_menus = None
     owner.refresh_wallets = None
+    owner.refresh_mandatory = None
     owner.refresh_budgets = None
     owner.refresh_all = None
     owner._after_jobs = after_jobs
@@ -64,6 +66,7 @@ def attach_tab_aliases(owner: Any, tab_widgets: Mapping[str, Any]) -> None:
     owner.tab_analytics = tab_widgets["analytics"]
     owner.tab_dashboard = tab_widgets["dashboard"]
     owner.tab_budget = tab_widgets["budget"]
+    owner.tab_mandatory = tab_widgets["mandatory"]
     owner.tab_debts = tab_widgets["debts"]
     owner.tab_distribution = tab_widgets["distribution"]
     owner.tab_settings = tab_widgets["settings"]
