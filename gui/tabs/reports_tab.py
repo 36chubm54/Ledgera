@@ -11,16 +11,18 @@ from typing import Any, Protocol
 from gui.helpers import open_in_file_manager
 from gui.i18n import tr
 from gui.logging_utils import log_ui_error
-from gui.record_colors import KIND_TO_FOREGROUND, foreground_for_kind
 from gui.tabs.reports_controller import ReportsController
-from gui.tooltip import Tooltip
-from gui.ui_helpers import (
-    attach_treeview_scrollbars,
-    enable_treeview_column_autosize,
-    show_error,
-    show_info,
+from gui.tabs.reports_layout import ReportsUiHandles, build_reports_layout
+from gui.tabs.reports_render import (
+    apply_group_ui_state,
+    apply_table_ui_state,
+    refresh_category_sources,
+    refresh_monthly_table,
+    refresh_operations_table,
+    refresh_summary_only,
+    refresh_wallets,
 )
-from gui.ui_theme import PAD_LG, create_card_section, enable_treeview_zebra
+from gui.ui_helpers import show_error, show_info
 from services.report_service import ReportFilters, build_category_group_rows
 from utils.csv_utils import report_to_csv
 
@@ -48,20 +50,10 @@ class ReportsFrame(ttk.Frame):
         self._last_result = None
         self._group_drill_category: str | None = None
         self._group_iid_to_category: dict[str, str] = {}
+        self._wallet_label_to_id: dict[str, int | None] = {}
 
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
-
-        self._build_controls()
-        self._build_body()
-        self.operations_tree.bind("<Double-1>", self._on_operations_double_click)
-        self._refresh_wallets()
-        self._apply_group_ui_state()
-
-    def _build_controls(self) -> None:
-        controls = ttk.Frame(self)
-        controls.grid(row=0, column=0, sticky="ew")
-        controls.grid_columnconfigure(0, weight=1)
 
         self.period_start_var = tk.StringVar()
         self.period_end_var = tk.StringVar()
@@ -70,271 +62,28 @@ class ReportsFrame(ttk.Frame):
         self.wallet_var = tk.StringVar(value=tr("reports.wallets.all", "Все кошельки"))
         self.group_var = tk.BooleanVar(value=True)
         self.totals_mode_var = tk.StringVar(value="fixed")
-
-        top_filters = ttk.Frame(controls)
-        top_filters.grid(row=0, column=0, sticky="ew")
-        for column in (1, 3, 5, 7):
-            top_filters.grid_columnconfigure(column, weight=1, uniform="reports_filters")
-
-        ttk.Label(top_filters, text=tr("common.from", "С даты:")).grid(row=0, column=0, sticky="w")
-        ttk.Entry(top_filters, textvariable=self.period_start_var, width=16).grid(
-            row=0, column=1, sticky="ew", padx=(6, 16)
-        )
-
-        ttk.Label(top_filters, text=tr("common.to", "По дату:")).grid(row=0, column=2, sticky="w")
-        ttk.Entry(top_filters, textvariable=self.period_end_var, width=16).grid(
-            row=0, column=3, sticky="ew", padx=(6, 16)
-        )
-
-        ttk.Label(top_filters, text=tr("common.category", "Категория:")).grid(
-            row=0, column=4, sticky="w"
-        )
-        self.category_combo = ttk.Combobox(
-            top_filters, textvariable=self.category_var, values=[], width=18
-        )
-        self.category_combo.grid(row=0, column=5, sticky="ew", padx=(6, 16))
-
-        ttk.Label(top_filters, text=tr("common.wallet", "Кошелек:")).grid(
-            row=0, column=6, sticky="w"
-        )
-        self.wallet_menu = ttk.Combobox(
-            top_filters,
-            textvariable=self.wallet_var,
-            values=[],
-            state="readonly",
-        )
-        self.wallet_menu.grid(row=0, column=7, sticky="ew", padx=(6, 0))
-
-        middle_row = ttk.Frame(controls)
-        middle_row.grid(row=1, column=0, sticky="ew", pady=(8, 0))
-        middle_row.grid_columnconfigure(0, weight=3)
-        middle_row.grid_columnconfigure(1, weight=2)
-        middle_row.grid_columnconfigure(2, weight=3)
-
-        tag_filters = ttk.Frame(middle_row)
-        tag_filters.grid(row=0, column=0, sticky="ew")
-        tag_filters.grid_columnconfigure(1, weight=1)
-        ttk.Label(tag_filters, text=tr("common.tags", "Теги:")).grid(row=0, column=0, sticky="w")
-        self.tag_combo = ttk.Combobox(tag_filters, textvariable=self.tag_var, values=[], width=18)
-        self.tag_combo.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-
-        group_frame = ttk.Frame(middle_row)
-        group_frame.grid(row=0, column=1, sticky="ew", padx=(16, 16))
-        group_frame.grid_columnconfigure(1, weight=1)
-        ttk.Checkbutton(
-            group_frame,
-            text=tr("reports.group_by_category", "Группировать по категориям"),
-            variable=self.group_var,
-            command=self._apply_group_ui_state,
-        ).grid(row=0, column=0, sticky="w")
-
         self._group_status_var = tk.StringVar(value="")
-        self.group_status_label = ttk.Label(group_frame, textvariable=self._group_status_var)
-        self.group_status_label.grid(row=0, column=1, sticky="w", padx=(12, 0))
 
-        # Hint for grouped view
-        self._group_status_tooltip = Tooltip(
-            self.group_status_label,
-            tr(
-                "reports.group_tooltip",
-                "Двойной щелчок по категории открывает детализацию. "
-                "Кнопка «Назад» возвращает к сводке.",
-            ),
-        )
+        self._ui: ReportsUiHandles = build_reports_layout(self)
+        self.category_combo = self._ui.category_combo
+        self.wallet_menu = self._ui.wallet_menu
+        self.tag_combo = self._ui.tag_combo
+        self.group_status_label = self._ui.group_status_label
+        self.group_back_button = self._ui.group_back_button
+        self.export_button = self._ui.export_button
+        self.operations_container = self._ui.operations_container
+        self.operations_tree = self._ui.operations_tree
+        self.monthly_tree = self._ui.monthly_tree
+        self.summary_frame = self._ui.summary_frame
+        self._summary_labels = self._ui.summary_labels
+        self._summary_values = self._ui.summary_values
 
-        self.group_back_button = ttk.Button(
-            group_frame,
-            text=tr("common.back", "Назад"),
-            command=self._on_group_back,
-        )
-        self.group_back_button.grid(row=0, column=2, sticky="w", padx=(12, 0))
-
-        totals = ttk.Frame(middle_row)
-        totals.grid(row=0, column=2, sticky="e")
-        ttk.Label(totals, text=tr("reports.totals_mode", "Режим итогов:")).grid(
-            row=0, column=0, sticky="w", padx=(0, 8)
-        )
-        ttk.Radiobutton(
-            totals,
-            text=tr("reports.totals.fixed", "На историческом курсе"),
-            variable=self.totals_mode_var,
-            value="fixed",
-            command=self._refresh_summary_only,
-        ).grid(row=0, column=1, sticky="w", padx=(0, 8))
-        ttk.Radiobutton(
-            totals,
-            text=tr("reports.totals.current", "На текущем курсе"),
-            variable=self.totals_mode_var,
-            value="current",
-            command=self._refresh_summary_only,
-        ).grid(row=0, column=2, sticky="w")
-
-        buttons = ttk.Frame(controls)
-        buttons.grid(row=2, column=0, sticky="w", pady=(10, 0))
-        ttk.Button(
-            buttons,
-            text=tr("reports.generate", "Сформировать"),
-            style="Primary.TButton",
-            command=self._on_generate,
-        ).grid(row=0, column=0, padx=(0, 8))
-
-        self.export_button = ttk.Menubutton(buttons, text=tr("common.export", "Экспорт"))
-        self.export_button.grid(row=0, column=1, padx=(0, 8))
-        export_menu = tk.Menu(self.export_button, tearoff=False)
-        export_menu.add_command(label="CSV", command=lambda: self._export("csv"))
-        export_menu.add_command(label="XLSX", command=lambda: self._export("xlsx"))
-        export_menu.add_command(label="PDF", command=lambda: self._export("pdf"))
-        self.export_button["menu"] = export_menu
-        self._export_tooltip = Tooltip(
-            self.export_button,
-            tr(
-                "reports.export.tooltip",
-                "Экспорт отчётов использует суммы в валюте базы.\n"
-                "Файл может отличаться от текущего отображения в выбранной валюте показа.",
-            ),
-        )
-
-    def _build_body(self) -> None:
-        body = ttk.PanedWindow(self, orient=tk.HORIZONTAL, style="Reports.TPanedwindow")
-        body.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
-
-        left = ttk.Frame(body)
-        left.grid_rowconfigure(1, weight=1)
-        left.grid_columnconfigure(0, weight=1)
-        body.add(left, weight=3)
-
-        right = ttk.Frame(body)
-        right.grid_rowconfigure(0, weight=1)
-        right.grid_columnconfigure(0, weight=1)
-        body.add(right, weight=2)
-
-        # (B) Summary block
-        summary_card = create_card_section(left, tr("common.summary", "Сводка"))
-        summary_card.grid(row=0, column=0, sticky="ew")
-        self.summary_frame = summary_card.winfo_children()[-1]
-        self.summary_frame.grid_columnconfigure(1, weight=1)
-        self._summary_labels: dict[str, ttk.Label] = {}
-        self._summary_values: dict[str, ttk.Label] = {}
-        for row_index, (label_key, label_text) in enumerate(
-            [
-                (
-                    "net_worth_fixed",
-                    tr("reports.summary.net_worth_fixed", "Чистый капитал (исторический):"),
-                ),
-                (
-                    "net_worth_current",
-                    tr("reports.summary.net_worth_current", "Чистый капитал (текущий):"),
-                ),
-                ("initial_balance", tr("reports.summary.initial_balance", "Начальный баланс:")),
-                ("records_total", tr("reports.summary.records_total", "Сумма операций:")),
-                ("final_balance", tr("reports.summary.final_balance", "Итоговый баланс:")),
-                ("fx_difference", tr("reports.summary.fx_difference", "Курсовая разница:")),
-            ]
-        ):
-            label_widget = ttk.Label(self.summary_frame, text=label_text)
-            label_widget.grid(row=row_index, column=0, sticky="w")
-            value_label = ttk.Label(self.summary_frame, text="—")
-            value_label.grid(row=row_index, column=1, sticky="e")
-            self._summary_labels[label_key] = label_widget
-            self._summary_values[label_key] = value_label
-
-        # (C) Operations table
-        operations_card = create_card_section(left, tr("tab.operations", "Операции"))
-        operations_card.grid(row=1, column=0, sticky="nsew", pady=(PAD_LG, 0))
-        self.operations_container = operations_card.winfo_children()[-1]
-        self.operations_container.grid_rowconfigure(0, weight=1)
-        self.operations_container.grid_columnconfigure(0, weight=1)
-
-        self.operations_tree = ttk.Treeview(
-            self.operations_container,
-            columns=("date", "type", "category", "tags", "amount"),
-            show="headings",
-            selectmode="browse",
-        )
-        enable_treeview_zebra(self.operations_tree)
-        self.operations_tree.heading("date", text=tr("common.date", "Дата"))
-        self.operations_tree.heading("type", text=tr("common.type_short", "Тип"))
-        self.operations_tree.heading("category", text=tr("common.category", "Категория"))
-        self.operations_tree.heading("tags", text=tr("common.tags", "Теги"))
-        self.operations_tree.heading("amount", text=tr("common.amount", "Сумма"))
-        self.operations_tree.column("date", width=100, minwidth=100, stretch=False, anchor="w")
-        self.operations_tree.column("type", width=200, minwidth=200, stretch=False, anchor="w")
-        self.operations_tree.column("category", width=260, minwidth=220, stretch=False, anchor="w")
-        self.operations_tree.column("tags", width=220, minwidth=160, stretch=True, anchor="w")
-        self.operations_tree.column("amount", width=100, minwidth=100, anchor="e")
-        enable_treeview_column_autosize(
-            self.operations_tree,
-            columns=("category", "tags"),
-            max_width=420,
-        )
-        self.operations_tree.grid(row=0, column=0, sticky="nsew")
-        attach_treeview_scrollbars(
-            self.operations_container,
-            self.operations_tree,
-            row=0,
-            column=0,
-            horizontal=False,
-        )
-        for kind, color in KIND_TO_FOREGROUND.items():
-            try:
-                self.operations_tree.tag_configure(kind, foreground=color)
-            except tk.TclError:
-                pass
-
-        # (D) Monthly summary
-        monthly_card = create_card_section(
-            right, tr("reports.monthly_summary", "Помесячная сводка")
-        )
-        monthly_card.grid(row=0, column=0, sticky="nsew")
-        monthly_frame = monthly_card.winfo_children()[-1]
-        monthly_frame.grid_rowconfigure(0, weight=1)
-        monthly_frame.grid_columnconfigure(0, weight=1)
-
-        self.monthly_tree = ttk.Treeview(
-            monthly_frame,
-            columns=("month", "income", "expense"),
-            show="headings",
-            selectmode="none",
-        )
-        enable_treeview_zebra(self.monthly_tree)
-        self.monthly_tree.heading("month", text=tr("common.month", "Месяц"))
-        self.monthly_tree.heading("income", text=tr("analytics.income", "Доходы"))
-        self.monthly_tree.heading("expense", text=tr("analytics.expenses", "Расходы"))
-        self.monthly_tree.column("month", width=50, minwidth=50, anchor="w")
-        self.monthly_tree.column("income", width=90, minwidth=90, anchor="e")
-        self.monthly_tree.column("expense", width=90, minwidth=90, anchor="e")
-        self.monthly_tree.grid(row=0, column=0, sticky="nsew")
-        attach_treeview_scrollbars(
-            monthly_frame,
-            self.monthly_tree,
-            row=0,
-            column=0,
-            horizontal=False,
-        )
-
-        def _block_separator_resize(event: tk.Event) -> str | None:
-            if isinstance(event.widget, ttk.Treeview):
-                region = event.widget.identify_region(event.x, event.y)
-                if region == "separator":
-                    return "break"
-            return None
-
-        def _bind_fixed_width_columns(tree: ttk.Treeview) -> None:
-            tree.bind("<Button-1>", _block_separator_resize, add="+")
-
-        _bind_fixed_width_columns(self.operations_tree)
-        _bind_fixed_width_columns(self.monthly_tree)
+        self.operations_tree.bind("<Double-1>", self._on_operations_double_click)
+        self._refresh_wallets()
+        self._apply_group_ui_state()
 
     def _refresh_wallets(self) -> None:
-        selected = self.wallet_var.get()
-        all_wallets = tr("reports.wallets.all", "Все кошельки")
-        self._wallet_label_to_id: dict[str, int | None] = {all_wallets: None}
-        for wallet in self._controller.load_active_wallets():
-            self._wallet_label_to_id[f"[{wallet.id}] {wallet.name} ({wallet.currency})"] = wallet.id
-        labels = list(self._wallet_label_to_id.keys())
-        selected_label = selected if selected in self._wallet_label_to_id else all_wallets
-        self.wallet_menu["values"] = labels
-        self.wallet_var.set(selected_label)
+        refresh_wallets(self, self._ui)
 
     def _current_filters(self) -> ReportFilters:
         wallet_id = self._wallet_label_to_id.get(self.wallet_var.get(), None)
@@ -370,51 +119,7 @@ class ReportsFrame(ttk.Frame):
         self._refresh_category_sources()
 
     def _refresh_summary_only(self) -> None:
-        result = self._last_result
-        if result is None:
-            return
-        currency_code = self._context.controller.get_display_currency_code()
-        fmt_money = self._context.controller.format_display_money
-        summary = result.summary
-        wallet_specific = result.filters.wallet_id is not None
-        self._summary_labels["net_worth_fixed"].config(
-            text=(
-                tr("reports.summary.wallet_balance_fixed", "Баланс кошелька (исторический):")
-                if wallet_specific
-                else tr("reports.summary.net_worth_fixed", "Чистый капитал (исторический):")
-            )
-        )
-        self._summary_labels["net_worth_current"].config(
-            text=(
-                tr("reports.summary.wallet_balance_current", "Баланс кошелька (текущий):")
-                if wallet_specific
-                else tr("reports.summary.net_worth_current", "Чистый капитал (текущий):")
-            )
-        )
-        self.operations_tree.heading("amount", text=currency_code)
-        self.monthly_tree.heading(
-            "income",
-            text=tr("reports.income", "Доход") + f" ({currency_code})",
-        )
-        self.monthly_tree.heading(
-            "expense", text=tr("reports.expense", "Расход") + f" ({currency_code})"
-        )
-        self._summary_values["net_worth_fixed"].config(text=fmt_money(summary.net_worth_fixed))
-        self._summary_values["net_worth_current"].config(text=fmt_money(summary.net_worth_current))
-        self._summary_values["initial_balance"].config(text=fmt_money(summary.initial_balance))
-        self._summary_values["records_total"].config(text=fmt_money(summary.records_total_fixed))
-        if self.totals_mode_var.get() == "current":
-            final_value = summary.final_balance_current
-        else:
-            final_value = summary.final_balance_fixed
-        self._summary_values["final_balance"].config(text=fmt_money(final_value))
-        self._summary_values["fx_difference"].config(text=fmt_money(summary.fx_difference))
-        if summary.active_tag:
-            self._group_status_var.set(
-                tr("reports.filter.tag", "Фильтр по тегу: {tag}", tag=summary.active_tag)
-            )
-        elif not self._group_drill_category:
-            self._group_status_var.set("")
+        refresh_summary_only(self, self._ui)
 
     def _display_type_label(self, raw_label: str) -> str:
         normalized = str(raw_label or "").strip().lower()
@@ -435,117 +140,16 @@ class ReportsFrame(ttk.Frame):
         return category
 
     def _refresh_operations_table(self) -> None:
-        for iid in self.operations_tree.get_children():
-            self.operations_tree.delete(iid)
-        result = self._last_result
-        if result is None:
-            return
-
-        if not self.group_var.get():
-            for row in result.operations:
-                tags = (row.kind,) if foreground_for_kind(row.kind) else ()
-                self.operations_tree.insert(
-                    "",
-                    "end",
-                    values=(
-                        row.date,
-                        self._display_type_label(row.type_label),
-                        self._display_category_label(row.category),
-                        row.tags_text,
-                        self._context.controller.format_display_amount(row.amount_base),
-                    ),
-                    tags=tags,
-                )
-            return
-
-        self._group_iid_to_category = {}
-        drill_category = (self._group_drill_category or "").strip()
-        if drill_category:
-            for row in result.operations:
-                if row.category != drill_category:
-                    continue
-                tags = (row.kind,) if foreground_for_kind(row.kind) else ()
-                self.operations_tree.insert(
-                    "",
-                    "end",
-                    values=(
-                        row.date,
-                        self._display_type_label(row.type_label),
-                        self._display_category_label(row.category),
-                        row.tags_text,
-                        self._context.controller.format_display_amount(row.amount_base),
-                    ),
-                    tags=tags,
-                )
-            return
-
-        for index, row in enumerate(build_category_group_rows(result.operations), start=1):
-            category = self._display_category_label(row.category)
-            iid = f"cat_{index}"
-            self._group_iid_to_category[iid] = (
-                "" if str(row.category or "").strip() == "<Empty>" else str(row.category)
-            )
-            self.operations_tree.insert(
-                "",
-                "end",
-                iid=iid,
-                values=(
-                    "",
-                    tr("reports.group.ops", "Опер.: {count}", count=row.operations_count),
-                    category,
-                    "",
-                    self._context.controller.format_display_amount(row.total_base),
-                ),
-            )
+        refresh_operations_table(self, self._ui)
 
     def _refresh_monthly_table(self) -> None:
-        for iid in self.monthly_tree.get_children():
-            self.monthly_tree.delete(iid)
-        result = self._last_result
-        if result is None:
-            return
-        for row in result.monthly:
-            self.monthly_tree.insert(
-                "",
-                "end",
-                values=(
-                    row.month,
-                    self._context.controller.format_display_amount(row.income),
-                    self._context.controller.format_display_amount(row.expense),
-                ),
-            )
+        refresh_monthly_table(self, self._ui)
 
     def _refresh_category_sources(self) -> None:
-        result = self._last_result
-        if result is None:
-            return
-        values = [""] + result.categories
-        self.category_combo["values"] = values
-        tag_values = [tag.name for tag in self._context.controller.list_tags()]
-        self.tag_combo["values"] = [""] + tag_values
+        refresh_category_sources(self, self._ui)
 
     def _apply_group_ui_state(self) -> None:
-        enabled = bool(self.group_var.get())
-        try:
-            self.group_back_button.configure(state=("normal" if enabled else "disabled"))
-        except tk.TclError:
-            pass
-        if not enabled:
-            self._group_drill_category = None
-            self._group_status_var.set("")
-        else:
-            self._group_status_var.set(
-                tr(
-                    "reports.group.category",
-                    "Категория: {category}",
-                    category=self._group_drill_category,
-                )
-                if self._group_drill_category
-                else tr(
-                    "reports.grouped_hint", "Сгруппированный вид (двойной щелчок по категории) ⓘ"
-                )
-            )
-        self._refresh_operations_table()
+        apply_group_ui_state(self, self._ui)
 
     def _on_group_back(self) -> None:
         if not self._group_drill_category:
@@ -568,7 +172,7 @@ class ReportsFrame(ttk.Frame):
         self._apply_group_ui_state()
 
     def _apply_table_ui_state(self) -> None:
-        self.operations_container.grid()
+        apply_table_ui_state(self, self._ui)
 
     def _export(self, fmt: str) -> None:
         result = self._last_result
