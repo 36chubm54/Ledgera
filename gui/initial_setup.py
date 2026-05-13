@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
+import os
 import sqlite3
 import tkinter as tk
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from tkinter import ttk
 from typing import Any
@@ -15,6 +18,7 @@ from infrastructure.currency_providers import DEFAULT_PROVIDER_REGISTRY, Currenc
 
 SUPPORTED_SETUP_CURRENCIES = ("KZT", "USD", "EUR", "RUB")
 SETUP_PROVIDER_MODES = ("personal", "commercial")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -35,34 +39,59 @@ class InitialSetupOutcome:
     initial_base_currency: str | None = None
 
 
+def _quarantine_malformed_sqlite_file(db_path: Path) -> Path | None:
+    if not db_path.exists():
+        return None
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    quarantine_path = db_path.with_name(f"{db_path.name}.corrupt_{stamp}")
+    try:
+        os.replace(db_path, quarantine_path)
+        logger.error(
+            "Malformed SQLite file quarantined: source=%s quarantine=%s",
+            db_path,
+            quarantine_path,
+        )
+        return quarantine_path
+    except OSError:
+        logger.exception("Failed to quarantine malformed SQLite file: %s", db_path)
+        return None
+
+
 def should_run_initial_setup(sqlite_path: str | Path = SQLITE_PATH) -> bool:
     db_path = Path(sqlite_path)
     if not db_path.exists():
         return True
+    conn: sqlite3.Connection | None = None
     try:
-        with sqlite3.connect(db_path) as conn:
-            wallet_table = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'wallets'"
-            ).fetchone()
-            schema_meta_table = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'"
-            ).fetchone()
-            if wallet_table is None or schema_meta_table is None:
-                return True
-            base_currency_row = conn.execute(
-                "SELECT value FROM schema_meta WHERE key = 'base_currency' LIMIT 1"
-            ).fetchone()
-            system_wallet_row = conn.execute(
-                "SELECT 1 FROM wallets WHERE system = 1 OR id = 1 LIMIT 1"
-            ).fetchone()
-            base_currency = (
-                str(base_currency_row[0]).strip().upper()
-                if base_currency_row and base_currency_row[0] is not None
-                else ""
-            )
-            return not (base_currency and system_wallet_row is not None)
+        conn = sqlite3.connect(db_path)
+        wallet_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'wallets'"
+        ).fetchone()
+        schema_meta_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'"
+        ).fetchone()
+        if wallet_table is None or schema_meta_table is None:
+            return True
+        base_currency_row = conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'base_currency' LIMIT 1"
+        ).fetchone()
+        system_wallet_row = conn.execute(
+            "SELECT 1 FROM wallets WHERE system = 1 OR id = 1 LIMIT 1"
+        ).fetchone()
+        base_currency = (
+            str(base_currency_row[0]).strip().upper()
+            if base_currency_row and base_currency_row[0] is not None
+            else ""
+        )
+        return not (base_currency and system_wallet_row is not None)
     except sqlite3.Error:
-        return False
+        if conn is not None:
+            conn.close()
+        _quarantine_malformed_sqlite_file(db_path)
+        return True
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def _supported_provider_names(

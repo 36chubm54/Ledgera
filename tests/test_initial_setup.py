@@ -25,6 +25,17 @@ def test_should_run_initial_setup_when_sqlite_is_missing(tmp_path: Path) -> None
     assert should_run_initial_setup(tmp_path / "missing.db") is True
 
 
+def test_should_run_initial_setup_quarantines_malformed_sqlite_file(tmp_path: Path) -> None:
+    db_path = tmp_path / "broken.db"
+    db_path.write_text("not a sqlite database", encoding="utf-8")
+
+    assert should_run_initial_setup(db_path) is True
+    assert not db_path.exists()
+    quarantine_candidates = list(tmp_path.glob("broken.db.corrupt_*"))
+    assert len(quarantine_candidates) == 1
+    assert quarantine_candidates[0].read_text(encoding="utf-8") == "not a sqlite database"
+
+
 def test_validate_initial_setup_selection_rejects_same_primary_and_fallback() -> None:
     try:
         validate_initial_setup_selection(
@@ -193,6 +204,30 @@ def test_bootstrap_repository_uses_initial_base_currency_for_new_db(
         assert repo.get_system_wallet().currency == "USD"
     finally:
         repo.close()
+
+
+def test_bootstrap_repository_recovers_after_initial_setup_quarantines_malformed_db(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "finance.db"
+    db_path.write_text("not a sqlite database", encoding="utf-8")
+    monkeypatch.setattr(bootstrap_module, "SQLITE_PATH", str(db_path))
+
+    assert should_run_initial_setup(db_path) is True
+
+    repo = cast(
+        SQLiteRecordRepository,
+        bootstrap_repository(run_maintenance=False, initial_base_currency="USD"),
+    )
+    try:
+        assert repo.get_schema_meta("base_currency") == "USD"
+        assert repo.get_system_wallet().currency == "USD"
+    finally:
+        repo.close()
+
+    quarantine_candidates = list(tmp_path.glob("finance.db.corrupt_*"))
+    assert len(quarantine_candidates) == 1
 
 
 def test_bootstrap_repository_does_not_override_existing_base_currency(
