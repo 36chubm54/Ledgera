@@ -22,9 +22,7 @@ def _ensure_legacy_minor_columns(conn: sqlite3.Connection) -> None:
         columns = _column_names(conn, table)
         if amount_column not in columns or minor_column in columns:
             continue
-        conn.execute(
-            f"ALTER TABLE {table} ADD COLUMN {minor_column} INTEGER NOT NULL DEFAULT 0"
-        )
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {minor_column} INTEGER NOT NULL DEFAULT 0")
 
 
 def up(conn: sqlite3.Connection) -> None:

@@ -2064,9 +2064,7 @@ def _load_budgets_from_json(path: str) -> list[Budget]:
         if not start_date or not end_date:
             raise ValueError(f"Budget #{budget_id} is missing start_date/end_date")
         limit_base = to_money_float(item.get("limit_base", item.get("limit_kzt", 0.0)) or 0.0)
-        limit_base_minor = int(
-            item.get("limit_base_minor", item.get("limit_kzt_minor", 0)) or 0
-        )
+        limit_base_minor = int(item.get("limit_base_minor", item.get("limit_kzt_minor", 0)) or 0)
         budgets.append(
             Budget(
                 id=budget_id,
