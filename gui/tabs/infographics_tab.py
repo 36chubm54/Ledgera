@@ -326,12 +326,14 @@ def build_infographics_tab(
     pie_frame.grid_columnconfigure(1, weight=1)
     pie_frame.grid_rowconfigure(1, weight=1)
 
-    pie_controls = ttk.Frame(pie_frame)
+    pie_controls = ttk.Frame(pie_frame, style="CardBody.TFrame")
     pie_controls.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=(8, 0))
     pie_controls.grid_columnconfigure(1, weight=1)
-    ttk.Label(pie_controls, text=tr("infographics.month", "Месяц:")).grid(
-        row=0, column=0, sticky="w"
-    )
+    ttk.Label(
+        pie_controls,
+        text=tr("infographics.month", "Месяц:"),
+        style="FormField.TLabel",
+    ).grid(row=0, column=0, sticky="w")
 
     pie_month_var = tk.StringVar()
     pie_month_menu = ttk.Combobox(
@@ -408,12 +410,14 @@ def build_infographics_tab(
 
     bind_all("<MouseWheel>", on_legend_mousewheel)
 
-    daily_controls = ttk.Frame(daily_frame)
+    daily_controls = ttk.Frame(daily_frame, style="CardBody.TFrame")
     daily_controls.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
     daily_controls.grid_columnconfigure(1, weight=1)
-    ttk.Label(daily_controls, text=tr("infographics.month", "Месяц:")).grid(
-        row=0, column=0, sticky="w"
-    )
+    ttk.Label(
+        daily_controls,
+        text=tr("infographics.month", "Месяц:"),
+        style="FormField.TLabel",
+    ).grid(row=0, column=0, sticky="w")
 
     chart_month_var = tk.StringVar()
     chart_month_menu = ttk.Combobox(
@@ -433,12 +437,14 @@ def build_infographics_tab(
     )
     daily_bar_canvas.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
 
-    monthly_controls = ttk.Frame(monthly_frame)
+    monthly_controls = ttk.Frame(monthly_frame, style="CardBody.TFrame")
     monthly_controls.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
     monthly_controls.grid_columnconfigure(1, weight=1)
-    ttk.Label(monthly_controls, text=tr("infographics.year", "Год:")).grid(
-        row=0, column=0, sticky="w"
-    )
+    ttk.Label(
+        monthly_controls,
+        text=tr("infographics.year", "Год:"),
+        style="FormField.TLabel",
+    ).grid(row=0, column=0, sticky="w")
 
     chart_year_var = tk.StringVar()
     chart_year_menu = ttk.Combobox(

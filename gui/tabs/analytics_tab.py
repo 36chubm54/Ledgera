@@ -467,7 +467,7 @@ def build_analytics_tab(
     enable_treeview_zebra(spending_tree)
     spending_tree.grid(row=1, column=0, sticky="nsew", pady=(6, 14))
     spending_tree.heading("category", text=tr("analytics.category", "Категория"))
-    spending_tree.heading("total", text=tr("common.amount", "Сумма"))
+    spending_tree.heading("total", text=tr("common.amount_short", "Сумма"))
     spending_tree.heading("count", text=tr("common.count_short", "#"))
     spending_tree.column("category", width=200, minwidth=200)
     spending_tree.column("total", width=120, minwidth=120, anchor="e")
@@ -491,7 +491,7 @@ def build_analytics_tab(
     enable_treeview_zebra(income_tree)
     income_tree.grid(row=3, column=0, sticky="nsew", pady=(6, 0))
     income_tree.heading("category", text=tr("analytics.category", "Категория"))
-    income_tree.heading("total", text=tr("common.amount", "Сумма"))
+    income_tree.heading("total", text=tr("common.amount_short", "Сумма"))
     income_tree.heading("count", text=tr("common.count_short", "#"))
     income_tree.column("category", width=200, minwidth=200)
     income_tree.column("total", width=120, minwidth=120, anchor="e")
@@ -519,8 +519,8 @@ def build_analytics_tab(
     )
     enable_treeview_zebra(tag_tree)
     tag_tree.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
-    tag_tree.heading("tag", text=tr("common.tags", "Теги"))
-    tag_tree.heading("total", text=tr("common.amount", "Сумма"))
+    tag_tree.heading("tag", text=tr("common.tags_short", "Теги"))
+    tag_tree.heading("total", text=tr("common.amount_short", "Сумма"))
     tag_tree.heading("count", text=tr("common.count_short", "#"))
     tag_tree.column("tag", width=100, minwidth=100)
     tag_tree.column("total", width=90, minwidth=90, anchor="e")
@@ -558,13 +558,8 @@ def build_analytics_tab(
     monthly_frame.grid_columnconfigure(0, weight=1)
     monthly_frame.grid_rowconfigure(0, weight=1)
 
-    monthly_container = ttk.Frame(monthly_frame, padding=(10, 10))
-    monthly_container.grid(row=0, column=0, sticky="nsew")
-    monthly_container.grid_columnconfigure(0, weight=1)
-    monthly_container.grid_rowconfigure(0, weight=1)
-
     monthly_tree = ttk.Treeview(
-        monthly_container,
+        monthly_frame,
         columns=("month", "income", "expenses", "cashflow", "savings"),
         show="headings",
         height=10,
@@ -577,14 +572,14 @@ def build_analytics_tab(
     monthly_tree.heading("cashflow", text=tr("analytics.cashflow", "Денежный поток"))
     monthly_tree.heading("savings", text=tr("analytics.savings_pct", "Сбережения %"))
     monthly_tree.column("month", width=80, minwidth=80)
-    monthly_tree.column("income", width=120, minwidth=120, anchor="e")
-    monthly_tree.column("expenses", width=120, minwidth=120, anchor="e")
+    monthly_tree.column("income", width=100, minwidth=100, anchor="e")
+    monthly_tree.column("expenses", width=100, minwidth=100, anchor="e")
     monthly_tree.column("cashflow", width=120, minwidth=120, anchor="e")
-    monthly_tree.column("savings", width=70, minwidth=70, anchor="e")
+    monthly_tree.column("savings", width=90, minwidth=90, anchor="e")
     monthly_tree.tag_configure("positive", foreground=palette.chart_income)
     monthly_tree.tag_configure("negative", foreground=palette.chart_expense)
 
-    attach_treeview_scrollbars(monthly_container, monthly_tree, row=0, column=0, horizontal=True)
+    attach_treeview_scrollbars(monthly_frame, monthly_tree, row=0, column=0, horizontal=True)
 
     last_timeline_data: list = []
     last_breakdown_data: list = []

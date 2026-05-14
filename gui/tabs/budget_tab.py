@@ -166,16 +166,20 @@ def build_budget_tab(
     for col in (1, 3, 5):
         form_frame.grid_columnconfigure(col, weight=1)
 
-    ttk.Label(form_frame, text=tr("common.category", "Категория:")).grid(
-        row=0, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        form_frame,
+        text=tr("common.category", "Категория:"),
+        style="FormField.TLabel",
+    ).grid(row=0, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     category_combo = ttk.Combobox(form_frame, state="normal", width=20)
     category_combo.grid(row=0, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
     scope_type_var = tk.StringVar(value="category")
-    ttk.Label(form_frame, text=tr("budget.scope", "Тип:")).grid(
-        row=1, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        form_frame,
+        text=tr("common.type", "Тип:"),
+        style="FormField.TLabel",
+    ).grid(row=1, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     scope_type_combo = ttk.Combobox(
         form_frame,
         state="readonly",
@@ -185,21 +189,27 @@ def build_budget_tab(
     )
     scope_type_combo.grid(row=1, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(form_frame, text=tr("common.from", "С даты:")).grid(
-        row=0, column=2, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        form_frame,
+        text=tr("common.from", "С даты:"),
+        style="FormField.TLabel",
+    ).grid(row=0, column=2, sticky="w", padx=PAD_SM, pady=PAD_XS)
     start_date_entry = ttk.Entry(form_frame, width=12)
     start_date_entry.grid(row=0, column=3, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(form_frame, text=tr("common.to", "По дату:")).grid(
-        row=0, column=4, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        form_frame,
+        text=tr("common.to", "По дату:"),
+        style="FormField.TLabel",
+    ).grid(row=0, column=4, sticky="w", padx=PAD_SM, pady=PAD_XS)
     end_date_entry = ttk.Entry(form_frame, width=12)
     end_date_entry.grid(row=0, column=5, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(form_frame, text=tr("budget.limit_base", "Лимит (валюта базы):")).grid(
-        row=2, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        form_frame,
+        text=tr("budget.limit_base", "Лимит (валюта базы):"),
+        style="FormField.TLabel",
+    ).grid(row=2, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     limit_entry = ttk.Entry(form_frame, width=16)
     limit_entry.grid(row=2, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
@@ -208,6 +218,7 @@ def build_budget_tab(
         form_frame,
         text=tr("budget.include_mandatory", "Учитывать обязательные расходы"),
         variable=include_mandatory_var,
+        style="FormField.TCheckbutton",
     )
     include_mandatory_check.grid(
         row=2, column=2, columnspan=2, sticky="w", padx=PAD_SM, pady=PAD_XS
@@ -471,7 +482,7 @@ def build_budget_tab(
                 start_date=target.start_date,
                 end_date=target.end_date,
             ),
-            title=tr("operations.delete_all.title", "Подтвердите удаление"),
+            title=tr("common.confirm", "Подтверждение"),
         ):
             return
         try:

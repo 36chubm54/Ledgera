@@ -306,6 +306,11 @@ def bootstrap_ui(root: tk.Misc, theme_name: str | None = None) -> ttk.Style:
     style.configure(
         "CardSubtle.TLabel", background=palette.surface_form, foreground=palette.text_muted
     )
+    style.configure(
+        "FormField.TLabel",
+        background=palette.surface_form,
+        foreground=palette.text_primary,
+    )
     style.configure("SectionDivider.TSeparator", background=palette.border_section)
     style.configure(
         "StatusMuted.TLabel", foreground=palette.text_muted, background=palette.background
@@ -466,6 +471,26 @@ def bootstrap_ui(root: tk.Misc, theme_name: str | None = None) -> ttk.Style:
     style.map(
         "TCheckbutton",
         background=[("active", palette.background), ("pressed", palette.background)],
+        foreground=[("active", palette.text_primary), ("pressed", palette.text_primary)],
+        indicatorbackground=[
+            ("selected", palette.accent_blue),
+            ("active", palette.surface_alt),
+            ("pressed", palette.surface_alt),
+        ],
+        indicatorforeground=[("selected", palette.surface_elevated)],
+    )
+    style.configure(
+        "FormField.TCheckbutton",
+        background=palette.surface_form,
+        foreground=palette.text_primary,
+        indicatorbackground=palette.surface_elevated,
+        indicatorforeground=palette.accent_blue,
+        indicatormargin=4,
+        focuscolor=palette.surface_form,
+    )
+    style.map(
+        "FormField.TCheckbutton",
+        background=[("active", palette.surface_form), ("pressed", palette.surface_form)],
         foreground=[("active", palette.text_primary), ("pressed", palette.text_primary)],
         indicatorbackground=[
             ("selected", palette.accent_blue),
@@ -648,6 +673,31 @@ def bootstrap_ui(root: tk.Misc, theme_name: str | None = None) -> ttk.Style:
         bordercolor=palette.inline_accent_border,
         lightcolor=palette.inline_accent_bg,
         darkcolor=palette.inline_accent_bg,
+    )
+    style.configure(
+        "InlineField.TLabel",
+        background=palette.inline_accent_bg,
+        foreground=palette.text_primary,
+    )
+    style.configure(
+        "InlineField.TCheckbutton",
+        background=palette.inline_accent_bg,
+        foreground=palette.text_primary,
+        indicatorbackground=palette.surface_elevated,
+        indicatorforeground=palette.accent_blue,
+        indicatormargin=4,
+        focuscolor=palette.inline_accent_bg,
+    )
+    style.map(
+        "InlineField.TCheckbutton",
+        background=[("active", palette.inline_accent_bg), ("pressed", palette.inline_accent_bg)],
+        foreground=[("active", palette.text_primary), ("pressed", palette.text_primary)],
+        indicatorbackground=[
+            ("selected", palette.accent_blue),
+            ("active", palette.surface_alt),
+            ("pressed", palette.surface_alt),
+        ],
+        indicatorforeground=[("selected", palette.surface_elevated)],
     )
     style.configure(
         "TProgressbar",

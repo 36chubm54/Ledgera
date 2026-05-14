@@ -43,7 +43,7 @@ def statement_title(title: str) -> str:
         return export_tr("reports.export.statement_title", prefix)
     if title.startswith(f"{prefix} (") and title.endswith(")"):
         localized_prefix = export_tr("reports.export.statement_title", prefix)
-        return f"{localized_prefix}{title[len(prefix):]}"
+        return f"{localized_prefix}{title[len(prefix) :]}"
     return title
 
 
@@ -86,7 +86,7 @@ def record_type_label_key(record_type: str) -> str:
 
 def report_csv_headers(base_currency: str = "KZT") -> list[str]:
     return [
-        export_tr("common.date", "Date"),
+        export_tr("common.date_short", "Date"),
         export_tr("common.type_short", "Type"),
         export_tr("common.category_short", "Category"),
         amount_base_header(base_currency),
@@ -119,17 +119,17 @@ def grouped_tag_headers(base_currency: str = "KZT") -> list[str]:
 
 def report_xlsx_headers(base_currency: str = "KZT") -> list[str]:
     return [
-        export_tr("common.date", "Date"),
+        export_tr("common.date_short", "Date"),
         export_tr("common.type_short", "Type"),
         export_tr("common.category_short", "Category"),
         amount_base_header(base_currency),
-        export_tr("common.tags", "Tags"),
+        export_tr("common.tag_short", "Tags"),
     ]
 
 
 def category_breakdown_headers(base_currency: str = "KZT") -> list[str]:
     return [
-        export_tr("common.date", "Date"),
+        export_tr("common.date_short", "Date"),
         export_tr("common.type_short", "Type"),
         amount_base_header(base_currency),
     ]
@@ -228,7 +228,7 @@ def debt_headers() -> list[str]:
         export_tr("common.status", "Status"),
         export_tr("reports.export.header.opened", "Opened"),
         export_tr("reports.export.header.closed", "Closed"),
-        export_tr("common.currency", "Currency"),
+        export_tr("common.currency_short", "Currency"),
         export_tr("reports.export.header.total_base_short", "Total"),
         export_tr("reports.export.header.remaining_short", "Remain"),
         export_tr("reports.export.header.covered_short", "Covered"),
@@ -345,7 +345,7 @@ def canonical_report_header(header: str, base_currency: str = "KZT") -> str:
     ):
         return "amount"
     aliases = {
-        "date": _catalog_values_for("common.date", "Date"),
+        "date": _catalog_values_for("common.date_short", "Date"),
         "type": _catalog_values_for("common.type_short", "Type"),
         "category": _catalog_values_for("common.category_short", "Category"),
         "amount": {
@@ -355,7 +355,7 @@ def canonical_report_header(header: str, base_currency: str = "KZT") -> str:
             "Сумма (KZT)",
             "Сумма (валюта базы)",
         },
-        "tags": _catalog_values_for("common.tags", "Tags"),
+        "tags": _catalog_values_for("common.tags_short", "Tags"),
     }
     for canonical, values in aliases.items():
         if normalized in {_norm(value) for value in values}:

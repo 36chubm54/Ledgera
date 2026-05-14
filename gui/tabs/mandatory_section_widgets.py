@@ -107,12 +107,14 @@ def _build_wallet_selector(
     controller: Any,
     selected_wallet_id: int | None = None,
     stacked: bool = False,
+    label_style: str = "FormField.TLabel",
 ) -> tuple[tk.StringVar, ttk.Combobox, dict[str, int]]:
     wallet_label = ttk.Label(
         panel,
         text=tr("common.wallet", "Кошелек:"),
         width=FORM_LABEL_WIDTH,
         anchor="w",
+        style=label_style,
     )
     wallet_label.grid(
         row=row_index,
@@ -185,6 +187,7 @@ def _grid_inline_field(
         text=text,
         width=FORM_LABEL_WIDTH,
         anchor="w",
+        style="InlineField.TLabel",
     ).grid(
         row=row_index,
         column=0,
@@ -216,7 +219,13 @@ def build_add_mandatory_panel(
         panel.grid_columnconfigure(3, weight=0)
 
         def form_label(row: int, text: str) -> ttk.Label:
-            label = ttk.Label(panel, text=text, width=FORM_LABEL_WIDTH, anchor="w")
+            label = ttk.Label(
+                panel,
+                text=text,
+                width=FORM_LABEL_WIDTH,
+                anchor="w",
+                style="FormField.TLabel",
+            )
             label.grid(row=row, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
             return label
 
@@ -323,6 +332,7 @@ def build_add_mandatory_panel(
         text=tr("mandatory.field.amount", "Сумма"),
         width=FORM_LABEL_WIDTH,
         anchor="w",
+        style="InlineField.TLabel",
     )
     amount_entry = ttk.Entry(panel)
     current_row = _place_field(
@@ -337,6 +347,7 @@ def build_add_mandatory_panel(
         text=tr("mandatory.field.currency", "Валюта:"),
         width=FORM_LABEL_WIDTH,
         anchor="w",
+        style="InlineField.TLabel",
     )
     currency_entry = ttk.Entry(panel)
     currency_entry.insert(0, base_currency_code)
@@ -352,6 +363,7 @@ def build_add_mandatory_panel(
         row_index=current_row,
         controller=controller,
         stacked=stacked,
+        label_style="InlineField.TLabel",
     )
     current_row += 2 if stacked else 1
 
@@ -360,6 +372,7 @@ def build_add_mandatory_panel(
         text=tr("mandatory.field.category", "Категория"),
         width=FORM_LABEL_WIDTH,
         anchor="w",
+        style="InlineField.TLabel",
     )
     category_entry = ttk.Entry(panel)
     category_entry.insert(0, "Mandatory")
@@ -375,6 +388,7 @@ def build_add_mandatory_panel(
         text=tr("common.description", "Описание:"),
         width=FORM_LABEL_WIDTH,
         anchor="w",
+        style="InlineField.TLabel",
     )
     description_entry = ttk.Entry(panel)
     current_row = _place_field(
@@ -389,6 +403,7 @@ def build_add_mandatory_panel(
         text=tr("common.period", "Период:"),
         width=FORM_LABEL_WIDTH,
         anchor="w",
+        style="InlineField.TLabel",
     )
     period_var = tk.StringVar(value="monthly")
     period_combo = ttk.Combobox(
@@ -409,6 +424,7 @@ def build_add_mandatory_panel(
         text=tr("mandatory.field.date_optional", "Дата (необязательно):"),
         width=FORM_LABEL_WIDTH,
         anchor="w",
+        style="InlineField.TLabel",
     )
     date_entry = ttk.Entry(panel)
     _place_field(
@@ -455,6 +471,7 @@ def build_edit_mandatory_panel(
         row_index=1,
         controller=controller,
         selected_wallet_id=int(expense.wallet_id),
+        label_style="InlineField.TLabel",
     )
 
     period_var = tk.StringVar(value=str(expense.period or "monthly"))
@@ -511,6 +528,7 @@ def build_add_to_records_panel(
         panel,
         row_index=1,
         controller=controller,
+        label_style="InlineField.TLabel",
     )
     return MandatoryAddToRecordsFields(
         panel=panel,
@@ -641,10 +659,10 @@ def build_mandatory_actions_row(
         values=["CSV", "XLSX"],
         state="readonly",
     ).grid(row=1, column=1, sticky="ew", padx=6)
-    ttk.Button(actions, text=tr("operations.import", "Импорт"), command=on_import).grid(
+    ttk.Button(actions, text=tr("common.import", "Импорт"), command=on_import).grid(
         row=1, column=2, sticky="ew", padx=6
     )
-    ttk.Button(actions, text=tr("operations.export", "Экспорт"), command=on_export).grid(
+    ttk.Button(actions, text=tr("common.export", "Экспорт"), command=on_export).grid(
         row=1, column=3, sticky="ew", padx=(6, 0)
     )
 

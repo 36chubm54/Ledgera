@@ -71,25 +71,35 @@ def _create_wallet_form(
     base_currency_code: str,
     pad_x: int,
     pad_y: int,
+    label_style: str = "TLabel",
+    checkbutton_style: str = "TCheckbutton",
 ) -> WalletFormFields:
     form = ttk.Frame(parent)
     form.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=pad_y)
     form.grid_columnconfigure(1, weight=1)
 
-    ttk.Label(form, text=tr("settings.wallets.name", "Название:")).grid(row=0, column=0, sticky="w")
+    ttk.Label(
+        form,
+        text=tr("settings.wallets.name", "Название:"),
+        style=label_style,
+    ).grid(row=0, column=0, sticky="w")
     wallet_name_entry = ttk.Entry(form)
     wallet_name_entry.grid(row=0, column=1, sticky="ew", pady=2)
 
-    ttk.Label(form, text=tr("settings.wallets.currency", "Валюта:")).grid(
-        row=1, column=0, sticky="w"
-    )
+    ttk.Label(
+        form,
+        text=tr("settings.wallets.currency", "Валюта:"),
+        style=label_style,
+    ).grid(row=1, column=0, sticky="w")
     wallet_currency_entry = ttk.Entry(form, width=8)
     wallet_currency_entry.insert(0, base_currency_code)
     wallet_currency_entry.grid(row=1, column=1, sticky="ew", pady=2)
 
-    ttk.Label(form, text=tr("settings.wallets.initial_balance", "Начальный баланс:")).grid(
-        row=2, column=0, sticky="w"
-    )
+    ttk.Label(
+        form,
+        text=tr("settings.wallets.initial_balance", "Начальный баланс:"),
+        style=label_style,
+    ).grid(row=2, column=0, sticky="w")
     wallet_initial_entry = ttk.Entry(form)
     wallet_initial_entry.insert(0, "0")
     wallet_initial_entry.grid(row=2, column=1, sticky="ew", pady=2)
@@ -99,6 +109,7 @@ def _create_wallet_form(
         form,
         text=tr("settings.wallets.allow_negative", "Разрешить отрицательный баланс"),
         variable=wallet_allow_negative_var,
+        style=checkbutton_style,
     ).grid(
         row=3,
         column=0,
@@ -307,6 +318,8 @@ def build_wallets_section(
         base_currency_code=base_currency_code,
         pad_x=pad_x,
         pad_y=pad_y,
+        label_style="FormField.TLabel" if use_card else "TLabel",
+        checkbutton_style="FormField.TCheckbutton" if use_card else "TCheckbutton",
     )
     wallet_tree, wallet_scroll, wallet_xscroll = _build_wallet_tree(wallets_frame, pad_x=pad_x)
     _bind_wallet_scrolling(wallet_tree, wallet_scroll, wallet_xscroll)
@@ -487,14 +500,16 @@ def build_currency_section(
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.base_currency", "Базовая валюта:"),
+        style="FormField.TLabel",
     ).grid(row=0, column=0, sticky="w", padx=pad_x, pady=pad_y)
-    base_currency_frame = ttk.Frame(currency_frame)
+    base_currency_frame = ttk.Frame(currency_frame, style="CardBody.TFrame")
     base_currency_frame.grid(row=0, column=1, sticky="w", padx=(0, pad_x), pady=pad_y)
     ttk.Label(
         base_currency_frame,
         text=base_currency_text,
+        style="FormField.TLabel",
     ).grid(row=0, column=0, sticky="w")
-    base_currency_info = ttk.Label(base_currency_frame, text="ⓘ")
+    base_currency_info = ttk.Label(base_currency_frame, text="ⓘ", style="FormField.TLabel")
     base_currency_info.grid(row=0, column=1, sticky="w", padx=(PAD_XS, 0))
     Tooltip(
         base_currency_info,
@@ -507,6 +522,7 @@ def build_currency_section(
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.display_currency", "Валюта отображения:"),
+        style="FormField.TLabel",
     ).grid(row=1, column=0, sticky="w", padx=pad_x, pady=pad_y)
     display_currency_combo = ttk.Combobox(
         currency_frame,
@@ -520,6 +536,7 @@ def build_currency_section(
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.provider_mode", "Режим провайдера:"),
+        style="FormField.TLabel",
     ).grid(row=2, column=0, sticky="w", padx=pad_x, pady=pad_y)
     provider_mode_combo = ttk.Combobox(
         currency_frame,
@@ -533,6 +550,7 @@ def build_currency_section(
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.primary_provider", "Основной провайдер:"),
+        style="FormField.TLabel",
     ).grid(row=3, column=0, sticky="w", padx=pad_x, pady=pad_y)
     primary_provider_combo = ttk.Combobox(
         currency_frame,
@@ -546,6 +564,7 @@ def build_currency_section(
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.fallback_provider", "Резервный провайдер:"),
+        style="FormField.TLabel",
     ).grid(row=4, column=0, sticky="w", padx=pad_x, pady=pad_y)
     fallback_provider_combo = ttk.Combobox(
         currency_frame,
@@ -559,6 +578,7 @@ def build_currency_section(
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.exchange_api_key", "API key ExchangeRate:"),
+        style="FormField.TLabel",
     ).grid(row=5, column=0, sticky="w", padx=pad_x, pady=pad_y)
     ttk.Entry(
         currency_frame,
@@ -570,11 +590,13 @@ def build_currency_section(
         currency_frame,
         text=tr("settings.currency.auto_update", "Автообновление курсов"),
         variable=auto_update_var,
+        style="FormField.TCheckbutton",
     ).grid(row=6, column=0, columnspan=2, sticky="w", padx=pad_x, pady=(pad_y, 0))
 
     ttk.Label(
         currency_frame,
         text=tr("settings.currency.update_interval", "Интервал обновления (мин):"),
+        style="FormField.TLabel",
     ).grid(row=7, column=0, sticky="w", padx=pad_x, pady=(pad_y, 0))
     ttk.Entry(
         currency_frame,

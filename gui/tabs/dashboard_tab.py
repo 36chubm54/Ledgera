@@ -673,7 +673,7 @@ def show_bulk_asset_snapshot_dialog(
     titles = [
         (tr("dashboard.asset", "Актив"), 0),
         (tr("dashboard.asset.current_value", "Текущее значение"), 1),
-        (tr("common.currency", "Валюта"), 2),
+        (tr("common.currency_short", "Валюта"), 2),
         (tr("dashboard.asset.new_value", "Новое значение"), 3),
         (tr("common.note", "Примечание"), 4),
     ]
@@ -1044,13 +1044,13 @@ def show_asset_editor_dialog(
         font=("Segoe UI", 11, "bold"),
     ).grid(row=0, column=0, columnspan=4, sticky="w")
 
-    ttk.Label(content, text=tr("common.name", "Название")).grid(
+    ttk.Label(content, text=tr("common.name", "Название:")).grid(
         row=1, column=0, sticky="w", pady=(10, 0)
     )
     name_entry = ttk.Entry(content, textvariable=name_var, width=28)
     name_entry.grid(row=2, column=0, columnspan=2, sticky="ew", padx=(0, 10))
 
-    ttk.Label(content, text=tr("common.category_short", "Категория")).grid(
+    ttk.Label(content, text=tr("common.category", "Категория:")).grid(
         row=1, column=2, sticky="w", pady=(10, 0)
     )
     category_combo = ttk.Combobox(
@@ -1062,13 +1062,13 @@ def show_asset_editor_dialog(
     )
     category_combo.grid(row=2, column=2, sticky="ew", padx=(0, 10))
 
-    ttk.Label(content, text=tr("common.currency", "Валюта")).grid(
+    ttk.Label(content, text=tr("common.currency", "Валюта:")).grid(
         row=1, column=3, sticky="w", pady=(10, 0)
     )
     currency_entry = ttk.Entry(content, textvariable=currency_var, width=8)
     currency_entry.grid(row=2, column=3, sticky="ew")
 
-    ttk.Label(content, text=tr("common.created_at", "Дата создания")).grid(
+    ttk.Label(content, text=tr("common.created_at", "Дата создания:")).grid(
         row=3, column=0, sticky="w", pady=(10, 0)
     )
     created_at_entry = ttk.Entry(content, textvariable=created_at_var, width=16)
@@ -1076,7 +1076,7 @@ def show_asset_editor_dialog(
     if initial_asset is not None:
         created_at_entry.state(["readonly"])
 
-    ttk.Label(content, text=tr("common.description", "Описание")).grid(
+    ttk.Label(content, text=tr("common.description", "Описание:")).grid(
         row=3, column=1, columnspan=3, sticky="w", pady=(10, 0)
     )
     description_entry = ttk.Entry(content, textvariable=description_var)
@@ -1227,7 +1227,7 @@ def show_manage_assets_dialog(
     tree.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
     tree.heading("name", text=tr("common.name", "Название"))
     tree.heading("category", text=tr("common.category_short", "Категория"))
-    tree.heading("currency", text=tr("common.currency", "Валюта"))
+    tree.heading("currency", text=tr("common.currency_short", "Валюта"))
     tree.heading("created_at", text=tr("common.created_short", "Создан"))
     tree.heading("status", text=tr("common.status", "Статус"))
     tree.column("name", width=220)
@@ -1357,7 +1357,7 @@ def show_manage_assets_dialog(
     ).pack(side=tk.LEFT)
     edit_button.pack(side=tk.LEFT, padx=(8, 0))
     deactivate_button.pack(side=tk.LEFT, padx=(8, 0))
-    ttk.Button(actions, text=tr("debts.close", "Закрыть"), command=dialog.destroy).pack(
+    ttk.Button(actions, text=tr("common.close", "Закрыть"), command=dialog.destroy).pack(
         side=tk.RIGHT
     )
 
@@ -1453,6 +1453,7 @@ def build_dashboard_tab(
         summary_frame,
         text=tr("dashboard.net_worth", "Чистый капитал: {amount}", amount="-"),
         font=("Segoe UI", 14, "bold"),
+        style="CardText.TLabel",
     )
     net_worth_label.grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
 
@@ -1460,6 +1461,7 @@ def build_dashboard_tab(
         summary_frame,
         text=tr("dashboard.assets_total", "Активы всего: {amount}", amount="-"),
         font=("Segoe UI", 14, "bold"),
+        style="CardText.TLabel",
     )
     assets_total_label.grid(row=0, column=1, sticky="w", padx=12, pady=(12, 4))
 
@@ -1472,6 +1474,7 @@ def build_dashboard_tab(
             total="-",
         ),
         font=("Segoe UI", 14, "bold"),
+        style="CardText.TLabel",
     )
     goals_status_label.grid(row=0, column=2, sticky="w", padx=12, pady=(12, 4))
 
@@ -1484,6 +1487,7 @@ def build_dashboard_tab(
             total="-",
         ),
         foreground=palette.text_muted,
+        style="CardSubtle.TLabel",
     )
     assets_status_label.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 4))
 
@@ -1491,18 +1495,21 @@ def build_dashboard_tab(
         summary_frame,
         text=tr("dashboard.trend.title", "Динамика капитала"),
         font=("Segoe UI", 10, "bold"),
+        style="CardText.TLabel",
     )
     trend_label.grid(row=2, column=0, columnspan=2, sticky="w", padx=12, pady=(8, 0))
     ttk.Label(
         summary_frame,
         text=tr("dashboard.trend.hint", "Краткая помесячная динамика капитала."),
         foreground=palette.text_muted,
+        style="CardSubtle.TLabel",
     ).grid(row=3, column=0, columnspan=2, sticky="w", padx=12)
 
     allocation_label = ttk.Label(
         summary_frame,
         text=tr("dashboard.allocation.title", "Структура активов"),
         font=("Segoe UI", 10, "bold"),
+        style="CardText.TLabel",
     )
     allocation_label.grid(row=2, column=2, sticky="w", padx=12, pady=(8, 0))
     ttk.Label(
@@ -1512,6 +1519,7 @@ def build_dashboard_tab(
             "Активные активы, сгруппированные по категориям.",
         ),
         foreground=palette.text_muted,
+        style="CardSubtle.TLabel",
     ).grid(row=3, column=2, sticky="w", padx=12)
 
     trend_canvas = tk.Canvas(
@@ -1543,6 +1551,7 @@ def build_dashboard_tab(
             "dashboard.goals.hint",
             "Следите за прогрессом и меняйте статус целей прямо отсюда.",
         ),
+        style="CardSubtle.TLabel",
         foreground=palette.text_muted,
     )
     goals_hint_label.grid(row=0, column=0, sticky="ew")

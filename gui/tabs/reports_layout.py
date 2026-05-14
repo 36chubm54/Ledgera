@@ -184,9 +184,9 @@ def build_reports_layout(owner) -> ReportsUiHandles:
             ("fx_difference", tr("reports.summary.fx_difference", "Курсовая разница:")),
         ]
     ):
-        label_widget = ttk.Label(summary_frame, text=label_text)
+        label_widget = ttk.Label(summary_frame, text=label_text, style="CardText.TLabel")
         label_widget.grid(row=row_index, column=0, sticky="w")
-        value_label = ttk.Label(summary_frame, text="—")
+        value_label = ttk.Label(summary_frame, text="—", style="CardText.TLabel")
         value_label.grid(row=row_index, column=1, sticky="e")
         summary_labels[label_key] = label_widget
         summary_values[label_key] = value_label
@@ -204,11 +204,11 @@ def build_reports_layout(owner) -> ReportsUiHandles:
         selectmode="browse",
     )
     enable_treeview_zebra(operations_tree)
-    operations_tree.heading("date", text=tr("common.date", "Дата"))
+    operations_tree.heading("date", text=tr("common.date_short", "Дата"))
     operations_tree.heading("type", text=tr("common.type_short", "Тип"))
-    operations_tree.heading("category", text=tr("common.category", "Категория"))
-    operations_tree.heading("tags", text=tr("common.tags", "Теги"))
-    operations_tree.heading("amount", text=tr("common.amount", "Сумма"))
+    operations_tree.heading("category", text=tr("common.category_short", "Категория"))
+    operations_tree.heading("tags", text=tr("common.tags_short", "Теги"))
+    operations_tree.heading("amount", text=tr("common.amount_short", "Сумма"))
     operations_tree.column("date", width=100, minwidth=100, stretch=False, anchor="w")
     operations_tree.column("type", width=200, minwidth=200, stretch=False, anchor="w")
     operations_tree.column("category", width=260, minwidth=220, stretch=False, anchor="w")
@@ -233,7 +233,11 @@ def build_reports_layout(owner) -> ReportsUiHandles:
         except tk.TclError:
             pass
 
-    monthly_card = create_card_section(right, tr("reports.monthly_summary", "Помесячная сводка"))
+    monthly_card = create_card_section(
+        right,
+        tr("reports.monthly_summary", "Помесячная сводка"),
+        body_padding=(4, 4, 4, 4),
+    )
     monthly_card.grid(row=0, column=0, sticky="nsew")
     monthly_frame = monthly_card.winfo_children()[-1]
     monthly_frame.grid_rowconfigure(0, weight=1)
@@ -244,16 +248,25 @@ def build_reports_layout(owner) -> ReportsUiHandles:
         columns=("month", "income", "expense"),
         show="headings",
         selectmode="none",
+        height=12,
     )
     enable_treeview_zebra(monthly_tree)
     monthly_tree.heading("month", text=tr("common.month", "Месяц"))
-    monthly_tree.heading("income", text=tr("analytics.income", "Доходы"))
-    monthly_tree.heading("expense", text=tr("analytics.expenses", "Расходы"))
+    monthly_tree.heading("income", text=tr("reports.income", "Доход"))
+    monthly_tree.heading("expense", text=tr("reports.expense", "Расход"))
     monthly_tree.column("month", width=50, minwidth=50, anchor="w")
     monthly_tree.column("income", width=90, minwidth=90, anchor="e")
     monthly_tree.column("expense", width=90, minwidth=90, anchor="e")
     monthly_tree.grid(row=0, column=0, sticky="nsew")
-    attach_treeview_scrollbars(monthly_frame, monthly_tree, row=0, column=0, horizontal=False)
+    attach_treeview_scrollbars(
+        monthly_frame,
+        monthly_tree,
+        row=0,
+        column=0,
+        horizontal=False,
+        padx=0,
+        pady=0,
+    )
 
     def _block_separator_resize(event: tk.Event) -> str | None:
         if isinstance(event.widget, ttk.Treeview):

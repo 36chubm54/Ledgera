@@ -175,20 +175,21 @@ def draw_bar_chart(
                 font=("Segoe UI", 9),
             )
 
+    legend_y = max(6, padding["top"] - 14)
     canvas.create_text(
         padding["left"],
-        padding["top"] - 6,
+        legend_y,
         text=tr("operations.type.income", "Доход"),
         fill=palette.chart_income,
-        anchor="sw",
+        anchor="nw",
         font=("Segoe UI", 9),
     )
     canvas.create_text(
         padding["left"] + 60,
-        padding["top"] - 6,
+        legend_y,
         text=tr("operations.type.expense", "Расход"),
         fill=palette.chart_expense,
-        anchor="sw",
+        anchor="nw",
         font=("Segoe UI", 9),
     )
 

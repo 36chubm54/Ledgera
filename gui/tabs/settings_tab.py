@@ -87,6 +87,7 @@ def build_settings_tab(
             "Управление кошельками открывается в отдельном окне.",
         ),
         justify="left",
+        style="CardText.TLabel",
     ).grid(row=0, column=0, sticky="w", pady=(0, PAD_SM))
 
     ttk.Button(

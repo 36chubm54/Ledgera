@@ -123,7 +123,13 @@ def build_operations_tab(
     label_width = 12
 
     def _form_label(row: int, text: str) -> ttk.Label:
-        label = ttk.Label(form_frame, text=text, width=label_width, anchor="w")
+        label = ttk.Label(
+            form_frame,
+            text=text,
+            width=label_width,
+            anchor="w",
+            style="FormField.TLabel",
+        )
         label.grid(row=row, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
         return label
 
@@ -551,10 +557,10 @@ def build_operations_tab(
     enable_treeview_zebra(records_tree)
     for col, text, width, minwidth, stretch, anchor in (
         ("index", "#", 50, 50, False, "e"),
-        ("date", tr("common.date", "Дата"), 100, 100, False, "w"),
+        ("date", tr("common.date_short", "Дата"), 100, 100, False, "w"),
         ("type", tr("common.type_short", "Тип"), 110, 110, False, "w"),
         ("category", tr("common.category_short", "Категория"), 180, 180, True, "w"),
-        ("amount", tr("common.amount", "Сумма"), 90, 90, False, "e"),
+        ("amount", tr("common.amount_short", "Сумма"), 90, 90, False, "e"),
         ("currency", tr("operations.currency_short", "Вал."), 60, 60, False, "center"),
         ("kzt", "KZT", 100, 90, False, "e"),
         ("wallets", tr("operations.wallets", "Кошельки"), 120, 110, False, "center"),
@@ -571,7 +577,7 @@ def build_operations_tab(
         columns=("tags",),
     )
     enable_treeview_zebra(tags_tree)
-    tags_tree.heading("tags", text=tr("common.tags", "Теги"))
+    tags_tree.heading("tags", text=tr("common.tags_short", "Теги"))
     tags_tree.column("tags", width=180, minwidth=140, stretch=True, anchor="w")
     enable_treeview_column_autosize(tags_tree, columns=("tags",), max_width=420)
     tags_tree.grid(row=0, column=1, sticky="nsew", padx=(PAD_SM, 0))
@@ -899,21 +905,28 @@ def build_operations_tab(
         edit_panel.grid(row=4, column=0, columnspan=2, padx=6, sticky="ew")
         edit_panel_state["panel"] = edit_panel
 
-        ttk.Label(edit_panel, text=tr("common.date", "Дата:")).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            edit_panel,
+            text=tr("common.date", "Дата:"),
+            style="InlineField.TLabel",
+        ).grid(row=0, column=0, sticky="w")
         date_edit_entry = ttk.Entry(edit_panel)
         date_edit_entry.grid(row=0, column=1, sticky="ew")
         amount_edit_label = ttk.Label(
             edit_panel,
             text=_amount_edit_label_text(getattr(transfer, "currency", _base_currency_code())),
+            style="InlineField.TLabel",
         )
         amount_edit_label.grid(row=1, column=0, sticky="w")
         amount_base_edit_entry = ttk.Entry(edit_panel)
         amount_base_edit_entry.grid(row=1, column=1, sticky="ew")
         Tooltip(amount_edit_label, amount_edit_tooltip_text)
         Tooltip(amount_base_edit_entry, amount_edit_tooltip_text)
-        ttk.Label(edit_panel, text=tr("operations.transfer.from", "Из кошелька:")).grid(
-            row=2, column=0, sticky="w"
-        )
+        ttk.Label(
+            edit_panel,
+            text=tr("operations.transfer.from", "Из кошелька:"),
+            style="InlineField.TLabel",
+        ).grid(row=2, column=0, sticky="w")
         from_wallet_var = tk.StringVar(value="")
         from_wallet_menu = ttk.Combobox(
             edit_panel,
@@ -922,9 +935,11 @@ def build_operations_tab(
             state="readonly",
         )
         from_wallet_menu.grid(row=2, column=1, sticky="ew")
-        ttk.Label(edit_panel, text=tr("operations.transfer.to", "В кошелек:")).grid(
-            row=3, column=0, sticky="w"
-        )
+        ttk.Label(
+            edit_panel,
+            text=tr("operations.transfer.to", "В кошелек:"),
+            style="InlineField.TLabel",
+        ).grid(row=3, column=0, sticky="w")
         to_wallet_var = tk.StringVar(value="")
         to_wallet_menu = ttk.Combobox(
             edit_panel,
@@ -933,9 +948,11 @@ def build_operations_tab(
             state="readonly",
         )
         to_wallet_menu.grid(row=3, column=1, sticky="ew")
-        ttk.Label(edit_panel, text=tr("operations.transfer.description", "Описание:")).grid(
-            row=4, column=0, sticky="w"
-        )
+        ttk.Label(
+            edit_panel,
+            text=tr("operations.transfer.description", "Описание:"),
+            style="InlineField.TLabel",
+        ).grid(row=4, column=0, sticky="w")
         description_edit_entry = ttk.Entry(edit_panel)
         description_edit_entry.grid(row=4, column=1, sticky="ew")
         edit_panel.grid_columnconfigure(1, weight=1)
@@ -1118,18 +1135,25 @@ def build_operations_tab(
         amount_edit_label = ttk.Label(
             edit_panel,
             text=_amount_edit_label_text(getattr(record, "currency", _base_currency_code())),
+            style="InlineField.TLabel",
         )
         amount_edit_label.grid(row=0, column=0, sticky="w")
         amount_entry = ttk.Entry(edit_panel)
         amount_entry.grid(row=0, column=1, sticky="ew")
         Tooltip(amount_edit_label, amount_edit_tooltip_text)
         Tooltip(amount_entry, amount_edit_tooltip_text)
-        ttk.Label(edit_panel, text=tr("common.date", "Дата:")).grid(row=1, column=0, sticky="w")
+        ttk.Label(
+            edit_panel,
+            text=tr("common.date", "Дата:"),
+            style="InlineField.TLabel",
+        ).grid(row=1, column=0, sticky="w")
         date_edit_entry = ttk.Entry(edit_panel)
         date_edit_entry.grid(row=1, column=1, sticky="ew")
-        ttk.Label(edit_panel, text=tr("common.wallet", "Кошелек:")).grid(
-            row=2, column=0, sticky="w"
-        )
+        ttk.Label(
+            edit_panel,
+            text=tr("common.wallet", "Кошелек:"),
+            style="InlineField.TLabel",
+        ).grid(row=2, column=0, sticky="w")
         wallet_edit_var = tk.StringVar(value="")
         wallet_edit_menu = ttk.Combobox(
             edit_panel,
@@ -1138,17 +1162,25 @@ def build_operations_tab(
             state="readonly",
         )
         wallet_edit_menu.grid(row=2, column=1, sticky="ew")
-        ttk.Label(edit_panel, text=tr("common.category", "Категория:")).grid(
-            row=3, column=0, sticky="w"
-        )
+        ttk.Label(
+            edit_panel,
+            text=tr("common.category", "Категория:"),
+            style="InlineField.TLabel",
+        ).grid(row=3, column=0, sticky="w")
         category_edit_combo = ttk.Combobox(edit_panel, state="normal")
         category_edit_combo.grid(row=3, column=1, sticky="ew")
-        ttk.Label(edit_panel, text=tr("common.description", "Описание:")).grid(
-            row=4, column=0, sticky="w"
-        )
+        ttk.Label(
+            edit_panel,
+            text=tr("common.description", "Описание:"),
+            style="InlineField.TLabel",
+        ).grid(row=4, column=0, sticky="w")
         description_edit_entry = ttk.Entry(edit_panel)
         description_edit_entry.grid(row=4, column=1, sticky="ew")
-        ttk.Label(edit_panel, text=tr("common.tags", "Теги:")).grid(row=5, column=0, sticky="w")
+        ttk.Label(
+            edit_panel,
+            text=tr("common.tags", "Теги:"),
+            style="InlineField.TLabel",
+        ).grid(row=5, column=0, sticky="w")
         tags_edit_combo = ttk.Combobox(edit_panel, state="normal")
         tags_edit_combo.grid(row=5, column=1, sticky="ew")
         edit_panel.grid_columnconfigure(1, weight=1)
@@ -1501,9 +1533,11 @@ def build_operations_tab(
     transfer_frame = transfer_card.winfo_children()[-1]
     transfer_frame.grid_columnconfigure(1, weight=1)
 
-    ttk.Label(transfer_frame, text=tr("operations.transfer.from", "Из кошелька:")).grid(
-        row=0, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        transfer_frame,
+        text=tr("operations.transfer.from", "Из кошелька:"),
+        style="FormField.TLabel",
+    ).grid(row=0, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     transfer_from_var = tk.StringVar(value="")
     transfer_from_menu = ttk.Combobox(
         transfer_frame,
@@ -1513,9 +1547,11 @@ def build_operations_tab(
     )
     transfer_from_menu.grid(row=0, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(transfer_frame, text=tr("operations.transfer.to", "В кошелек:")).grid(
-        row=1, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        transfer_frame,
+        text=tr("operations.transfer.to", "В кошелек:"),
+        style="FormField.TLabel",
+    ).grid(row=1, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     transfer_to_var = tk.StringVar(value="")
     transfer_to_menu = ttk.Combobox(
         transfer_frame,
@@ -1525,43 +1561,55 @@ def build_operations_tab(
     )
     transfer_to_menu.grid(row=1, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(transfer_frame, text=tr("common.date", "Дата:")).grid(
-        row=2, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        transfer_frame,
+        text=tr("common.date", "Дата:"),
+        style="FormField.TLabel",
+    ).grid(row=2, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     transfer_date_entry = ttk.Entry(transfer_frame)
     transfer_date_entry.grid(row=2, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
     transfer_date_entry.insert(0, date.today().isoformat())
 
-    ttk.Label(transfer_frame, text=tr("common.amount", "Сумма:")).grid(
-        row=3, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        transfer_frame,
+        text=tr("common.amount", "Сумма:"),
+        style="FormField.TLabel",
+    ).grid(row=3, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     transfer_amount_entry = ttk.Entry(transfer_frame)
     transfer_amount_entry.grid(row=3, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(transfer_frame, text=tr("common.currency", "Валюта:")).grid(
-        row=4, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        transfer_frame,
+        text=tr("common.currency", "Валюта:"),
+        style="FormField.TLabel",
+    ).grid(row=4, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     transfer_currency_entry = ttk.Entry(transfer_frame)
     transfer_currency_entry.insert(0, _base_currency_code())
     transfer_currency_entry.grid(row=4, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(transfer_frame, text=tr("operations.transfer.commission", "Комиссия:")).grid(
-        row=5, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        transfer_frame,
+        text=tr("operations.transfer.commission", "Комиссия:"),
+        style="FormField.TLabel",
+    ).grid(row=5, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     transfer_commission_entry = ttk.Entry(transfer_frame)
     transfer_commission_entry.insert(0, "0")
     transfer_commission_entry.grid(row=5, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
     ttk.Label(
-        transfer_frame, text=tr("operations.transfer.commission_currency", "Валюта комиссии:")
+        transfer_frame,
+        text=tr("operations.transfer.commission_currency", "Валюта комиссии:"),
+        style="FormField.TLabel",
     ).grid(row=6, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     transfer_commission_currency_entry = ttk.Entry(transfer_frame)
     transfer_commission_currency_entry.insert(0, _base_currency_code())
     transfer_commission_currency_entry.grid(row=6, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
-    ttk.Label(transfer_frame, text=tr("common.description", "Описание:")).grid(
-        row=7, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS
-    )
+    ttk.Label(
+        transfer_frame,
+        text=tr("common.description", "Описание:"),
+        style="FormField.TLabel",
+    ).grid(row=7, column=0, sticky="w", padx=PAD_SM, pady=PAD_XS)
     transfer_description_entry = ttk.Entry(transfer_frame)
     transfer_description_entry.grid(row=7, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
 
