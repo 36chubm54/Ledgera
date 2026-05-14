@@ -35,6 +35,13 @@ def _collect_combos(parent: tk.Misc) -> list[ttk.Combobox]:
     return combos
 
 
+def _find_combo_by_values(parent: tk.Misc, expected_values: tuple[str, ...]) -> ttk.Combobox | None:
+    for combo in _collect_combos(parent):
+        if tuple(combo.cget("values")) == expected_values:
+            return combo
+    return None
+
+
 def _collect_entries(parent: tk.Misc) -> list[tk.Entry | ttk.Entry]:
     entries: list[tk.Entry | ttk.Entry] = []
 
@@ -117,5 +124,31 @@ def test_operations_creator_frames_have_keyboard_navigation() -> None:
         assert transfer_button.bind("<Return>")
         assert transfer_button.bind("<Left>")
         assert transfer_button.bind("<Right>")
+    finally:
+        root.destroy()
+
+
+def test_operations_format_selector_excludes_unsupported_export_formats() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        parent = tk.Frame(root)
+        parent.pack()
+        context = _make_context()
+        build_operations_tab(
+            parent,
+            context,
+            import_formats={
+                "CSV": {"ext": ".csv", "desc": "CSV"},
+                "XLSX": {"ext": ".xlsx", "desc": "Excel"},
+                "JSON": {"ext": ".json", "desc": "JSON"},
+            },
+        )
+        root.update_idletasks()
+
+        format_combo = _find_combo_by_values(parent, ("CSV", "XLSX"))
+
+        assert format_combo is not None
+        assert tuple(format_combo.cget("values")) == ("CSV", "XLSX")
     finally:
         root.destroy()

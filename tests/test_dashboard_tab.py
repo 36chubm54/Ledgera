@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import ttk
@@ -73,6 +74,9 @@ class _Controller:
                 )
             ],
         )
+
+    def get_base_currency_code(self) -> str:
+        return "KZT"
 
     def get_assets(self, *, active_only: bool = False) -> list[Asset]:
         assets = [
@@ -624,3 +628,31 @@ def test_dashboard_tab_goal_delete_button_is_rendered() -> None:
         assert len(delete_buttons) == 1
     finally:
         context.destroy()
+
+
+def test_tab_subpackages_are_importable_from_stable_paths() -> None:
+    operations_pkg = importlib.import_module("gui.tabs.operations")
+    operations_builder = importlib.import_module("gui.tabs.operations.builder")
+    operations_form = importlib.import_module("gui.tabs.operations.form_section")
+    operations_journal = importlib.import_module("gui.tabs.operations.journal_section")
+    operations_inline = importlib.import_module("gui.tabs.operations.inline_editors")
+    operations_transfer = importlib.import_module("gui.tabs.operations.transfer_section")
+    dashboard_pkg = importlib.import_module("gui.tabs.dashboard")
+    dashboard_builder = importlib.import_module("gui.tabs.dashboard.builder")
+    dashboard_actions = importlib.import_module("gui.tabs.dashboard.actions")
+    dashboard_dialogs = importlib.import_module("gui.tabs.dashboard.dialogs")
+    dashboard_render = importlib.import_module("gui.tabs.dashboard.render")
+
+    assert operations_pkg.build_operations_tab is operations_builder.build_operations_tab
+    assert hasattr(operations_form, "build_operation_form_section")
+    assert hasattr(operations_journal, "build_journal_section")
+    assert hasattr(operations_inline, "build_inline_editors")
+    assert hasattr(operations_transfer, "build_transfer_section")
+
+    assert dashboard_pkg.build_dashboard_tab is dashboard_builder.build_dashboard_tab
+    assert dashboard_pkg._prepare_goal_payload is dashboard_actions._prepare_goal_payload
+    assert hasattr(dashboard_dialogs, "show_bulk_asset_snapshot_dialog")
+    assert hasattr(dashboard_dialogs, "show_create_goal_dialog")
+    assert hasattr(dashboard_dialogs, "show_asset_editor_dialog")
+    assert hasattr(dashboard_dialogs, "show_manage_assets_dialog")
+    assert hasattr(dashboard_render, "_draw_trend")
