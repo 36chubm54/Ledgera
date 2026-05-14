@@ -239,12 +239,11 @@ def build_operations_tab(
         if not filepath:
             return
 
-        records = context.repository.load_all()
-        transfers = context.repository.load_transfers()
-
         def task() -> None:
             from gui.exporters import export_records
 
+            records = context.repository.load_all()
+            transfers = context.repository.load_transfers()
             export_records(records, filepath, fmt.lower(), transfers=transfers)
 
         def on_success(_: Any) -> None:
