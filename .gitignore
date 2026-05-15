@@ -6,6 +6,8 @@ tests/_tmp/
 .pytest_tmp/
 .obsidian/
 .vscode/
+build/
+dist/
 
 # Icons
 *.png

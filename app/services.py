@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from app_paths import get_currency_config_path, get_currency_rates_path
 from domain.currency import CurrencyService as DomainCurrencyService
 from infrastructure.currency_aggregator import CurrencyAggregator
 from infrastructure.currency_providers import (
@@ -34,8 +35,8 @@ class CurrencyCacheError(OSError):
 class CurrencyService:
     """Адаптер сервиса валют для приложения."""
 
-    CACHE_FILE = Path(__file__).resolve().parents[1] / "currency_rates.json"
-    CONFIG_FILE = Path(__file__).resolve().parents[1] / "currency_config.json"
+    CACHE_FILE = get_currency_rates_path()
+    CONFIG_FILE = get_currency_config_path()
     EXCHANGE_RATE_API_KEY_ENV = "FINACCOUNTING_EXCHANGE_RATE_API_KEY"
     DEFAULT_DISPLAY_CURRENCY_WHITELIST = ("KZT", "USD", "EUR", "RUB")
     DEFAULT_RATES = {"USD": 500.0, "EUR": 590.0, "RUB": 6.5}

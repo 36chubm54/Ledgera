@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app_paths import get_locales_dir
+
 DEFAULT_LANGUAGE = "ru"
-LOCALES_DIR = Path(__file__).resolve().parents[1] / "locales"
+LOCALES_DIR = get_locales_dir()
 
 _catalogs: dict[str, dict[str, str]] = {}
 _current_language = DEFAULT_LANGUAGE

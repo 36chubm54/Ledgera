@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "financial-accounting"
-version = "2.0.0-beta.4"
+version = "2.0.0"
 description = "Financial accounting system"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,9 +16,12 @@ dependencies = [
 pdf = [
     "reportlab==4.0.0",
 ]
+build = [
+    "pyinstaller>=6,<7",
+]
 
 [tool.setuptools]
-py-modules = ["backup", "bootstrap", "config", "main", "migrate_json_to_sqlite", "version"]
+py-modules = ["app_paths", "backup", "bootstrap", "config", "main", "migrate_json_to_sqlite", "version"]
 
 [tool.setuptools.packages.find]
 include = ["app*", "db*", "domain*", "gui*", "infrastructure*", "services*", "storage*", "utils*"]

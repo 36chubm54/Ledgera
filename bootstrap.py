@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 
 from app.repository import RecordRepository
+from app_paths import get_schema_sql_path, resolve_resource_path
 from backup import create_backup, export_to_json
 from config import JSON_BACKUP_KEEP_LAST, JSON_PATH, LAZY_EXPORT_SIZE_THRESHOLD, SQLITE_PATH
 from infrastructure.sqlite_repository import SQLiteRecordRepository
@@ -16,7 +17,7 @@ def _resolve_schema_path(schema_path: str) -> str:
     candidate = Path(schema_path)
     if candidate.is_absolute():
         return str(candidate)
-    return str((Path(__file__).resolve().parent / candidate).resolve())
+    return str(resolve_resource_path(candidate))
 
 
 def _is_onedrive_path(path: Path) -> bool:
@@ -238,7 +239,7 @@ def _export_in_background() -> None:
             export_to_json(
                 SQLITE_PATH,
                 JSON_PATH,
-                schema_path=_resolve_schema_path("db/schema.sql"),
+                schema_path=str(get_schema_sql_path()),
                 autofreeze_closed_months=False,
             )
             create_backup(JSON_PATH, keep_last=JSON_BACKUP_KEEP_LAST)
@@ -254,7 +255,7 @@ def _export_in_background() -> None:
 def _run_post_startup_maintenance(db_path: Path) -> None:
     repository = SQLiteRecordRepository(
         SQLITE_PATH,
-        schema_path=_resolve_schema_path("db/schema.sql"),
+        schema_path=str(get_schema_sql_path()),
     )
     try:
         _freeze_closed_distribution_months(repository)
@@ -280,7 +281,7 @@ def _run_post_startup_maintenance(db_path: Path) -> None:
             export_to_json(
                 SQLITE_PATH,
                 JSON_PATH,
-                schema_path=_resolve_schema_path("db/schema.sql"),
+                schema_path=str(get_schema_sql_path()),
                 autofreeze_closed_months=False,
             )
             create_backup(JSON_PATH, keep_last=JSON_BACKUP_KEEP_LAST)
@@ -306,7 +307,7 @@ def bootstrap_repository(
 
     repository = SQLiteRecordRepository(
         SQLITE_PATH,
-        schema_path=_resolve_schema_path("db/schema.sql"),
+        schema_path=str(get_schema_sql_path()),
     )
 
     if db_existed:

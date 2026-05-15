@@ -3,10 +3,10 @@ from __future__ import annotations
 import platform
 import tkinter as tk
 from collections.abc import Callable
-from pathlib import Path
 from tkinter import ttk
 from typing import Any, cast
 
+from app_paths import get_icons_dir
 from gui.i18n import tr
 from gui.ui_theme import bootstrap_ui, get_palette, get_theme
 
@@ -71,7 +71,7 @@ def _get_icon_for_kind(kind: str) -> tuple[str, str]:
     If a <kind>.png file exists in project/gui/assets/icons/, returns type "image"
     and the absolute path to the file. Otherwise it returns a Unicode character.
     """
-    icons_dir = Path(__file__).parent / "assets" / "icons"
+    icons_dir = get_icons_dir()
     icon_file = icons_dir / f"{kind}.png"
     if icon_file.exists():
         return ("image", str(icon_file.resolve()))

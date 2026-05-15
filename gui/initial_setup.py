@@ -12,6 +12,7 @@ from tkinter import ttk
 from typing import Any
 
 from app.services import CurrencyService
+from app_paths import get_icons_dir
 from config import SQLITE_PATH
 from gui.i18n import tr
 from gui.shell.shell_window import apply_window_icon
@@ -300,8 +301,7 @@ def run_initial_setup_wizard(
     root.title(tr("setup.title", "Первоначальная настройка"))
     root.resizable(False, False)
     root.grid_columnconfigure(0, weight=1)
-    icons_dir = Path(__file__).resolve().parent / "assets" / "icons"
-    apply_window_icon(root, icons_dir=icons_dir)
+    apply_window_icon(root, icons_dir=get_icons_dir())
 
     content = ttk.Frame(root, padding=16)
     content.grid(row=0, column=0, sticky="nsew")

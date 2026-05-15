@@ -7,11 +7,11 @@ in gui.shell.* so this module stays a shell-only composition root.
 import logging
 import tkinter as tk
 from collections.abc import Callable
-from pathlib import Path
 from tkinter import ttk
 from typing import Any, cast
 
 from app.services import CurrencyService
+from app_paths import get_icons_dir
 from bootstrap import bootstrap_repository
 from domain.import_policy import ImportPolicy
 from gui.controllers import FinancialController
@@ -142,8 +142,7 @@ class FinancialApp(tk.Tk):
     def __init__(self, *, initial_base_currency: str | None = None) -> None:
         super().__init__()
 
-        icons_dir = Path(__file__).resolve().parent / "assets" / "icons"
-        apply_window_icon(self, icons_dir=icons_dir)
+        apply_window_icon(self, icons_dir=get_icons_dir())
         configure_main_window(self)
 
         self.repository = bootstrap_repository(

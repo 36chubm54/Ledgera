@@ -6,6 +6,7 @@ import typing
 from datetime import date as dt_date
 from pathlib import Path
 
+from app_paths import get_schema_sql_path
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
 from domain.transfers import Transfer
 from domain.wallets import Wallet
@@ -169,7 +170,7 @@ class SQLiteStorage(Storage):
 
     def initialize_schema(self, schema_path: str | None = None) -> None:
         if schema_path is None:
-            schema_path = str(Path(__file__).resolve().parents[1] / "db" / "schema.sql")
+            schema_path = str(get_schema_sql_path())
         self._ensure_pre_schema_compatibility()
         schema = Path(schema_path).read_text(encoding="utf-8")
         self._conn.executescript(schema)
