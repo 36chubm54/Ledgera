@@ -9,13 +9,25 @@ class RecordService:
     def __init__(self, repository: RecordRepository) -> None:
         self._repository = repository
 
+    @staticmethod
+    def _normalize_currency_code(value: object) -> str:
+        currency = str(value or "").strip().upper()
+        if not currency or any(ch in currency for ch in "<>() "):
+            return ""
+        return currency
+
     def _base_currency_code(self) -> str:
+        get_schema_meta = getattr(self._repository, "get_schema_meta", None)
+        if callable(get_schema_meta):
+            schema_currency = self._normalize_currency_code(get_schema_meta("base_currency"))
+            if schema_currency:
+                return schema_currency
         try:
             wallet = self._repository.get_system_wallet()
         except (AttributeError, TypeError, ValueError):
             return "KZT"
-        currency = str(getattr(wallet, "currency", "") or "").strip().upper()
-        if not currency or any(ch in currency for ch in "<>() "):
+        currency = self._normalize_currency_code(getattr(wallet, "currency", ""))
+        if not currency:
             return "KZT"
         return currency
 
