@@ -59,6 +59,8 @@ Current contract:
 - `base_currency` remains a repository-owned concern after bootstrap
 - runtime updates to `display_currency`, provider mode, provider selection, API key, auto-update, and refresh interval are persisted before the in-memory runtime is reconfigured
 - failed config persistence must not leave partially applied runtime currency state in memory
+- `exchange_rate_api_key` should be persisted through OS-backed secure storage rather than plaintext `currency_config.json`
+- env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` remains a runtime override, but not the preferred default persistence path
 
 ## 3. Key Runtime Flows
 
@@ -77,6 +79,7 @@ Packaging note:
 
 - the checked-in `FinAccountingApp.spec` builds the main `PyInstaller --onedir` app bundle
 - `migrate_json_to_sqlite.py` and `migrations/migration_002_rename_amount_kzt_to_base.py` are shipped inside that bundle as raw Python utility scripts rather than separate executable tools
+- the Windows release workflow can optionally sign `FinAccountingApp.exe` and the installer if certificate secrets are configured; otherwise the release remains unsigned
 
 ### 3.1 Startup
 
@@ -180,6 +183,7 @@ Important details:
 
 - dry-run and real import share the same validation pipeline
 - readonly snapshots require `force=True`
+- imported JSON/CSV/XLSX payloads should be treated as untrusted input, with file-size guardrails and explicit validation before persistence
 - JSON full backups can contain extended runtime entities such as budgets, debts, assets, goals, and distribution payloads
 - partial `JSON` imports are section-aware and should not treat omitted sections as implicit deletion
 - debt-aware imports must preserve `records.related_debt_id` and `debt_payments.record_id` links across normalization and bulk replace paths
@@ -188,6 +192,15 @@ Important details:
 - compatibility logic in `storage/sqlite_storage.py` protects older SQLite databases during schema initialization
 - rollback-safe import orchestration lives in `app.import_support.py`
 - payload parsing, replacement, execution, and mandatory-template paths are split across `services/import_*_support.py`
+
+### 3.5 Security posture
+
+Current practical security model:
+
+- runtime data lives in user-scoped `AppData`, separate from the installed binaries
+- SQLite data, JSON backups, and exported reports remain plaintext files at rest
+- uninstall removes installed files and shortcuts, but not user data in `AppData`
+- recommended host protections are OS-level (`BitLocker`, Windows account password, trusted-machine-only use), not custom application crypto
 
 ### Repository compatibility notes
 
@@ -444,7 +457,7 @@ Core modules:
 - `domain/currency.py`
 - `infrastructure/currency_providers.py`
 - `infrastructure/currency_aggregator.py`
-- `currency_config.json`
+- `currency_config.json` + OS-backed secret storage for API credentials
 
 This subsystem is responsible for:
 
@@ -467,7 +480,7 @@ Configuration model:
 
 - `provider_order` overrides the whole chain explicitly when present
 - otherwise `provider_mode` chooses between `fallback_provider` and `commercial_fallback_provider`
-- `exchange_rate_api_key` can come from `currency_config.json` or env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY`
+- `exchange_rate_api_key` should resolve from OS-backed secure storage first, with env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` as an override path
 - `display_currency_whitelist` constrains which codes appear in the status-bar switcher
 - `auto_update` and `update_interval_minutes` control recurring rate refresh while online mode is enabled
 - first-run setup may seed the initial provider/display config through a dedicated GUI wizard, but `base_currency` remains a bootstrap-only choice that is persisted into SQLite `schema_meta`

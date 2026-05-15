@@ -53,6 +53,7 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 - Bundled read-only resources include `gui/assets/icons`, `locales`, and `db/schema.sql`
 - In packaged mode, mutable runtime files (`finance.db`, currency config/cache, backups) are created in user-scoped `AppData` instead of the install directory
 - Migration utilities [migrate_json_to_sqlite.py](C:/Users/swar4/OneDrive/Документы/Финансовый%20учёт/Проект%20ФУ/FinAccountingApp-dev/migrate_json_to_sqlite.py) and [migration_002_rename_amount_kzt_to_base.py](C:/Users/swar4/OneDrive/Документы/Финансовый%20учёт/Проект%20ФУ/FinAccountingApp-dev/migrations/migration_002_rename_amount_kzt_to_base.py) are included in the bundle as raw Python scripts, not as separate `.exe` tools
+- The GitHub Actions release workflow can optionally sign `FinAccountingApp.exe` and the installer when a code-signing certificate is configured in repository secrets; without a certificate, the build remains unsigned
 
 ## ✨ Core Features
 
@@ -88,6 +89,7 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 - `base_currency` is chosen only during first-run setup, then SQLite `schema_meta` remains the source of truth
 - By default, the display selector is limited to the whitelist `KZT` / `USD` / `EUR` / `RUB`, even if cached rates contain more currency codes
 - `Settings -> Currency and rates` can update `display_currency`, provider mode, primary/fallback provider, `exchange_rate_api_key`, `auto_update`, and `update_interval_minutes`, but not post-startup `base_currency`
+- `exchange_rate_api_key` is no longer expected to live in `currency_config.json`: in the Windows packaged/runtime flow it is migrated into secure OS storage while the JSON config keeps only non-secret settings
 - `auto_update` is now active behavior instead of passive metadata: when online mode is enabled, rates refresh automatically according to `update_interval_minutes`
 - Exported reports are localized to the current UI language, and base-amount columns explicitly show the real base code, for example `Amount (KZT)`
 - Localized report `CSV` / `XLSX` exports remain import-safe for the app's generic import pipeline
@@ -310,8 +312,20 @@ Rates are provided through `CurrencyService` and an ordered provider chain:
 
 Useful configuration points:
 
-- `currency_config.json` — `provider_mode`, `fallback_provider`, `commercial_fallback_provider`, `display_currency_whitelist`, `auto_update`, `update_interval_minutes`
+- `currency_config.json` — `provider_mode`, `fallback_provider`, `commercial_fallback_provider`, `display_currency_whitelist`, `auto_update`, `update_interval_minutes` without a plaintext `exchange_rate_api_key`
 - env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` — runtime override for `exchange_rate_api_key`
+
+## 🔐 Security Notes
+
+- Runtime data (`finance.db`, `currency_config.json`, `currency_rates.json`, backups, exports) lives in user-scoped `AppData`, not beside the executable
+- `exchange_rate_api_key` is expected to live in secure OS-backed storage; `currency_config.json` is no longer treated as a plaintext secret store
+- The SQLite database, JSON backups, and exported reports are still not encrypted at rest: they remain readable financial-data files
+- Uninstall removes installed files and shortcuts, but does not remove user data from `AppData`
+- For personal Windows use, the recommended host protections are:
+  - `BitLocker`
+  - a password-protected Windows account
+  - trusted-machine-only usage
+  - importing only trusted backup/export files
 
 ## 📄 License
 
