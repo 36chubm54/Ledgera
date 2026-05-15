@@ -309,7 +309,8 @@ def report_to_pdf(
     style = TableStyle(
         [
             ("FONT", (0, 0), (-1, -1), font_name),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("FONTSIZE", (0, 0), (-1, 0), 10),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("ALIGN", (3, 0), (3, -1), "RIGHT"),
