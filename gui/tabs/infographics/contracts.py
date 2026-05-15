@@ -56,6 +56,8 @@ class InfographicsChartsOwner(Protocol):
 
 
 class InfographicsRefreshOwner(InfographicsChartsOwner, Protocol):
+    _infographics_records_cache: list[object] | None
+
     @property
     def repository(self) -> InfographicsRepository: ...
 

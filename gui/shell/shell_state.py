@@ -64,6 +64,7 @@ def reset_tab_bindings_state(owner: Any, *, hide_records_tooltip: Callable[[], N
     owner.expense_legend_frame = None
     owner.daily_bar_canvas = None
     owner.monthly_bar_canvas = None
+    owner._infographics_records_cache = None
 
 
 def assign_status_bar_state(owner: Any, result: StatusBarBuildResult) -> ttk.Frame:

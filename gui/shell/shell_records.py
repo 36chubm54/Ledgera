@@ -10,6 +10,42 @@ from gui.tooltip import show_popup_tooltip
 from utils.tag_utils import color_for_tag
 
 
+def _list_items_for_refresh(controller: Any, records: list[Any] | None) -> list[Any]:
+    return (
+        controller.build_record_list_items(records)
+        if records is not None
+        else controller.build_record_list_items()
+    )
+
+
+def _tag_color_map_for_refresh(
+    controller: Any,
+    *,
+    record_tags_tree: ttk.Treeview | None,
+) -> dict[str, str]:
+    if record_tags_tree is None:
+        return {}
+    return {
+        str(getattr(tag, "name", "") or ""): str(getattr(tag, "color", "") or "")
+        for tag in controller.list_tags()
+    }
+
+
+def _lookup_maps_for_refresh(
+    list_items: list[Any],
+) -> tuple[dict[str, int], dict[str, int], dict[str, str]]:
+    repo_index_map: dict[str, int] = {}
+    domain_id_map: dict[str, int] = {}
+    description_map: dict[str, str] = {}
+    for item in list_items:
+        record_id = item.record_id
+        repo_index_map[record_id] = item.repository_index
+        if item.domain_record_id is not None:
+            domain_id_map[record_id] = item.domain_record_id
+        description_map[record_id] = str(getattr(item, "description_text", "") or "").strip()
+    return repo_index_map, domain_id_map, description_map
+
+
 def refresh_record_views(
     *,
     controller: Any,
@@ -32,25 +68,15 @@ def refresh_record_views(
         except TclError:
             pass
 
-    list_items = (
-        controller.build_record_list_items(records)
-        if records is not None
-        else controller.build_record_list_items()
+    list_items = _list_items_for_refresh(controller, records)
+    tag_color_map = _tag_color_map_for_refresh(
+        controller,
+        record_tags_tree=record_tags_tree,
     )
-    tag_color_map = {
-        str(getattr(tag, "name", "") or ""): str(getattr(tag, "color", "") or "")
-        for tag in controller.list_tags()
-    }
+    repo_index_map, domain_id_map, description_map = _lookup_maps_for_refresh(list_items)
 
-    repo_index_map: dict[str, int] = {}
-    domain_id_map: dict[str, int] = {}
-    description_map: dict[str, str] = {}
     for item in list_items:
         record_id = item.record_id
-        repo_index_map[record_id] = item.repository_index
-        if item.domain_record_id is not None:
-            domain_id_map[record_id] = item.domain_record_id
-        description_map[record_id] = str(getattr(item, "description_text", "") or "").strip()
 
         kind = str(getattr(item, "kind", "") or "").strip().lower()
         row_tags = (kind,) if foreground_for_kind(kind) else ()

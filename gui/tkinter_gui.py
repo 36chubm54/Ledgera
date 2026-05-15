@@ -90,6 +90,7 @@ class FinancialApp(tk.Tk):
     _record_id_to_repo_index: dict[str, int]
     _record_id_to_domain_id: dict[str, int]
     _record_id_to_description: dict[str, str]
+    _infographics_records_cache: list[object] | None
     _chart_refresh_suspended: bool
     _built_tabs: set[str]
     _analytics_bindings: AnalyticsTabBindings | None
@@ -422,7 +423,11 @@ class FinancialApp(tk.Tk):
         show_owner_records_tooltip(self, event)
 
     def _refresh_charts(self, records: list[Any] | None = None) -> None:
-        refresh_owner_infographics(self, records=records)
+        refresh_owner_infographics(
+            self,
+            records=records,
+            load_fresh=records is None,
+        )
 
     def _ensure_tab_built(self, tab_key: str) -> None:
         ensure_tab_built(

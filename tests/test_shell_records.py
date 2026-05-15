@@ -103,6 +103,40 @@ def test_refresh_record_views_populates_rows_maps_and_heading() -> None:
     assert tags_tree.rows[0][1] == ("mandatory",)
 
 
+def test_refresh_record_views_skips_tag_lookup_without_tags_tree() -> None:
+    records_tree = _FakeTree()
+    controller = SimpleNamespace(
+        build_record_list_items=lambda records=None: [
+            SimpleNamespace(
+                record_id="row-1",
+                repository_index=1,
+                domain_record_id=2,
+                description_text="Desc",
+                kind="expense",
+                tags=(),
+                tags_text="",
+            )
+        ],
+        list_tags=lambda: (_ for _ in ()).throw(AssertionError("tag lookup is unexpected")),
+    )
+
+    repo_map, domain_map, desc_map = refresh_record_views(
+        controller=controller,
+        records_tree=cast(Any, records_tree),
+        record_tags_tree=None,
+        records=None,
+        display_currency_code="USD",
+        build_record_tree_values=lambda item, kind: (item.record_id, kind),
+        kind_to_foreground={"expense": "#f00"},
+        foreground_for_kind=lambda kind: kind == "expense",
+        color_for_tag=lambda _name: "#ff0000",
+    )
+
+    assert repo_map == {"row-1": 1}
+    assert domain_map == {"row-1": 2}
+    assert desc_map == {"row-1": "Desc"}
+
+
 def test_tooltip_helpers_use_description_map_and_state() -> None:
     description = tooltip_description_for_row("row-1", {"row-1": "Hello"})
 

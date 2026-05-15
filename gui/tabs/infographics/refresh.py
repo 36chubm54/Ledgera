@@ -99,9 +99,19 @@ def refresh_infographics_charts(
 
 
 def refresh_owner_infographics(
-    owner: InfographicsRefreshOwner, records: Sequence[object] | None = None
+    owner: InfographicsRefreshOwner,
+    records: Sequence[object] | None = None,
+    *,
+    load_fresh: bool = False,
 ) -> None:
-    loaded_records = records if records is not None else list(owner.repository.load_all())
+    if records is not None:
+        loaded_records = cast(list[object], list(records))
+        owner._infographics_records_cache = loaded_records
+    elif load_fresh or owner._infographics_records_cache is None:
+        loaded_records = cast(list[object], list(owner.repository.load_all()))
+        owner._infographics_records_cache = loaded_records
+    else:
+        loaded_records = owner._infographics_records_cache
     refresh_infographics_charts(
         owner,
         records=loaded_records,
@@ -114,7 +124,7 @@ def refresh_owner_infographics(
 def handle_chart_filter_change(owner: InfographicsRefreshOwner) -> bool:
     if owner._chart_refresh_suspended:
         return False
-    refresh_owner_infographics(owner)
+    refresh_owner_infographics(owner, load_fresh=False)
     return True
 
 

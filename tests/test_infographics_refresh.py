@@ -121,6 +121,7 @@ def test_refresh_owner_infographics_uses_repository_and_controller(monkeypatch) 
         controller=SimpleNamespace(
             format_display_money=lambda amount, precision=2: f"{amount:.2f}"
         ),
+        _infographics_records_cache=None,
         chart_month_menu=object(),
         chart_month_var=object(),
         pie_month_menu=object(),
@@ -146,6 +147,7 @@ def test_refresh_owner_infographics_uses_repository_and_controller(monkeypatch) 
     assert calls
     assert calls[0][0] is owner
     assert calls[0][1]["records"] == records
+    assert owner._infographics_records_cache == records
 
 
 def test_handle_chart_filter_change_and_scroll_owner_legend_canvas(monkeypatch) -> None:
@@ -161,6 +163,7 @@ def test_handle_chart_filter_change_and_scroll_owner_legend_canvas(monkeypatch) 
     canvas = _LegendCanvas()
     owner = SimpleNamespace(
         _chart_refresh_suspended=False,
+        _infographics_records_cache=[],
         repository=SimpleNamespace(load_all=lambda: []),
         controller=SimpleNamespace(
             format_display_money=lambda amount, precision=2: f"{amount:.2f}"
@@ -181,7 +184,7 @@ def test_handle_chart_filter_change_and_scroll_owner_legend_canvas(monkeypatch) 
 
     monkeypatch.setattr(
         "gui.tabs.infographics.refresh.refresh_owner_infographics",
-        lambda _owner, records=None: calls.append("refresh"),
+        lambda _owner, records=None, **_kwargs: calls.append("refresh"),
     )
     assert handle_chart_filter_change(cast(InfographicsRefreshOwner, owner)) is True
 
@@ -191,3 +194,42 @@ def test_handle_chart_filter_change_and_scroll_owner_legend_canvas(monkeypatch) 
         is True
     )
     assert canvas.calls == [(-1, "units")]
+
+
+def test_handle_chart_filter_change_reuses_cached_records_without_repository_reload(
+    monkeypatch,
+) -> None:
+    cached_records = [SimpleNamespace(date="2026-05-01")]
+
+    def load_all() -> list[object]:
+        raise AssertionError("repository reload is unexpected")
+
+    owner = SimpleNamespace(
+        _chart_refresh_suspended=False,
+        _infographics_records_cache=cached_records,
+        repository=SimpleNamespace(load_all=load_all),
+        controller=SimpleNamespace(
+            format_display_money=lambda amount, precision=2: f"{amount:.2f}"
+        ),
+        chart_month_menu=object(),
+        chart_month_var=object(),
+        pie_month_menu=object(),
+        pie_month_var=object(),
+        chart_year_menu=object(),
+        chart_year_var=object(),
+        expense_pie_canvas=None,
+        expense_legend_canvas=None,
+        expense_legend_frame=None,
+        daily_bar_canvas=None,
+        monthly_bar_canvas=None,
+    )
+    calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        "gui.tabs.infographics.refresh.refresh_infographics_charts",
+        lambda _owner, **kwargs: calls.append(kwargs),
+    )
+
+    assert handle_chart_filter_change(cast(InfographicsRefreshOwner, owner)) is True
+    assert calls
+    assert calls[0]["records"] == cached_records

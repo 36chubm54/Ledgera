@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable
 from tkinter import TclError
 from typing import Any
 
-_SAFE_EXCEPTIONS = (TclError, RuntimeError, ValueError, TypeError)
+_SAFE_EXCEPTIONS = (TclError, RuntimeError)
 
 
 def safe_call(callback: Callable[[], object] | None) -> None:

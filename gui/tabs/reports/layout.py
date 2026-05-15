@@ -19,6 +19,7 @@ class ReportsUiHandles:
     tag_combo: ttk.Combobox
     group_status_label: ttk.Label
     group_back_button: ttk.Button
+    generate_button: ttk.Button
     export_button: ttk.Menubutton
     operations_container: ttk.Frame
     operations_tree: ttk.Treeview
@@ -126,12 +127,13 @@ def build_reports_layout(owner) -> ReportsUiHandles:
 
     buttons = ttk.Frame(controls)
     buttons.grid(row=2, column=0, sticky="w", pady=(10, 0))
-    ttk.Button(
+    generate_button = ttk.Button(
         buttons,
         text=tr("reports.generate", "Сформировать"),
         style="Primary.TButton",
         command=owner._on_generate,
-    ).grid(row=0, column=0, padx=(0, 8))
+    )
+    generate_button.grid(row=0, column=0, padx=(0, 8))
 
     export_button = ttk.Menubutton(buttons, text=tr("common.export", "Экспорт"))
     export_button.grid(row=0, column=1, padx=(0, 8))
@@ -287,6 +289,7 @@ def build_reports_layout(owner) -> ReportsUiHandles:
         tag_combo=tag_combo,
         group_status_label=group_status_label,
         group_back_button=group_back_button,
+        generate_button=generate_button,
         export_button=export_button,
         operations_container=operations_container,
         operations_tree=operations_tree,

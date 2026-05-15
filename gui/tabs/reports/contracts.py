@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Protocol
 
 
@@ -36,3 +37,13 @@ class ReportsControllerApi(Protocol):
 class ReportsTabContext(Protocol):
     controller: ReportsControllerApi
     currency: object
+
+    def _run_background(
+        self,
+        task: Callable[[], Any],
+        *,
+        on_success: Callable[[Any], None],
+        on_error: Callable[[BaseException], None] | None = None,
+        busy_message: str = ...,
+        block_ui: bool = ...,
+    ) -> None: ...

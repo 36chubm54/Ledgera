@@ -45,6 +45,7 @@ def initialize_shell_state(owner: Any, *, after_jobs: Mapping[str, str]) -> None
     owner._hotkeys_registered = False
     owner._records_tooltip_window = None
     owner._records_tooltip_text = ""
+    owner._infographics_records_cache = None
 
     owner.pie_month_var = None
     owner.pie_month_menu = None

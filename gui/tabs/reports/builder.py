@@ -46,6 +46,7 @@ class ReportsFrame(ttk.Frame):
         self._group_drill_category: str | None = None
         self._group_iid_to_category: dict[str, str] = {}
         self._wallet_label_to_id: dict[str, int | None] = {}
+        self._reports_busy = False
 
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -65,6 +66,7 @@ class ReportsFrame(ttk.Frame):
         self.tag_combo = self._ui.tag_combo
         self.group_status_label = self._ui.group_status_label
         self.group_back_button = self._ui.group_back_button
+        self.generate_button = self._ui.generate_button
         self.export_button = self._ui.export_button
         self.operations_container = self._ui.operations_container
         self.operations_tree = self._ui.operations_tree
@@ -76,6 +78,14 @@ class ReportsFrame(ttk.Frame):
         self.operations_tree.bind("<Double-1>", self._on_operations_double_click)
         self._refresh_wallets()
         self._apply_group_ui_state()
+        self._set_reports_busy(False)
+
+    def _set_reports_busy(self, is_busy: bool) -> None:
+        self._reports_busy = is_busy
+        generate_state = tk.DISABLED if is_busy else tk.NORMAL
+        export_state = tk.DISABLED if is_busy or self._last_result is None else tk.NORMAL
+        self.generate_button.configure(state=generate_state)
+        self.export_button.configure(state=export_state)
 
     def _refresh_wallets(self) -> None:
         refresh_wallets(self, self._ui)
@@ -93,25 +103,39 @@ class ReportsFrame(ttk.Frame):
 
     def _on_generate(self) -> None:
         self._refresh_wallets()
-        try:
-            result = self._controller.generate(self._current_filters())
-        except ValueError as error:
-            show_error(str(error), title=tr("common.error", "Ошибка"))
-            return
-        except (TypeError, RuntimeError, ValueError) as error:  # noqa: B025
+        filters = self._current_filters()
+        self._set_reports_busy(True)
+
+        def task():
+            return self._controller.generate(filters)
+
+        def on_success(result) -> None:
+            self._last_result = result
+            self._group_drill_category = None
+            self._refresh_summary_only()
+            self._refresh_operations_table()
+            self._refresh_monthly_table()
+            self._refresh_category_sources()
+            self._set_reports_busy(False)
+
+        def on_error(error: BaseException) -> None:
+            self._set_reports_busy(False)
+            if isinstance(error, ValueError):
+                show_error(str(error), title=tr("common.error", "Ошибка"))
+                return
             log_ui_error(logger, "UI_REPORTS_GENERATE_FAILED", error)
             show_error(
                 tr("reports.error.generate", "Не удалось сформировать отчет: {error}", error=error),
                 title=tr("common.error", "Ошибка"),
             )
-            return
 
-        self._last_result = result
-        self._group_drill_category = None
-        self._refresh_summary_only()
-        self._refresh_operations_table()
-        self._refresh_monthly_table()
-        self._refresh_category_sources()
+        self._context._run_background(
+            task,
+            on_success=on_success,
+            on_error=on_error,
+            busy_message=tr("reports.generate.busy", "Формируем отчет..."),
+            block_ui=False,
+        )
 
     def _refresh_summary_only(self) -> None:
         refresh_summary_only(self, self._ui)
@@ -210,7 +234,9 @@ class ReportsFrame(ttk.Frame):
             )
         if not filepath:
             return
-        try:
+        self._set_reports_busy(True)
+
+        def task() -> None:
             base_currency = self._context.controller.get_base_currency_code()
             export_grouped_summary = bool(self.group_var.get()) and not drill_category
             if export_grouped_summary:
@@ -231,24 +257,29 @@ class ReportsFrame(ttk.Frame):
                     fmt,
                     base_currency=base_currency,
                 )
-            else:
-                report_to_export = (
-                    result.report.filter_by_category(drill_category)
-                    if export_category_only
-                    else result.report
-                )
-                if fmt == "csv":
-                    report_to_csv(report_to_export, filepath, base_currency=base_currency)
-                else:
-                    from gui.exporters import export_report
+                return
 
-                    export_report(
-                        report_to_export,
-                        filepath,
-                        fmt,
-                        debts=self._context.controller.get_debts(result.filters.wallet_id),
-                        base_currency=base_currency,
-                    )
+            report_to_export = (
+                result.report.filter_by_category(drill_category)
+                if export_category_only
+                else result.report
+            )
+            if fmt == "csv":
+                report_to_csv(report_to_export, filepath, base_currency=base_currency)
+                return
+
+            from gui.exporters import export_report
+
+            export_report(
+                report_to_export,
+                filepath,
+                fmt,
+                debts=self._context.controller.get_debts(result.filters.wallet_id),
+                base_currency=base_currency,
+            )
+
+        def on_success(_: object) -> None:
+            self._set_reports_busy(False)
             show_info(
                 "\n\n".join(
                     [
@@ -267,9 +298,19 @@ class ReportsFrame(ttk.Frame):
                 title=tr("common.done", "Готово"),
             )
             open_in_file_manager(os.path.dirname(filepath))
-        except (OSError, TypeError, ValueError, RuntimeError) as error:
+
+        def on_error(error: BaseException) -> None:
+            self._set_reports_busy(False)
             log_ui_error(logger, "UI_REPORTS_EXPORT_FAILED", error, filepath=filepath)
             show_error(
                 tr("reports.export.error", "Не удалось экспортировать: {error}", error=error),
                 title=tr("common.error", "Ошибка"),
             )
+
+        self._context._run_background(
+            task,
+            on_success=on_success,
+            on_error=on_error,
+            busy_message=tr("reports.export.busy", "Экспортируем отчет..."),
+            block_ui=False,
+        )
