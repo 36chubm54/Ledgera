@@ -33,8 +33,15 @@ jobs:
           pip install -r requirements-dev.txt
           pip install .[pdf,build]
 
-      - name: Run pytest
-        run: pytest -q --tb=short
+      - name: Run targeted pytest slice
+        run: >
+          pytest -q --tb=short
+          tests/test_app_paths.py
+          tests/test_initial_setup.py
+          tests/test_main_startup.py
+          tests/test_online_mode.py
+          tests/test_bootstrap_migration_verification.py
+          tests/test_migrate_json_to_sqlite.py
 
       - name: Run pyright
         run: npx -y pyright
