@@ -22,6 +22,12 @@ This project adheres to Semantic Versioning.
 - Stopped `Infographics` month/year filter changes from reloading the full record set on every interaction by reusing a shell-owned cached snapshot
 - Tightened shell refresh error handling so lifecycle-safe widget teardown is still tolerated, but real contract and value errors are no longer silently swallowed
 - Reduced avoidable work in the records refresh flow and finished several GUI typing and contract-seam cleanups discovered during the refactor wave
+- `BalanceService` now excludes transfers by `transfer_id` instead of relying on the literal `Transfer` category label, so ordinary user categories named `Transfer` are no longer dropped from cashflow totals
+- `CurrencyService.update_runtime_currency_config(...)` now persists runtime currency/provider changes before mutating in-memory runtime state
+- `CurrencyAggregator` now clears stale `last_provider_name` when every provider in the chain fails
+- `JsonFileRecordRepository.replace_all_data(...)` now preserves top-level tag metadata during full restore flows, including tag color, usage count, and last-used date
+- `RecordService` now prefers `schema_meta.base_currency` as the authoritative base-currency source for inline record edits instead of inferring it from the system wallet
+- `app/use_cases.py` now exposes an explicit named re-export surface instead of wildcard facade imports
 
 ### Testing
 

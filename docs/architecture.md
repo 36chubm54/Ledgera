@@ -32,16 +32,16 @@ Supported business areas include:
 
 ## 2. Layer Map
 
-| Layer | Purpose | Main modules |
-| --- | --- | --- |
-| `domain` | Immutable entities, enums, validation rules, report DTOs | `records.py`, `tags.py`, `wallets.py`, `budget.py`, `debt.py`, `asset.py`, `goal.py`, `reports.py`, `audit.py`, `validation.py` |
-| `app` | Use cases, application contracts, and orchestration | `use_cases.py`, `use_cases_records.py`, `use_cases_assets.py`, `use_cases_mandatory.py`, `use_cases_analytics.py`, `use_cases_planning.py`, `repository.py`, `import_support.py`, `preferences_service.py`, `audit_runner.py`, `use_case_support.py`, `finance_service.py`, `record_service.py`, `services.py` |
-| `services` | Focused business subsystems and read-only engines | `import_service.py`, `import_models.py`, `import_payload_support.py`, `import_replace_support.py`, `import_execution_support.py`, `import_mandatory_support.py`, `audit_service.py`, `balance_service.py`, `metrics_service.py`, `timeline_service.py`, `budget_service.py`, `debt_service.py`, `distribution_service.py`, `asset_service.py`, `goal_service.py`, `dashboard_service.py`, `report_service.py` |
-| `infrastructure` | Runtime repository implementation | `sqlite_repository.py`, `repositories.py` |
-| `storage` | Low-level persistence adapters and schema bootstrap | `sqlite_storage.py`, `json_storage.py`, `base.py` |
-| `gui` | Tkinter presentation layer | `tkinter_gui.py`, `controllers.py`, `runtime_coordinator.py`, `startup_coordinator.py`, `status_bar_coordinator.py`, `tab_lifecycle.py`, `tabs/*`, `exporters.py`, `importers.py`, `tooltip.py`, `logging_utils.py`, `ui_theme.py`, `i18n.py`, `ui_dialogs.py` |
-| `utils` | Format-specific helpers and shared technical helpers | `backup_utils.py`, `import_core.py`, `csv_utils.py`, `excel_utils.py`, `pdf_utils.py`, `money.py`, `charting.py`, `debt_report_utils.py`, `tabular_utils.py` |
-| `tests` | Regression, contract, and integration-like coverage | `test_*` modules across all subsystems |
+| Layer            | Purpose                                                  | Main modules                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `domain`         | Immutable entities, enums, validation rules, report DTOs | `records.py`, `tags.py`, `wallets.py`, `budget.py`, `debt.py`, `asset.py`, `goal.py`, `reports.py`, `audit.py`, `validation.py`                                                                                                                                                                                                                                                                               |
+| `app`            | Use cases, application contracts, and orchestration      | `use_cases.py`, `use_cases_records.py`, `use_cases_assets.py`, `use_cases_mandatory.py`, `use_cases_analytics.py`, `use_cases_planning.py`, `repository.py`, `import_support.py`, `preferences_service.py`, `audit_runner.py`, `use_case_support.py`, `finance_service.py`, `record_service.py`, `services.py`                                                                                                |
+| `services`       | Focused business subsystems and read-only engines        | `import_service.py`, `import_models.py`, `import_payload_support.py`, `import_replace_support.py`, `import_execution_support.py`, `import_mandatory_support.py`, `audit_service.py`, `balance_service.py`, `metrics_service.py`, `timeline_service.py`, `budget_service.py`, `debt_service.py`, `distribution_service.py`, `asset_service.py`, `goal_service.py`, `dashboard_service.py`, `report_service.py` |
+| `infrastructure` | Runtime repository implementation                        | `sqlite_repository.py`, `repositories.py`                                                                                                                                                                                                                                                                                                                                                                     |
+| `storage`        | Low-level persistence adapters and schema bootstrap      | `sqlite_storage.py`, `json_storage.py`, `base.py`                                                                                                                                                                                                                                                                                                                                                             |
+| `gui`            | Tkinter presentation layer                               | `tkinter_gui.py`, `controllers.py`, `runtime_coordinator.py`, `startup_coordinator.py`, `status_bar_coordinator.py`, `tab_lifecycle.py`, `tabs/*`, `exporters.py`, `importers.py`, `tooltip.py`, `logging_utils.py`, `ui_theme.py`, `i18n.py`, `ui_dialogs.py`                                                                                                                                                |
+| `utils`          | Format-specific helpers and shared technical helpers     | `backup_utils.py`, `import_core.py`, `csv_utils.py`, `excel_utils.py`, `pdf_utils.py`, `money.py`, `charting.py`, `debt_report_utils.py`, `tabular_utils.py`                                                                                                                                                                                                                                                  |
+| `tests`          | Regression, contract, and integration-like coverage      | `test_*` modules across all subsystems                                                                                                                                                                                                                                                                                                                                                                        |
 
 Current implementation note:
 
@@ -49,6 +49,16 @@ Current implementation note:
 - application-side repository capabilities are now expressed through `app/repository_protocols.py`
 - the desktop runtime still depends primarily on `infrastructure/sqlite_repository.py` as the only fully featured backend for preferences, audit, analytics, planning, and shell-facing workflows
 - treat JSON storage and other adapters as narrower persistence backends, not as drop-in replacements for the full runtime feature set
+
+### Runtime currency configuration
+
+`CurrencyService` treats runtime currency/provider settings as persisted application policy layered on top of the repository-owned accounting base currency.
+
+Current contract:
+
+- `base_currency` remains a repository-owned concern after bootstrap
+- runtime updates to `display_currency`, provider mode, provider selection, API key, auto-update, and refresh interval are persisted before the in-memory runtime is reconfigured
+- failed config persistence must not leave partially applied runtime currency state in memory
 
 ## 3. Key Runtime Flows
 
@@ -122,6 +132,10 @@ Current report/export contract:
 - base-amount columns explicitly include the actual base code, for example `Amount (KZT)` / `Сумма (KZT)`
 - localized statement exports must stay compatible with the generic import parser, not only with direct `report_from_*` helpers
 
+### Money and transfer semantics
+
+Services that calculate income, expense, or cashflow totals must identify transfers structurally through `transfer_id`, not by checking whether the category label equals `Transfer`.
+
 Current tag-specific behavior:
 
 - `services/report_service.py` builds tag-aware grouped export payloads
@@ -159,6 +173,16 @@ Important details:
 - rollback-safe import orchestration lives in `app.import_support.py`
 - payload parsing, replacement, execution, and mandatory-template paths are split across `services/import_*_support.py`
 
+### Repository compatibility notes
+
+The SQLite repository remains the authoritative runtime backend for `schema_meta`, including `base_currency`.
+
+The JSON compatibility repository supports full dataset replacement for backup and restore scenarios. In that path it now preserves top-level tag metadata, including:
+
+- tag color
+- usage count
+- last-used date
+
 ## 4. Subsystem Map
 
 ### 4.1 Records / Wallets / Transfers
@@ -188,6 +212,10 @@ This subsystem is responsible for:
 - storing tag metadata (`color`, `usage_count`, `last_used_at`)
 - maintaining `record_tags` assignments for operation records
 - exposing tag search/list/rename/delete/color APIs to controllers and UI
+
+### Application facade boundaries
+
+`app/use_cases.py` is maintained as an explicit compatibility facade with named re-exports rather than wildcard imports. This keeps the public application surface inspectable and reduces accidental symbol drift between use-case modules.
 
 Current scope:
 
