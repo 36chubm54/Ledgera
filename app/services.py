@@ -209,9 +209,12 @@ class CurrencyService:
         return sorted(available)
 
     def get_supported_provider_names(self) -> list[str]:
+        return self._get_supported_provider_names_for_config(self._config)
+
+    def _get_supported_provider_names_for_config(self, config: Mapping[str, object]) -> list[str]:
         context = ProviderBuildContext(
             target_base=self._base,
-            config=self._config,
+            config=dict(config),
             default_rates=self._default_rates,
         )
         supported: list[str] = []
@@ -309,7 +312,21 @@ class CurrencyService:
         if normalized_mode not in self.SUPPORTED_PROVIDER_MODES:
             raise ValueError("Unsupported provider mode")
 
-        supported_providers = self.get_supported_provider_names()
+        next_config = dict(self._config)
+        next_config["display_currency"] = normalized_display
+        next_config["provider_mode"] = normalized_mode
+        next_config["primary_provider"] = normalized_primary
+        active_fallback_key = (
+            "commercial_fallback_provider"
+            if normalized_mode == "commercial"
+            else "fallback_provider"
+        )
+        next_config[active_fallback_key] = normalized_fallback
+        next_config["exchange_rate_api_key"] = normalized_key
+        next_config["auto_update"] = bool(auto_update)
+        next_config["update_interval_minutes"] = normalized_interval
+
+        supported_providers = self._get_supported_provider_names_for_config(next_config)
         if normalized_primary not in supported_providers:
             raise ValueError("Unsupported primary provider")
         if normalized_fallback not in supported_providers:
@@ -340,20 +357,9 @@ class CurrencyService:
             or normalized_key != str(self._config.get("exchange_rate_api_key", "") or "").strip()
         )
 
-        self._config["display_currency"] = normalized_display
-        self._config["provider_mode"] = normalized_mode
-        self._config["primary_provider"] = normalized_primary
-        active_fallback_key = (
-            "commercial_fallback_provider"
-            if normalized_mode == "commercial"
-            else "fallback_provider"
-        )
-        self._config[active_fallback_key] = normalized_fallback
-        self._config["exchange_rate_api_key"] = normalized_key
-        self._config["auto_update"] = bool(auto_update)
-        self._config["update_interval_minutes"] = normalized_interval
-
-        self._aggregator = self._build_default_aggregator()
+        self.save_config_payload(next_config)
+        self._config = next_config
+        self._aggregator = self._build_default_aggregator(config=self._config)
         self.set_display_currency(normalized_display)
         if self._use_online and provider_settings_changed:
             refreshed = self.refresh_rates()
@@ -361,7 +367,6 @@ class CurrencyService:
                 logger.warning(
                     "CurrencyService: runtime provider settings were updated but refresh failed"
                 )
-        self.save_config_payload(self._config)
 
     def set_display_currency(self, code: str) -> None:
         normalized = (code or "").strip().upper()
@@ -479,11 +484,13 @@ class CurrencyService:
                 self._base,
             )
 
-    def _build_default_aggregator(self) -> CurrencyAggregator:
+    def _build_default_aggregator(
+        self, *, config: Mapping[str, object] | None = None
+    ) -> CurrencyAggregator:
         providers = []
         context = ProviderBuildContext(
             target_base=self._base,
-            config=self._config,
+            config=dict(config or self._config),
             default_rates=self._default_rates,
         )
         for name in self._resolve_provider_order():

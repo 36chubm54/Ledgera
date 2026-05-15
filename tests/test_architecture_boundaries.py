@@ -59,3 +59,15 @@ def test_gui_controller_does_not_import_concrete_sqlite_repository() -> None:
     text = controller_path.read_text(encoding="utf-8")
     assert "from infrastructure.sqlite_repository import SQLiteRecordRepository" not in text
     assert "import infrastructure.sqlite_repository" not in text
+
+
+def test_use_cases_facade_avoids_wildcard_reexports() -> None:
+    use_cases_path = ROOT / "app" / "use_cases.py"
+    text = use_cases_path.read_text(encoding="utf-8")
+    assert "import *" not in text
+
+
+def test_use_cases_facade_declares_explicit_public_surface() -> None:
+    use_cases_path = ROOT / "app" / "use_cases.py"
+    text = use_cases_path.read_text(encoding="utf-8")
+    assert "__all__ = [" in text

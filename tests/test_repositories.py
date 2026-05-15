@@ -10,6 +10,7 @@ import pytest
 
 import infrastructure.repositories as repositories_module
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord
+from domain.tags import Tag
 from infrastructure.repositories import (
     JsonFileRecordRepository,
     RecordRepository,
@@ -581,6 +582,30 @@ class TestJsonFileRecordRepository:
         # Test loading initial balance when not set (should be 0.0)
         balance = self.repo.load_initial_balance()
         assert balance == 0.0
+
+    def test_replace_all_data_restores_exported_tag_metadata(self):
+        self.repo.replace_all_data(
+            wallets=[],
+            records=[],
+            mandatory_expenses=[],
+            tags=[
+                Tag(
+                    id=7,
+                    name="food",
+                    color="#123ABC",
+                    usage_count=9,
+                    last_used_at="2026-05-01",
+                )
+            ],
+        )
+
+        tags = self.repo.list_tags()
+
+        assert len(tags) == 1
+        assert tags[0].name == "food"
+        assert tags[0].color == "#123ABC"
+        assert tags[0].usage_count == 9
+        assert tags[0].last_used_at == "2026-05-01"
 
     def test_save_initial_balance_overwrite(self):
         # Test overwriting initial balance

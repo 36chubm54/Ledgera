@@ -16,6 +16,7 @@ class CurrencyAggregator:
         return self._last_provider_name
 
     def fetch_rates(self) -> dict[str, float]:
+        self._last_provider_name = None
         last_error: Exception | None = None
         for provider in self._providers:
             try:

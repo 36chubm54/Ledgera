@@ -465,6 +465,11 @@ class JsonFileRecordRepository(RecordRepository):
         if "debt_payments" not in data or not isinstance(data.get("debt_payments"), list):
             data["debt_payments"] = []
             migrated = True
+        if "tags" not in data:
+            data["tags"] = []
+        elif not isinstance(data.get("tags"), list):
+            data["tags"] = []
+            migrated = True
 
         legacy_initial_balance = float(self._as_float(data.get("initial_balance"), 0.0))
         wallets = data.get("wallets")
@@ -787,6 +792,7 @@ class JsonFileRecordRepository(RecordRepository):
 
     def list_tags(self) -> list[Tag]:
         records = self.load_all()
+        metadata_by_tag = self._load_tag_metadata_map()
         latest_by_tag: dict[str, str] = {}
         usage_by_tag: dict[str, int] = {}
         for record in records:
@@ -795,11 +801,15 @@ class JsonFileRecordRepository(RecordRepository):
                 usage_by_tag[name] = int(usage_by_tag.get(name, 0)) + 1
                 if record_date >= latest_by_tag.get(name, ""):
                     latest_by_tag[name] = record_date
+        all_names = set(metadata_by_tag) | set(usage_by_tag)
         tags = sorted(
-            usage_by_tag.keys(),
+            all_names,
             key=lambda name: (
-                latest_by_tag.get(name, ""),
-                int(usage_by_tag.get(name, 0)),
+                latest_by_tag.get(name, str(metadata_by_tag.get(name, {}).get("last_used_at", ""))),
+                usage_by_tag.get(
+                    name,
+                    self._as_int(metadata_by_tag.get(name, {}).get("usage_count"), 0),
+                ),
                 name.casefold(),
             ),
             reverse=True,
@@ -808,9 +818,14 @@ class JsonFileRecordRepository(RecordRepository):
             Tag(
                 id=index,
                 name=name,
-                color=color_for_tag(name),
-                usage_count=int(usage_by_tag.get(name, 0)),
-                last_used_at=str(latest_by_tag.get(name, "")),
+                color=str(metadata_by_tag.get(name, {}).get("color", "") or color_for_tag(name)),
+                usage_count=usage_by_tag.get(
+                    name,
+                    self._as_int(metadata_by_tag.get(name, {}).get("usage_count"), 0),
+                ),
+                last_used_at=str(
+                    latest_by_tag.get(name, metadata_by_tag.get(name, {}).get("last_used_at", ""))
+                ),
             )
             for index, name in enumerate(tags, start=1)
         ]
@@ -859,6 +874,13 @@ class JsonFileRecordRepository(RecordRepository):
                     new_tag if tag.casefold() == old_tag.casefold() else tag for tag in tags
                 ]
                 item["tags"] = list(normalize_tag_names(replaced))
+            metadata = list(data.get("tags", [])) if isinstance(data.get("tags"), list) else []
+            for item in metadata:
+                if not isinstance(item, dict):
+                    continue
+                if normalize_tag_name(item.get("name")).casefold() == old_tag.casefold():
+                    item["name"] = new_tag
+            data["tags"] = metadata
             self._save_data(data)
 
     def delete_tag(self, name: str) -> None:
@@ -876,6 +898,15 @@ class JsonFileRecordRepository(RecordRepository):
                     if tag.casefold() != target.casefold()
                 ]
                 item["tags"] = tags
+            metadata = list(data.get("tags", [])) if isinstance(data.get("tags"), list) else []
+            data["tags"] = [
+                item
+                for item in metadata
+                if not (
+                    isinstance(item, dict)
+                    and normalize_tag_name(item.get("name")).casefold() == target.casefold()
+                )
+            ]
             self._save_data(data)
 
     def get_records_by_tag(self, name: str) -> list[Record]:
@@ -889,7 +920,53 @@ class JsonFileRecordRepository(RecordRepository):
         ]
 
     def set_tag_color(self, name: str, color: str) -> None:
-        del name, color
+        target = normalize_tag_name(name)
+        normalized_color = str(color or "").strip()
+        if not target or not normalized_color:
+            return
+        with self._lock:
+            data = self._load_data()
+            tags_payload = list(data.get("tags", [])) if isinstance(data.get("tags"), list) else []
+            updated = False
+            for item in tags_payload:
+                if not isinstance(item, dict):
+                    continue
+                if normalize_tag_name(item.get("name")).casefold() == target.casefold():
+                    item["name"] = target
+                    item["color"] = normalized_color
+                    updated = True
+                    break
+            if not updated:
+                tags_payload.append(
+                    {
+                        "id": len(tags_payload) + 1,
+                        "name": target,
+                        "color": normalized_color,
+                        "usage_count": 0,
+                        "last_used_at": "",
+                    }
+                )
+            data["tags"] = tags_payload
+            self._save_data(data)
+
+    def _load_tag_metadata_map(self) -> dict[str, dict[str, object]]:
+        data = self._load_data()
+        payload = data.get("tags", [])
+        if not isinstance(payload, list):
+            return {}
+        metadata: dict[str, dict[str, object]] = {}
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            name = normalize_tag_name(item.get("name"))
+            if not name:
+                continue
+            metadata[name] = {
+                "color": str(item.get("color", "") or ""),
+                "usage_count": int(self._as_int(item.get("usage_count"), 0) or 0),
+                "last_used_at": str(item.get("last_used_at", "") or ""),
+            }
+        return metadata
 
     def load_wallets(self) -> list[Wallet]:
         data = self._load_data()
@@ -1544,6 +1621,17 @@ class JsonFileRecordRepository(RecordRepository):
                 "debts": [self._debt_to_dict(debt) for debt in (debts or [])],
                 "debt_payments": [
                     self._debt_payment_to_dict(payment) for payment in (debt_payments or [])
+                ],
+                "tags": [
+                    {
+                        "id": int(tag.id),
+                        "name": normalize_tag_name(tag.name),
+                        "color": str(tag.color or ""),
+                        "usage_count": int(tag.usage_count or 0),
+                        "last_used_at": str(tag.last_used_at or ""),
+                    }
+                    for tag in (tags or [])
+                    if normalize_tag_name(tag.name)
                 ],
             }
             for record in records:

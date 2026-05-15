@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 import requests
@@ -234,6 +235,25 @@ def test_aggregator_uses_first_successful_provider():
     assert aggregator.fetch_rates() == {"USD": 501.0}
     assert calls == ["nbk"]
     assert aggregator.last_provider_name == "nbk"
+
+
+def test_aggregator_clears_last_provider_name_when_all_providers_fail():
+    aggregator = CurrencyAggregator([DummyProvider("nbk", rates={"USD": 501.0})])
+    assert aggregator.fetch_rates() == {"USD": 501.0}
+    assert aggregator.last_provider_name == "nbk"
+
+    aggregator._providers = cast(
+        list[BaseRateProvider],
+        [
+            DummyProvider("nbk", error=ProviderFetchError("nbk down")),
+            DummyProvider("static", error=ProviderFetchError("static down")),
+        ],
+    )
+
+    with pytest.raises(ProviderFetchError):
+        aggregator.fetch_rates()
+
+    assert aggregator.last_provider_name is None
 
 
 def test_exchange_rate_provider_raises_without_api_key():
@@ -592,3 +612,34 @@ def test_update_runtime_currency_config_rejects_invalid_update_interval() -> Non
             auto_update=True,
             update_interval_minutes="abc",
         )
+
+
+def test_update_runtime_currency_config_does_not_mutate_runtime_when_save_fails(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(CurrencyService, "CONFIG_FILE", tmp_path / "currency_config.json")
+    svc = CurrencyService(rates={"USD": 500.0, "EUR": 590.0}, base="KZT")
+    previous_config = dict(svc._config)
+    previous_display = svc.display_currency
+    previous_aggregator = svc._aggregator
+    monkeypatch.setattr(
+        svc,
+        "save_config_payload",
+        lambda payload: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    with pytest.raises(OSError, match="disk full"):
+        svc.update_runtime_currency_config(
+            display_currency="USD",
+            provider_mode="commercial",
+            primary_provider="nbk",
+            fallback_provider="exchange_rate",
+            exchange_rate_api_key="new-key",
+            auto_update=False,
+            update_interval_minutes=15,
+        )
+
+    assert svc._config == previous_config
+    assert svc.display_currency == previous_display
+    assert svc._aggregator is previous_aggregator
