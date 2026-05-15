@@ -24,6 +24,7 @@ dist/
 *.xlsx
 *.pdf
 *.json
+!pyrightconfig.json
 
 # Database files
 *.db

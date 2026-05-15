@@ -1,0 +1,11 @@
+{
+  "exclude": [
+    "**/__pycache__",
+    ".pytest_cache",
+    ".pytest_tmp",
+    "build",
+    "dist",
+    "dist_rebuild",
+    "tests/_tmp", "**/node_modules", "**/.*", ".venv"
+  ]
+}
