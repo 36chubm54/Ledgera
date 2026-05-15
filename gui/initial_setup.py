@@ -14,6 +14,7 @@ from typing import Any
 from app.services import CurrencyService
 from config import SQLITE_PATH
 from gui.i18n import tr
+from gui.shell.shell_window import apply_window_icon
 from infrastructure.currency_providers import DEFAULT_PROVIDER_REGISTRY, CurrencyProviderRegistry
 
 SUPPORTED_SETUP_CURRENCIES = ("KZT", "USD", "EUR", "RUB")
@@ -55,6 +56,21 @@ def _quarantine_malformed_sqlite_file(db_path: Path) -> Path | None:
     except OSError:
         logger.exception("Failed to quarantine malformed SQLite file: %s", db_path)
         return None
+
+
+def _center_window_on_screen(window: tk.Tk | tk.Toplevel) -> None:
+    window.update_idletasks()
+    width = window.winfo_width()
+    height = window.winfo_height()
+    if width <= 1:
+        width = window.winfo_reqwidth()
+    if height <= 1:
+        height = window.winfo_reqheight()
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+    pos_x = max((screen_width - width) // 2, 0)
+    pos_y = max((screen_height - height) // 2, 0)
+    window.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
 
 
 def should_run_initial_setup(sqlite_path: str | Path = SQLITE_PATH) -> bool:
@@ -284,6 +300,8 @@ def run_initial_setup_wizard(
     root.title(tr("setup.title", "Первоначальная настройка"))
     root.resizable(False, False)
     root.grid_columnconfigure(0, weight=1)
+    icons_dir = Path(__file__).resolve().parent / "assets" / "icons"
+    apply_window_icon(root, icons_dir=icons_dir)
 
     content = ttk.Frame(root, padding=16)
     content.grid(row=0, column=0, sticky="nsew")
@@ -464,5 +482,6 @@ def run_initial_setup_wizard(
     )
 
     root.protocol("WM_DELETE_WINDOW", _cancel)
+    _center_window_on_screen(root)
     root.mainloop()
     return result
