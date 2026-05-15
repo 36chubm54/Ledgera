@@ -50,6 +50,12 @@ def build_display_formatters(context: AnalyticsTabContext) -> AnalyticsDisplayFo
         return f"{float(amount):,.{precision}f}"
 
     def format_display_money(amount: float, precision: int = 0) -> str:
+        formatter = getattr(context.controller, "format_display_money", None)
+        if callable(formatter):
+            try:
+                return str(formatter(amount, precision=precision))
+            except TypeError:
+                return str(formatter(amount, precision))
         return f"{format_display_amount(amount, precision=precision)} {display_code()}"
 
     return AnalyticsDisplayFormatters(

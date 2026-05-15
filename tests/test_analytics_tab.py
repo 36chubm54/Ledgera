@@ -464,6 +464,91 @@ def test_analytics_tab_net_worth_uses_period_end_date() -> None:
         context.destroy()
 
 
+def test_analytics_tab_prefers_controller_money_formatter() -> None:
+    class _Controller:
+        def __init__(self) -> None:
+            self.calls: list[tuple[float, int, bool]] = []
+
+        def get_total_balance(self, date: str | None = None) -> float:
+            return 1234.0
+
+        def format_display_money(
+            self,
+            amount_base: float,
+            *,
+            precision: int = 2,
+            with_code: bool = True,
+        ) -> str:
+            self.calls.append((amount_base, precision, with_code))
+            if amount_base == 1234.0 and precision == 0 and with_code is True:
+                return "USD 1,234"
+            return f"formatted:{amount_base}:{precision}:{with_code}"
+
+        def get_savings_rate(self, start_date: str, end_date: str) -> float:
+            return 0.0
+
+        def get_burn_rate(self, start_date: str, end_date: str) -> float:
+            return 0.0
+
+        def get_average_monthly_income(self, year: int, *, up_to_date: str | None = None) -> float:
+            return 0.0
+
+        def get_year_income(self, year: int, *, up_to_date: str | None = None) -> float:
+            return 0.0
+
+        def convert_base_to_usd(self, amount_base: float) -> float:
+            return 0.0
+
+        def get_year_expense(self, year: int, *, up_to_date: str | None = None) -> float:
+            return 0.0
+
+        def get_average_monthly_expenses(self, start_date: str, end_date: str) -> float:
+            return 0.0
+
+        def get_time_costs(self, start_date: str, end_date: str) -> tuple[float, float, float]:
+            return (0.0, 0.0, 0.0)
+
+        def get_net_worth_timeline(self) -> list:
+            return []
+
+        def get_spending_by_category(self, start_date: str, end_date: str, *, limit=None) -> list:
+            return []
+
+        def get_income_by_category(self, start_date: str, end_date: str, *, limit=None) -> list:
+            return []
+
+        def get_spending_by_tag(self, start_date: str, end_date: str, *, limit=None) -> list:
+            return []
+
+        def get_monthly_summary(
+            self,
+            start_date: str | None = None,
+            end_date: str | None = None,
+        ) -> list:
+            return []
+
+    class _Context(tk.Tk):
+        def __init__(self) -> None:
+            super().__init__()
+            self.withdraw()
+            self.controller = _Controller()
+
+    context = _Context()
+    try:
+        parent = ttk.Frame(context)
+        parent.grid()
+        bindings = build_analytics_tab(parent, context)
+        context.update()
+
+        bindings.refresh()
+        context.update()
+
+        assert bindings.net_worth_label.cget("text") == "Чистый капитал:  USD 1,234"
+        assert (1234.0, 0, True) in context.controller.calls
+    finally:
+        context.destroy()
+
+
 def test_analytics_tag_breakdown_toggle_renders_single_tag_tree(tmp_path: Path) -> None:
     db_path = tmp_path / "analytics.db"
     _init_db(db_path)
