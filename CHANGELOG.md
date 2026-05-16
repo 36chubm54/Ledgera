@@ -13,6 +13,7 @@ This project adheres to Semantic Versioning.
 
 - Moved `exchange_rate_api_key` persistence out of `currency_config.json` and into secure OS-backed secret storage, while keeping env-var override support
 - Restored honest `env -> secure storage -> legacy fallback` precedence for the ExchangeRate API key and prevented legacy fallback mode from turning currency settings into a save dead end
+- Fixed API-key persistence edge cases so environment overrides no longer erase stored keys and no longer become persisted credentials during unrelated settings saves
 - Added runtime security diagnostics for API-key storage mode, user-data location, and packaged-vs-source execution mode
 - Added plaintext-data warnings to backup/export flows and defaulted backup/report/operations export dialogs to user-writable `AppData` directories
 - Added size guardrails to low-level backup JSON parsing and the standalone JSON->SQLite migration utility

@@ -314,7 +314,7 @@ The detailed layer map, runtime flows, and module guide now live in `docs/archit
 ## 💱 Supported Currencies
 
 - By default, the UI display selector uses `KZT`, `USD`, `EUR`, and `RUB`
-- In the current beta config, the default base currency is `KZT`
+- In the current runtime config, the default base currency is `KZT`
 - The provider chain can load a wider set of rates when allowed by config and the active online provider
 
 Rates are provided through `CurrencyService` and an ordered provider chain:

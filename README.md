@@ -314,7 +314,7 @@ python migrate_json_to_sqlite.py --json-path data.json --sqlite-path finance.db
 ## 💱 Поддерживаемые валюты
 
 - По умолчанию UI-селектор отображения использует `KZT`, `USD`, `EUR`, `RUB`
-- Базовая валюта в текущем beta-конфиге по умолчанию — `KZT`
+- Базовая валюта в текущем runtime-конфиге по умолчанию — `KZT`
 - Provider chain может загружать более широкий набор курсов, если это разрешено конфигом и текущим online-provider
 
 Курсы обновляются через `CurrencyService` и ordered provider chain:
