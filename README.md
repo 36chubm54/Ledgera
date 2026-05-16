@@ -7,6 +7,7 @@
 В актуальном runtime-контракте:
 
 - `exchange_rate_api_key` больше не должен жить в plaintext `currency_config.json` и по умолчанию уходит в OS-backed secure storage
+- env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` остаётся runtime override поверх secure storage
 - mutable runtime state по-прежнему живёт в user-scoped `AppData`, а не рядом с установленным приложением
 - backup/export файлы остаются plaintext financial data, и это теперь явно отражено в UX и документации
 - Windows release workflow подготовлен к optional code signing, но без сертификата installer и bundle остаются unsigned
@@ -96,7 +97,7 @@ python main.py
 - `base_currency` выбирается только при первом запуске через setup wizard, затем источником истины остаётся SQLite `schema_meta`
 - По умолчанию селектор отображения ограничен whitelist-ом `KZT` / `USD` / `EUR` / `RUB`, даже если кэш курсов содержит больше кодов
 - `Settings -> Валюта и курсы` позволяет менять `display_currency`, provider mode, primary/fallback provider, `exchange_rate_api_key`, `auto_update` и `update_interval_minutes`, но не post-startup `base_currency`
-- `exchange_rate_api_key` больше не должен жить в `currency_config.json`: в Windows packaged/runtime flow он переносится в secure OS storage, а JSON-конфиг хранит только несекретные настройки
+- `exchange_rate_api_key` больше не должен жить в `currency_config.json`: в Windows packaged/runtime flow он переносится в secure OS storage, env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` остаётся override-путём, а аварийный plaintext fallback допустим только когда secure storage недоступен
 - `auto_update` больше не является декоративным флагом: при включённом online mode курсы обновляются автоматически по `update_interval_minutes`
 - Экспортируемые отчёты локализуются по текущему языку UI, а колонки базовых сумм явно показывают код базы, например `Сумма (KZT)`
 - Локализованные report `CSV` / `XLSX` exports остаются import-safe для generic import pipeline приложения
