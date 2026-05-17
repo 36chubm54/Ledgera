@@ -7,6 +7,34 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [2.1.0] - 2026-05-18
+
+### Added
+
+- Added a Windows-only in-app updater flow in `Settings` that checks the latest GitHub Release, detects the Windows installer asset, downloads it with a modal progress dialog, and offers installer handoff from the running app
+- Added dedicated updater models and service boundaries for release metadata, download progress, and installer download results
+- Added updater-specific runtime paths under `AppData\updates` so downloaded installers stay outside the install tree and outside source checkouts
+
+### Changed
+
+- Reworked the `Settings` layout so `Application updates` is visible on the first screen alongside wallets, currency settings, backup, and audit instead of being buried below the longer currency form
+- Relaxed updater version parsing so release tags with suffixes such as `-rc1` or `+build` do not silently disable update detection
+- Clarified source-mode updater UX: the app now explains that the downloaded installer updates the installed Windows build, not the current source checkout
+
+### Fixed
+
+- Fixed updater source-mode storage so installer downloads no longer land in the repository checkout
+- Fixed the modal updater dialog so download status text advances through real stages instead of staying forever on the initial preparing message
+- Added an explicit installer-file existence guard before process launch handoff
+
+### Testing
+
+- Added targeted regression coverage for updater metadata detection, streamed downloads, source-mode updater paths, settings updater prompts, and installer launch guards
+
+### Docs
+
+- Synced `README.md`, `README_EN.md`, and `docs/architecture.md` with the `v2.1.0` updater flow, settings layout, and `AppData` updater cache contract
+
 ## [2.0.1] - 2026-05-16
 
 ### Security

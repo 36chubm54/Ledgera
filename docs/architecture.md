@@ -74,12 +74,31 @@ Current rules:
 - mutable runtime files such as `finance.db`, currency config/cache, and backup output resolve from a user-scoped data directory
 - in Windows packaged mode, that mutable runtime state is expected to live under `AppData`, not inside the install tree
 - dev checkouts still resolve runtime files from the source tree unless an explicit override is provided
+- updater downloads are treated separately from the general source-tree dev contract and resolve to a dedicated Windows `AppData\updates` cache even in source mode
 
 Packaging note:
 
 - the checked-in `FinAccountingApp.spec` builds the main `PyInstaller --onedir` app bundle
 - `migrate_json_to_sqlite.py` and `migrations/migration_002_rename_amount_kzt_to_base.py` are shipped inside that bundle as raw Python utility scripts rather than separate executable tools
 - the Windows release workflow can optionally sign `FinAccountingApp.exe` and the installer if certificate secrets are configured; otherwise the release remains unsigned
+
+### 3.0.1 Application update flow
+
+The desktop app now has a Windows-only updater surface in `Settings`.
+
+Current flow:
+
+- `gui.tabs.settings.update_section` initiates the check and download UX
+- `gui.controllers.FinancialController` exposes the thin updater facade to the UI
+- `services.app_update_service.AppUpdateService` queries GitHub Releases, selects the Windows installer asset, and streams the download to the updater cache
+- `gui.shell.shell_window.launch_installer_and_exit(...)` performs the installer handoff after user confirmation
+
+Design rules:
+
+- updater logic is separate from currency `auto_update`
+- the running app only checks and downloads; it does not patch binaries in place
+- the installer remains the only component that performs the actual application update
+- source-mode updater runs are supported for testing, but they still target the packaged Windows install flow rather than the source checkout itself
 
 ### 3.1 Startup
 
@@ -417,6 +436,7 @@ This subsystem is responsible for:
 - composing the main shell, status area, notebook, and tab containers
 - keeping tab layouts visually consistent through shared card helpers and spacing tokens
 - coordinating shell rebuilds when runtime theme/language state changes
+- surfacing shell-owned updater handoff actions without embedding updater network logic into the shell itself
 - applying redesign conventions across form-heavy and table-heavy tabs
 - isolating background polling, deferred startup, status refresh, and lazy tab lifecycle outside the main shell class
 - keeping first paint responsive by deferring charts/budget/distribution refresh work until after the shell becomes interactive
@@ -425,6 +445,7 @@ Current implementation note:
 
 - `gui/tkinter_gui.py` is now treated as a composition shell, while `gui/shell/*` owns most shell-specific lifecycle, status, notebook, refresh, preferences, records, and startup orchestration
 - major tab implementations now live under dedicated `gui/tabs/<tab_name>/` packages, while top-level `gui/tabs/*_tab.py` files remain thin compatibility shims for tab lifecycle imports and tests
+- the `Settings` tab now uses a multi-panel layout where wallets stay full-width, while currency settings, updater, backup, and audit are composed as separate card sections
 - keep new feature details out of `gui/tkinter_gui.py`: tab-specific and shell-policy behavior should continue to land in `gui/tabs/*` or `gui/shell/*`
 
 ### 4.11 Hotkeys

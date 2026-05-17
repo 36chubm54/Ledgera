@@ -8,13 +8,14 @@
 
 Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, тегами, бюджетами, долгами, активами и целями.
 
-Текущий релиз `v2.0.1` продолжает stable-линию `v2.0.0` как personal-security hardening patch: базовая архитектура с `amount_base` / `limit_base`, `base_currency`, per-tab GUI packages и Windows installer сохраняется, а поверх неё усилены локальное хранение секретов, import/backup trust boundaries и release-security posture для packaged Windows builds.
+Текущий релиз `v2.1.0` развивает стабильную Windows desktop-линию вокруг встроенного updater flow. Поверх уже закреплённой архитектуры с `amount_base` / `limit_base`, `base_currency`, per-tab GUI packages и Windows installer приложение теперь умеет проверять GitHub Releases из `Settings`, скачивать новый installer в user-scoped cache и передавать обновление штатному установщику без ручного поиска release asset'ов.
 
 В актуальном runtime-контракте:
 
 - `exchange_rate_api_key` больше не должен жить в plaintext `currency_config.json` и по умолчанию уходит в OS-backed secure storage
 - env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` остаётся runtime override поверх secure storage
 - mutable runtime state по-прежнему живёт в user-scoped `AppData`, а не рядом с установленным приложением
+- Windows updater скачивает installer в отдельный `updates` cache внутри `AppData` и не пишет payload в install tree
 - backup/export файлы остаются plaintext financial data, и это теперь явно отражено в UX и документации
 - Windows release workflow подготовлен к optional code signing, но без сертификата installer и bundle остаются unsigned
 
@@ -28,7 +29,7 @@
 ### Установка
 
 ```bash
-cd "Проект ФУ/FinAccountingApp-dev"
+cd "Проект ФУ/project"
 
 python -m venv .venv
 
@@ -63,10 +64,10 @@ python main.py
 
 ### Windows build (`PyInstaller --onedir`)
 
-- Основной Windows bundle собирается через checked-in [FinAccountingApp.spec](C:/Users/swar4/OneDrive/Документы/Финансовый%20учёт/Проект%20ФУ/FinAccountingApp-dev/FinAccountingApp.spec)
+- Основной Windows bundle собирается через checked-in `FinAccountingApp.spec`
 - Bundled read-only resources включают `gui/assets/icons`, `locales`, `db/schema.sql`
-- В packaged режиме mutable runtime files (`finance.db`, currency config/cache, backups) создаются в user-scoped `AppData`, а не внутри install directory
-- Migration utilities [migrate_json_to_sqlite.py](C:/Users/swar4/OneDrive/Документы/Финансовый%20учёт/Проект%20ФУ/FinAccountingApp-dev/migrate_json_to_sqlite.py) и [migration_002_rename_amount_kzt_to_base.py](C:/Users/swar4/OneDrive/Документы/Финансовый%20учёт/Проект%20ФУ/FinAccountingApp-dev/migrations/migration_002_rename_amount_kzt_to_base.py) входят в bundle как raw Python scripts, а не как отдельные `.exe`
+- В packaged режиме mutable runtime files (`finance.db`, currency config/cache, backups, updater downloads) создаются в user-scoped `AppData`, а не внутри install directory
+- Migration utilities `migrate_json_to_sqlite.py` и `migration_002_rename_amount_kzt_to_base.py` входят в bundle как raw Python scripts, а не как отдельные `.exe`
 - GitHub Actions release workflow может опционально подписывать `FinAccountingApp.exe` и installer, если в repository secrets настроен code-signing certificate; без сертификата build остаётся unsigned
 
 ## ✨ Основные возможности
@@ -83,6 +84,7 @@ python main.py
 - Distribution System для monthly net-income allocation и frozen snapshots
 - Wealth layer: `Assets`, `Goals`, wealth `Dashboard`
 - Full backup / import / migration для `JSON` ↔ `SQLite`
+- Manual Windows app updater в `Settings`: проверка GitHub Release, скачивание installer'а с progress dialog и handoff в штатный setup flow
 - Read-only Data Audit Engine для проверки консистентности данных, включая tag integrity
 - Внешние языковые пакеты `locales/*.txt` и единый i18n-loader с fallback-цепочкой
 - Runtime `theme` / `language` preferences с сохранением в SQLite schema metadata
@@ -103,6 +105,7 @@ python main.py
 - `base_currency` выбирается только при первом запуске через setup wizard, затем источником истины остаётся SQLite `schema_meta`
 - По умолчанию селектор отображения ограничен whitelist-ом `KZT` / `USD` / `EUR` / `RUB`, даже если кэш курсов содержит больше кодов
 - `Settings -> Валюта и курсы` позволяет менять `display_currency`, provider mode, primary/fallback provider, `exchange_rate_api_key`, `auto_update` и `update_interval_minutes`, но не post-startup `base_currency`
+- `Settings -> Обновление приложения` в Windows умеет проверять последний GitHub Release, скачивать `setup.exe` в `AppData\updates` и предлагать install handoff через штатный installer
 - `exchange_rate_api_key` больше не должен жить в `currency_config.json`: в Windows packaged/runtime flow он переносится в secure OS storage, env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` остаётся override-путём, а аварийный plaintext fallback допустим только когда secure storage недоступен
 - `auto_update` больше не является декоративным флагом: при включённом online mode курсы обновляются автоматически по `update_interval_minutes`
 - Экспортируемые отчёты локализуются по текущему языку UI, а колонки базовых сумм явно показывают код базы, например `Сумма (KZT)`
@@ -119,7 +122,7 @@ python main.py
 - `Debts` — долги и ссуды: создание, погашение, write off, close, history, progress
 - `Distribution` — monthly net-income distribution и frozen snapshots
 - `Mandatory` — обязательные платежи: шаблоны, редактирование, удаление и добавление в операции
-- `Settings` — кошельки, валюта и курсы, backup/import, audit
+- `Settings` — кошельки, валюта и курсы, обновление приложения, backup/import, audit
 
 ## 🏗️ Архитектурный обзор
 
@@ -156,6 +159,7 @@ python main.py
 | `services.budget_service.BudgetService` | Budget CRUD, category/tag budgets и live tracking |
 | `services.debt_service.DebtService` | Debt/loan lifecycle |
 | `services.distribution_service.DistributionService` | Monthly distribution и frozen rows |
+| `services.app_update_service.AppUpdateService` | Проверка GitHub Release, выбор Windows installer asset и stream-download updater payload |
 | `infrastructure.sqlite_repository.SQLiteRecordRepository` | Основной runtime repository |
 | `storage.sqlite_storage.SQLiteStorage` | Низкоуровневый SQLite adapter / schema bootstrap |
 | `infrastructure.currency_providers.CurrencyProviderRegistry` | Реестр и extension point для rate providers |
@@ -170,6 +174,7 @@ python main.py
 - `gui.tab_lifecycle` — lazy tab build и lifecycle dispatch вне основного shell-класса
 - `gui.shell.*` — shell-specific lifecycle/refresh/preferences/status helpers, вынесенные из `gui.tkinter_gui`
 - `gui.tabs.*` — реальные tab packages, где `*_tab.py` оставлены как тонкие compatibility shims
+- `gui.tabs.settings.update_section` — Windows-only updater card, modal download progress dialog и installer handoff prompts
 - `CurrencyService.get_available_display_currencies()` — whitelist-aware набор кодов для status-bar switcher вместо полного набора из кэша
 - `FinanceService.get_import_capabilities()` — единая capability-модель для import pipeline вместо ad-hoc проверок по атрибутам
 - `services.import_payload_support`, `services.import_replace_support`, `services.import_execution_support`, `services.import_mandatory_support` — разрезанный import stack вместо одного разросшегося service body
@@ -332,6 +337,7 @@ python migrate_json_to_sqlite.py --json-path data.json --sqlite-path finance.db
 ## 🔐 Security Notes
 
 - Runtime data (`finance.db`, `currency_config.json`, `currency_rates.json`, backups, exports) хранится в user-scoped `AppData`, а не рядом с `.exe`
+- Downloads встроенного updater'а тоже живут в отдельном `AppData\updates` cache, а не рядом с исходниками или установленным bundle
 - `exchange_rate_api_key` должен храниться в secure OS-backed storage; `currency_config.json` больше не рассматривается как место для plaintext secrets
 - SQLite база, JSON backups и exported reports по-прежнему не шифруются at rest: это читаемые файлы с финансовыми данными
 - Uninstall удаляет установленные файлы и ярлыки, но не удаляет пользовательские данные в `AppData`
