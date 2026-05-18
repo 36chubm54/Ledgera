@@ -201,6 +201,50 @@ def _build_context(controller: _Controller, launches: list[str]) -> SettingsTabC
     )
 
 
+def _build_deferred_context(
+    controller: _Controller,
+    launches: list[str],
+    pending: list[dict[str, Any]],
+) -> SettingsTabContext:
+    def _run_background(self, task, **kwargs):
+        pending.append(
+            {
+                "task": task,
+                "on_success": kwargs.get("on_success"),
+                "on_error": kwargs.get("on_error"),
+            }
+        )
+
+    return cast(
+        SettingsTabContext,
+        type(
+            "Ctx",
+            (),
+            {
+                "controller": controller,
+                "repository": SimpleNamespace(
+                    load_wallets=lambda: [],
+                    load_all=lambda: [],
+                    load_mandatory_expenses=lambda: [],
+                    load_transfers=lambda: [],
+                ),
+                "refresh_operation_wallet_menu": None,
+                "refresh_transfer_wallet_menus": None,
+                "refresh_wallets": None,
+                "refresh_mandatory": None,
+                "_refresh_list": lambda self: None,
+                "_refresh_charts": lambda self: None,
+                "_refresh_budgets": lambda self: None,
+                "_refresh_all": lambda self: None,
+                "_launch_installer_and_exit": lambda self, installer_path: launches.append(
+                    installer_path
+                ),
+                "_run_background": _run_background,
+            },
+        )(),
+    )
+
+
 def test_settings_tab_disables_update_button_when_not_supported() -> None:
     root = tk.Tk()
     root.withdraw()
@@ -297,7 +341,54 @@ def test_settings_tab_source_mode_uses_source_specific_install_prompt() -> None:
         root.update()
 
         assert len(prompts) == 2
-        assert "source checkout" in prompts[1]
+        assert "исходной копии проекта" in prompts[1]
         assert launches == [str(controller.download_path)]
+    finally:
+        root.destroy()
+
+
+def test_settings_tab_ignores_repeat_check_clicks_while_flow_is_active() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        controller = _Controller(supported=True)
+        launches: list[str] = []
+        pending: list[dict[str, Any]] = []
+        context = _build_deferred_context(controller, launches, pending)
+        parent = tk.Frame(root)
+        parent.pack()
+
+        messagebox_module = SimpleNamespace(
+            askyesno=lambda *args, **kwargs: False,
+            showerror=lambda *args, **kwargs: None,
+            showinfo=lambda *args, **kwargs: None,
+        )
+        build_settings_tab(
+            parent,
+            context,
+            messagebox_module=messagebox_module,
+            wallet_manager_dialog=lambda *args, **kwargs: None,
+        )
+        root.update()
+
+        buttons = _find_buttons(parent, "Проверить обновления")
+        assert buttons
+        buttons[0].invoke()
+        buttons[0].invoke()
+        root.update()
+
+        assert len(pending) == 1
+        assert controller.check_calls == 0
+
+        result = pending[0]["task"]()
+        on_success = pending[0]["on_success"]
+        assert callable(on_success)
+        on_success(result)
+        root.update()
+
+        assert controller.check_calls == 1
+        state = getattr(buttons[0], "state", None)
+        assert callable(state)
+        assert "disabled" not in str(state())
     finally:
         root.destroy()

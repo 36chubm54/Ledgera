@@ -49,6 +49,7 @@ def build_update_section(
     packaged_mode = bool(security_diagnostics.get("packaged_mode", False))
     current_version = str(context.controller.get_app_version() or "").strip() or "unknown"
     latest_release_holder: dict[str, AppUpdateReleaseInfo | None] = {"value": None}
+    update_flow_state = {"active": False}
     status_var = tk.StringVar(
         value=(
             tr(
@@ -101,6 +102,13 @@ def build_update_section(
         wraplength=520,
     )
     status_label.grid(row=1, column=1, sticky="ew", padx=(0, pad_x), pady=pad_y)
+
+    def _set_update_flow_active(active: bool) -> None:
+        update_flow_state["active"] = active
+        if active:
+            check_button.state(["disabled"])
+        elif supported:
+            check_button.state(["!disabled"])
 
     def _open_release_page() -> None:
         release = latest_release_holder["value"]
@@ -226,6 +234,7 @@ def build_update_section(
             )
 
         def on_success(result) -> None:
+            _set_update_flow_active(False)
             running["active"] = False
             if running["indeterminate"]:
                 progress.stop()
@@ -278,6 +287,7 @@ def build_update_section(
                     )
 
         def on_error(error: BaseException) -> None:
+            _set_update_flow_active(False)
             running["active"] = False
             if running["indeterminate"]:
                 progress.stop()
@@ -310,6 +320,9 @@ def build_update_section(
         )
 
     def _on_check_updates() -> None:
+        if update_flow_state["active"]:
+            return
+        _set_update_flow_active(True)
         status_var.set(tr("settings.updates.checking", "Проверяем GitHub Release..."))
 
         def task() -> AppUpdateCheckResult:
@@ -318,6 +331,7 @@ def build_update_section(
         def on_success(result: AppUpdateCheckResult) -> None:
             latest_release_holder["value"] = result.latest_release
             if not result.update_available or result.latest_release is None:
+                _set_update_flow_active(False)
                 release_link_button.state(["disabled"])
                 status_var.set(
                     tr(
@@ -355,8 +369,11 @@ def build_update_section(
             )
             if should_download:
                 _show_download_dialog(release)
+                return
+            _set_update_flow_active(False)
 
         def on_error(error: BaseException) -> None:
+            _set_update_flow_active(False)
             latest_release_holder["value"] = None
             release_link_button.state(["disabled"])
             status_var.set(tr("settings.updates.check.failed", "Не удалось проверить обновления."))
