@@ -9,6 +9,7 @@ tests/_tmp/
 build/
 dist/
 installer_dist/
+windows_version_info.auto.txt
 
 # Icons
 *.png

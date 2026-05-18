@@ -157,7 +157,7 @@ def build_currency_section(
             "Хранение API key: {label}",
             label=str(runtime_config.get("exchange_rate_api_key_storage_label", "") or ""),
         ),
-        style="Hint.TLabel",
+        style="CardText.TLabel",
     ).grid(row=6, column=0, columnspan=2, sticky="w", padx=pad_x, pady=(0, pad_y))
 
     ttk.Checkbutton(
@@ -187,7 +187,7 @@ def build_currency_section(
                 else tr("settings.currency.mode.source", "source")
             ),
         ),
-        style="Hint.TLabel",
+        style="CardText.TLabel",
         wraplength=520,
         justify="left",
     ).grid(row=9, column=0, columnspan=2, sticky="w", padx=pad_x, pady=(0, pad_y))

@@ -8,13 +8,14 @@
 
 Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals.
 
-The current `v2.0.1` release continues the stable `v2.0.0` line as a personal-security hardening patch: the normalized `amount_base` / `limit_base` architecture, `base_currency` runtime model, per-tab GUI packages, and Windows installer remain intact, while local secret handling, import/backup trust boundaries, and the packaged Windows security posture are tightened on top of that baseline.
+The current `v2.1.0` release extends the stable Windows desktop line around an in-app updater flow. On top of the existing `amount_base` / `limit_base` architecture, `base_currency` runtime model, per-tab GUI packages, and Windows installer, the app can now check GitHub Releases from `Settings`, download the next installer into a user-scoped cache, and hand off the update to the normal installer flow without manually hunting for release assets.
 
 In the current runtime contract:
 
 - `exchange_rate_api_key` should no longer live in plaintext `currency_config.json` and is persisted through OS-backed secure storage by default
 - env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` remains a runtime override over secure storage
 - mutable runtime state still lives in user-scoped `AppData`, not beside the installed application
+- the Windows updater downloads installers into a dedicated `updates` cache under `AppData` instead of writing into the install tree
 - backup/export files remain plaintext financial data, and that is now reflected explicitly in the UX and docs
 - the Windows release workflow is prepared for optional code signing, but without a certificate the installer and bundle remain unsigned
 
@@ -28,7 +29,7 @@ In the current runtime contract:
 ### Installation
 
 ```bash
-cd "Проект ФУ/FinAccountingApp-dev"
+cd "Проект ФУ/project"
 
 python -m venv .venv
 
@@ -63,10 +64,10 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 
 ### Windows build (`PyInstaller --onedir`)
 
-- The main Windows bundle is built from the checked-in [FinAccountingApp.spec](C:/Users/swar4/OneDrive/Документы/Финансовый%20учёт/Проект%20ФУ/FinAccountingApp-dev/FinAccountingApp.spec)
+- The main Windows bundle is built from the checked-in `FinAccountingApp.spec`
 - Bundled read-only resources include `gui/assets/icons`, `locales`, and `db/schema.sql`
-- In packaged mode, mutable runtime files (`finance.db`, currency config/cache, backups) are created in user-scoped `AppData` instead of the install directory
-- Migration utilities [migrate_json_to_sqlite.py](C:/Users/swar4/OneDrive/Документы/Финансовый%20учёт/Проект%20ФУ/FinAccountingApp-dev/migrate_json_to_sqlite.py) and [migration_002_rename_amount_kzt_to_base.py](C:/Users/swar4/OneDrive/Документы/Финансовый%20учёт/Проект%20ФУ/FinAccountingApp-dev/migrations/migration_002_rename_amount_kzt_to_base.py) are included in the bundle as raw Python scripts, not as separate `.exe` tools
+- In packaged mode, mutable runtime files (`finance.db`, currency config/cache, backups, updater downloads) are created in user-scoped `AppData` instead of the install directory
+- Migration utilities `migrate_json_to_sqlite.py` and `migration_002_rename_amount_kzt_to_base.py` are included in the bundle as raw Python scripts, not as separate `.exe` tools
 - The GitHub Actions release workflow can optionally sign `FinAccountingApp.exe` and the installer when a code-signing certificate is configured in repository secrets; without a certificate, the build remains unsigned
 
 ## ✨ Core Features
@@ -83,6 +84,7 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 - Distribution System for monthly net-income allocation and frozen snapshots
 - Wealth layer: `Assets`, `Goals`, and a dedicated wealth `Dashboard`
 - Full backup / import / migration for `JSON` ↔ `SQLite`
+- Manual Windows app updater in `Settings`: GitHub Release check, installer download with a progress dialog, and installer handoff
 - Read-only Data Audit Engine for runtime consistency checks, including tag integrity
 - External `locales/*.txt` language packs with a shared i18n loader and fallback chain
 - Runtime `theme` / `language` preferences persisted in SQLite schema metadata
@@ -103,6 +105,7 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 - `base_currency` is chosen only during first-run setup, then SQLite `schema_meta` remains the source of truth
 - By default, the display selector is limited to the whitelist `KZT` / `USD` / `EUR` / `RUB`, even if cached rates contain more currency codes
 - `Settings -> Currency and rates` can update `display_currency`, provider mode, primary/fallback provider, `exchange_rate_api_key`, `auto_update`, and `update_interval_minutes`, but not post-startup `base_currency`
+- `Settings -> Application updates` on Windows can check the latest GitHub Release, download `setup.exe` into `AppData\\updates`, and offer install handoff through the normal installer
 - `exchange_rate_api_key` is no longer expected to live in `currency_config.json`: in the Windows packaged/runtime flow it is migrated into secure OS storage, env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` remains an override path, and a plaintext fallback is only tolerated when secure storage is unavailable
 - `auto_update` is now active behavior instead of passive metadata: when online mode is enabled, rates refresh automatically according to `update_interval_minutes`
 - Exported reports are localized to the current UI language, and base-amount columns explicitly show the real base code, for example `Amount (KZT)`
@@ -119,7 +122,7 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 - `Debts` — debts and loans: create, repay, write off, close, view history, track progress
 - `Distribution` — monthly net-income distribution and frozen snapshots
 - `Mandatory` — mandatory payment templates, edit/delete flows, and add-to-records actions
-- `Settings` — wallets, currency and rates, backup/import, audit
+- `Settings` — wallets, currency and rates, application updates, backup/import, audit
 
 ## 🏗️ Architecture Overview
 
@@ -156,6 +159,7 @@ Also important:
 | `services.budget_service.BudgetService` | Budget CRUD, category/tag budgets, and live tracking |
 | `services.debt_service.DebtService` | Debt/loan lifecycle |
 | `services.distribution_service.DistributionService` | Monthly distribution and frozen rows |
+| `services.app_update_service.AppUpdateService` | GitHub Release lookup, Windows installer asset selection, and streamed updater downloads |
 | `infrastructure.sqlite_repository.SQLiteRecordRepository` | Primary runtime repository |
 | `storage.sqlite_storage.SQLiteStorage` | Low-level SQLite adapter / schema bootstrap |
 | `infrastructure.currency_providers.CurrencyProviderRegistry` | Registry and extension point for rate providers |
@@ -170,6 +174,7 @@ Practical highlights in the current working tree:
 - `gui.tab_lifecycle` — lazy tab build and lifecycle dispatch outside the main shell class
 - `gui.shell.*` — shell-specific lifecycle/refresh/preferences/status helpers extracted from `gui.tkinter_gui`
 - `gui.tabs.*` — real tab packages, with `*_tab.py` kept as thin compatibility shims
+- `gui.tabs.settings.update_section` — Windows-only updater card, modal download progress dialog, and installer handoff prompts
 - `CurrencyService.get_available_display_currencies()` — whitelist-aware display switcher values instead of the full cached-rate set
 - `FinanceService.get_import_capabilities()` — a single capability model for the import pipeline instead of ad-hoc attribute probing
 - `services.import_payload_support`, `services.import_replace_support`, `services.import_execution_support`, `services.import_mandatory_support` — a split import stack instead of one oversized service body
@@ -332,6 +337,7 @@ Useful configuration points:
 ## 🔐 Security Notes
 
 - Runtime data (`finance.db`, `currency_config.json`, `currency_rates.json`, backups, exports) lives in user-scoped `AppData`, not beside the executable
+- In-app updater downloads also live in a dedicated `AppData\\updates` cache instead of the source checkout or installed bundle
 - `exchange_rate_api_key` is expected to live in secure OS-backed storage; `currency_config.json` is no longer treated as a plaintext secret store
 - The SQLite database, JSON backups, and exported reports are still not encrypted at rest: they remain readable financial-data files
 - Uninstall removes installed files and shortcuts, but does not remove user data from `AppData`

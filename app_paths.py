@@ -87,6 +87,17 @@ def get_exports_dir() -> Path:
     return get_user_data_root() / "exports"
 
 
+def get_updates_dir() -> Path:
+    if _is_windows():
+        base_dir = (
+            str(os.environ.get("LOCALAPPDATA", "") or "").strip()
+            or str(os.environ.get("APPDATA", "") or "").strip()
+            or str(Path.home() / "AppData" / "Local")
+        )
+        return Path(base_dir).expanduser().resolve() / APP_DATA_DIRNAME / "updates"
+    return get_user_data_root() / "updates"
+
+
 def get_locales_dir() -> Path:
     return resolve_resource_path(Path("locales"))
 

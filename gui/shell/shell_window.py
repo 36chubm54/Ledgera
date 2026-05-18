@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import os
+import subprocess
 import tkinter as tk
 from pathlib import Path
 from tkinter import TclError
@@ -81,3 +82,13 @@ def configure_main_window(owner: Any) -> None:
     owner.geometry(f"{min_width}x{min_height}")
     owner.minsize(min_width, min_height)
     owner.protocol("WM_DELETE_WINDOW", owner.destroy)
+
+
+def launch_installer_and_exit(owner: Any, installer_path: str) -> None:
+    if not Path(installer_path).is_file():
+        raise RuntimeError("The downloaded installer file was not found.")
+    try:
+        subprocess.Popen([str(installer_path)])
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError("Failed to launch the downloaded installer.") from exc
+    owner.destroy()

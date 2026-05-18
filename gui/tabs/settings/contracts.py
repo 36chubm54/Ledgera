@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from domain.update import AppUpdateCheckResult, AppUpdateDownloadResult, AppUpdateReleaseInfo
 from gui.i18n import tr
 
 
@@ -42,12 +43,29 @@ class SettingsController(Protocol):
 
     def get_available_display_currencies(self) -> list[str]: ...
 
+    def get_app_version(self) -> str: ...
+
+    def is_app_update_supported(self) -> bool: ...
+
+    def check_for_app_update(self) -> AppUpdateCheckResult: ...
+
+    def download_app_update(
+        self,
+        release: AppUpdateReleaseInfo,
+        *,
+        on_progress,
+    ) -> AppUpdateDownloadResult: ...
+
     def update_runtime_currency_config(
         self,
         *,
         display_currency: str,
-        provider: str,
+        provider_mode: str,
+        primary_provider: str,
+        fallback_provider: str,
+        exchange_rate_api_key: str,
         auto_update: bool,
+        update_interval_minutes: int | str,
     ) -> None: ...
 
     def run_audit(self) -> Any: ...
@@ -96,6 +114,8 @@ class SettingsTabContext(Protocol):
 
     def _refresh_all(self) -> None: ...
 
+    def _launch_installer_and_exit(self, installer_path: str) -> None: ...
+
     def _run_background(
         self,
         task: Callable[[], Any],
@@ -103,6 +123,7 @@ class SettingsTabContext(Protocol):
         on_success: Callable[[Any], None],
         on_error: Callable[[BaseException], None] | None = None,
         busy_message: str = tr("app.busy.default", "Выполняется операция..."),
+        block_ui: bool = True,
     ) -> None: ...
 
 

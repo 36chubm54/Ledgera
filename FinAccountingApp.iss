@@ -1,5 +1,5 @@
-#define MyAppName "FinAccountingApp"
-#define MyAppVersion "2.0.0"
+#define MyAppName "Финансовый учет"
+#define MyAppInternalName "FinAccountingApp"
 #define MyAppPublisher "36chubm54"
 #define MyAppExeName "FinAccountingApp.exe"
 #define MyBundleDir AddBackslash(SourcePath) + "dist\FinAccountingApp"
@@ -10,13 +10,17 @@
   #error "PyInstaller bundle not found. Build dist\FinAccountingApp first."
 #endif
 
+#define MyAppVersion GetStringFileInfo(MyBundleExe, "ProductVersion")
+
 [Setup]
 AppId={{A6A7D7E2-0DD4-4D44-8E0A-91DA9D76C8D5}
 AppName={#MyAppName}
+AppVerName={#MyAppName} {#MyAppVersion}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppComments=Uninstall removes installed files and shortcuts only; user data remains in AppData.
-DefaultDirName={autopf}\{#MyAppName}
+AppUserModelID=36chubm54.FinAccountingApp
+DefaultDirName={autopf}\{#MyAppInternalName}
 UsePreviousAppDir=no
 UsePreviousLanguage=no
 UsePreviousPrivileges=no
@@ -32,6 +36,10 @@ OutputDir={#SourcePath}\installer_dist
 OutputBaseFilename=FinAccountingApp-{#MyAppVersion}-setup
 SetupIconFile={#MyIconFile}
 UninstallDisplayIcon={app}\{#MyAppExeName}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName} Installer
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

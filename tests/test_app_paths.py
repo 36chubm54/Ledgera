@@ -60,3 +60,30 @@ def test_frozen_resource_root_falls_back_to_executable_parent_without_meipass(
     monkeypatch.delattr(app_paths.sys, "_MEIPASS", raising=False)
 
     assert app_paths.get_resource_root() == exe_dir.resolve()
+
+
+def test_get_updates_dir_follows_user_data_root(monkeypatch, tmp_path: Path) -> None:
+    override = tmp_path / "runtime"
+    monkeypatch.setenv("FIN_ACCOUNTING_DATA_DIR", str(override))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
+    monkeypatch.setattr(app_paths, "_is_windows", lambda: True)
+
+    assert (
+        app_paths.get_updates_dir()
+        == ((tmp_path / "LocalAppData") / app_paths.APP_DATA_DIRNAME / "updates").resolve()
+    )
+
+
+def test_dev_mode_updates_dir_uses_local_appdata_instead_of_source_root(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("FIN_ACCOUNTING_DATA_DIR", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
+    monkeypatch.setattr(app_paths, "_is_frozen_mode", lambda: False)
+    monkeypatch.setattr(app_paths, "_is_windows", lambda: True)
+
+    assert (
+        app_paths.get_updates_dir()
+        == ((tmp_path / "LocalAppData") / app_paths.APP_DATA_DIRNAME / "updates").resolve()
+    )

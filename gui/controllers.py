@@ -93,6 +93,7 @@ from domain.records import MandatoryExpenseRecord, Record
 from domain.reports import Report
 from domain.tags import Tag
 from domain.transfers import Transfer
+from domain.update import AppUpdateCheckResult, AppUpdateDownloadResult, AppUpdateReleaseInfo
 from domain.validation import parse_ymd
 from domain.wallets import Wallet
 from gui.controller_support import (
@@ -100,6 +101,7 @@ from gui.controller_support import (
     build_list_items,
     wallets_with_system_initial_balance,
 )
+from services.app_update_service import AppUpdateService
 from services.asset_service import AssetService
 from services.balance_service import BalanceService, CashflowResult, WalletBalance
 from services.budget_service import BudgetService
@@ -119,6 +121,7 @@ class FinancialController:
     def __init__(self, repository: RecordRepository, currency_service: CurrencyService) -> None:
         self._repository = repository
         self._currency = currency_service
+        self._app_update = AppUpdateService()
         self._record_service = RecordService(repository)
         self._ui_preferences = UIPreferencesService(repository, currency_service)
         self._asset_service_instance: AssetService | None = None
@@ -321,6 +324,23 @@ class FinancialController:
 
     def load_online_mode_preference(self) -> bool:
         return self._ui_preferences.load_online_mode_preference()
+
+    def get_app_version(self) -> str:
+        return self._app_update.get_current_version()
+
+    def is_app_update_supported(self) -> bool:
+        return self._app_update.is_supported_environment()
+
+    def check_for_app_update(self) -> AppUpdateCheckResult:
+        return self._app_update.check_for_app_update()
+
+    def download_app_update(
+        self,
+        release: AppUpdateReleaseInfo,
+        *,
+        on_progress,
+    ) -> AppUpdateDownloadResult:
+        return self._app_update.download_app_update(release, on_progress=on_progress)
 
     def create_income(
         self,

@@ -52,7 +52,11 @@ from gui.shell.shell_state import (
 )
 from gui.shell.shell_support import resolve_import_policy
 from gui.shell.shell_tabs import apply_tab_titles, rebuild_built_tabs
-from gui.shell.shell_window import apply_window_icon, configure_main_window
+from gui.shell.shell_window import (
+    apply_window_icon,
+    configure_main_window,
+    launch_installer_and_exit,
+)
 from gui.startup_coordinator import DeferredStartupCoordinator
 from gui.status_bar_builder import build_status_bar
 from gui.status_bar_coordinator import StatusBarCoordinator, StatusBarOwner
@@ -459,6 +463,9 @@ class FinancialApp(tk.Tk):
 
     def _on_legend_mousewheel(self, event: tk.Event) -> None:
         scroll_owner_legend_canvas(self, event)
+
+    def _launch_installer_and_exit(self, installer_path: str) -> None:
+        launch_installer_and_exit(self, installer_path)
 
 
 def main(*, initial_base_currency: str | None = None) -> None:
