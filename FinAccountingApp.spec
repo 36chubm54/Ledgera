@@ -4,6 +4,8 @@ from pathlib import Path
 import re
 import runpy
 
+from PyInstaller.utils.hooks import collect_submodules, copy_metadata
+
 
 ROOT = Path(SPECPATH).resolve()
 ICON_FILE = ROOT / "gui" / "assets" / "icons" / "app.ico"
@@ -17,6 +19,30 @@ DATAS = [
         "tools",
     ),
 ]
+HIDDEN_IMPORTS = collect_submodules("keyring.backends")
+
+
+def _collect_optional_metadata(*package_names: str) -> list[tuple[str, str]]:
+    collected: list[tuple[str, str]] = []
+    for package_name in package_names:
+        try:
+            collected.extend(copy_metadata(package_name))
+        except Exception:
+            continue
+    return collected
+
+
+DATAS += _collect_optional_metadata(
+    "keyring",
+    "jaraco.classes",
+    "jaraco.context",
+    "jaraco.functools",
+    "more-itertools",
+    "backports.tarfile",
+    "importlib_metadata",
+    "zipp",
+    "pywin32-ctypes",
+)
 
 
 def _load_app_version() -> str:
@@ -83,7 +109,7 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=[],
     datas=DATAS,
-    hiddenimports=[],
+    hiddenimports=HIDDEN_IMPORTS,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
