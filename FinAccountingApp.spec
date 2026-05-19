@@ -4,45 +4,16 @@ from pathlib import Path
 import re
 import runpy
 
-from PyInstaller.utils.hooks import collect_submodules, copy_metadata
+from packaging.pyinstaller.common_spec import (
+    build_common_datas,
+    build_common_hiddenimports,
+)
 
 
 ROOT = Path(SPECPATH).resolve()
 ICON_FILE = ROOT / "gui" / "assets" / "icons" / "app.ico"
-DATAS = [
-    (str(ROOT / "gui" / "assets" / "icons"), "gui/assets/icons"),
-    (str(ROOT / "locales"), "locales"),
-    (str(ROOT / "db" / "schema.sql"), "db"),
-    (str(ROOT / "migrate_json_to_sqlite.py"), "tools"),
-    (
-        str(ROOT / "migrations" / "migration_002_rename_amount_kzt_to_base.py"),
-        "tools",
-    ),
-]
-HIDDEN_IMPORTS = collect_submodules("keyring.backends")
-
-
-def _collect_optional_metadata(*package_names: str) -> list[tuple[str, str]]:
-    collected: list[tuple[str, str]] = []
-    for package_name in package_names:
-        try:
-            collected.extend(copy_metadata(package_name))
-        except Exception:
-            continue
-    return collected
-
-
-DATAS += _collect_optional_metadata(
-    "keyring",
-    "jaraco.classes",
-    "jaraco.context",
-    "jaraco.functools",
-    "more-itertools",
-    "backports.tarfile",
-    "importlib_metadata",
-    "zipp",
-    "pywin32-ctypes",
-)
+DATAS = build_common_datas(ROOT)
+HIDDEN_IMPORTS = build_common_hiddenimports()
 
 
 def _load_app_version() -> str:

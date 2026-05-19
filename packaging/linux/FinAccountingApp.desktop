@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FinAccountingApp
+Comment=Personal financial accounting desktop app
+Exec=FinAccountingApp
+Icon=FinAccountingApp
+Terminal=false
+Categories=Office;Finance;
+StartupNotify=true

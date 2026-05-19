@@ -32,3 +32,5 @@ windows_version_info.auto.txt
 *.db
 *.db-shm
 *.db-wal
+artifacts/
+*.AppImage
