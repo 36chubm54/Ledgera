@@ -5,6 +5,7 @@ from pathlib import Path
 from tkinter import ttk
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import patch
 
 from domain.update import (
     AppReleaseAsset,
@@ -142,6 +143,9 @@ class _Controller:
 
     def get_app_version(self) -> str:
         return "2.0.1"
+
+    def get_app_release_page_url(self) -> str:
+        return "https://github.com/36chubm54/FinAccountingApp/releases"
 
     def is_app_update_supported(self) -> bool:
         return self.supported
@@ -303,6 +307,34 @@ def test_settings_tab_update_flow_downloads_and_launches_installer() -> None:
         assert controller.check_calls == 1
         assert controller.download_calls == 1
         assert launches == [str(controller.download_path)]
+    finally:
+        root.destroy()
+
+
+def test_settings_tab_enables_release_page_for_packaged_linux_manual_updates() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        controller = _Controller(supported=False, packaged_mode=True)
+        launches: list[str] = []
+        context = _build_context(controller, launches)
+        parent = tk.Frame(root)
+        parent.pack()
+
+        with patch("gui.tabs.settings.update_section.os.name", "posix"):
+            build_settings_tab(
+                parent,
+                context,
+                messagebox_module=SimpleNamespace(),
+                wallet_manager_dialog=lambda *args, **kwargs: None,
+            )
+        root.update_idletasks()
+
+        release_buttons = _find_buttons(parent, "Страница релиза")
+        assert release_buttons
+        state = getattr(release_buttons[0], "state", None)
+        assert callable(state)
+        assert "disabled" not in str(state())
     finally:
         root.destroy()
 

@@ -48,6 +48,30 @@ def test_frozen_windows_mode_prefers_meipass_for_resources_and_appdata_for_state
     assert app_paths.get_icons_dir() == bundle_dir.resolve() / "gui" / "assets" / "icons"
 
 
+def test_frozen_linux_mode_prefers_xdg_data_home_for_state(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    exe_dir = tmp_path / "dist" / "FinAccountingApp"
+    exe_dir.mkdir(parents=True)
+    xdg_data_home = tmp_path / "xdg-data"
+    monkeypatch.delenv("FIN_ACCOUNTING_DATA_DIR", raising=False)
+    monkeypatch.delenv("FIN_ACCOUNTING_RESOURCE_ROOT", raising=False)
+    monkeypatch.setenv("XDG_DATA_HOME", str(xdg_data_home))
+    monkeypatch.setattr(app_paths, "_is_frozen_mode", lambda: True)
+    monkeypatch.setattr(app_paths, "_is_windows", lambda: False)
+    monkeypatch.setattr(app_paths, "_is_linux", lambda: True)
+    monkeypatch.setattr(app_paths.sys, "executable", str(exe_dir / "FinAccountingApp"))
+    monkeypatch.delattr(app_paths.sys, "_MEIPASS", raising=False)
+
+    assert app_paths.get_resource_root() == exe_dir.resolve()
+    assert app_paths.get_user_data_root() == (xdg_data_home / app_paths.APP_DATA_DIRNAME).resolve()
+    assert (
+        app_paths.get_updates_dir()
+        == (xdg_data_home / app_paths.APP_DATA_DIRNAME / "updates").resolve()
+    )
+
+
 def test_frozen_resource_root_falls_back_to_executable_parent_without_meipass(
     monkeypatch,
     tmp_path: Path,

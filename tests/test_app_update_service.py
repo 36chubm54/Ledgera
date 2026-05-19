@@ -10,6 +10,7 @@ from domain.update import AppUpdateDownloadProgress, AppUpdateReleaseInfo
 from services.app_update_service import (
     AppUpdateDownloadError,
     AppUpdateMetadataError,
+    AppUpdateNotSupportedError,
     AppUpdateService,
 )
 
@@ -65,6 +66,14 @@ def service(monkeypatch) -> AppUpdateService:
     monkeypatch.setattr(svc, "is_supported_environment", lambda: True)
     monkeypatch.setattr(svc, "get_current_version", lambda: "2.0.1")
     return svc
+
+
+def test_check_for_app_update_rejects_non_windows_runtime() -> None:
+    service = AppUpdateService()
+    service.is_supported_environment = lambda: False  # type: ignore[method-assign]
+
+    with pytest.raises(AppUpdateNotSupportedError, match="AppImage"):
+        service.check_for_app_update()
 
 
 def test_check_for_app_update_detects_newer_release(monkeypatch, service: AppUpdateService) -> None:
