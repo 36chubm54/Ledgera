@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import queue
 import tkinter as tk
 import webbrowser
@@ -48,6 +49,7 @@ def build_update_section(
     security_diagnostics = context.controller.get_runtime_security_diagnostics()
     packaged_mode = bool(security_diagnostics.get("packaged_mode", False))
     current_version = str(context.controller.get_app_version() or "").strip() or "unknown"
+    release_page_url = str(context.controller.get_app_release_page_url() or "").strip()
     latest_release_holder: dict[str, AppUpdateReleaseInfo | None] = {"value": None}
     update_flow_state = {"active": False}
     status_var = tk.StringVar(
@@ -63,6 +65,12 @@ def build_update_section(
                 "Скачанный установщик обновляет packaged app, а не этот checkout.",
             )
             if supported
+            else tr(
+                "settings.updates.linux_manual",
+                "Для Linux packaged builds встроенная установка обновлений пока недоступна. "
+                "Скачайте новый AppImage со страницы релизов GitHub.",
+            )
+            if packaged_mode and os.name != "nt"
             else tr(
                 "settings.updates.unsupported",
                 "Обновление из приложения доступно только на Windows.",
@@ -112,9 +120,12 @@ def build_update_section(
 
     def _open_release_page() -> None:
         release = latest_release_holder["value"]
-        if release is None or not release.release_url:
+        if release is not None and release.release_url:
+            webbrowser.open(release.release_url)
             return
-        webbrowser.open(release.release_url)
+        if not release_page_url:
+            return
+        webbrowser.open(release_page_url)
 
     def _show_download_dialog(release: AppUpdateReleaseInfo) -> None:
         owner = parent_panel.winfo_toplevel()
@@ -415,4 +426,5 @@ def build_update_section(
         command=_open_release_page,
     )
     release_link_button.grid(row=0, column=1, sticky="ew", padx=(PAD_XS, 0))
-    release_link_button.state(["disabled"])
+    if supported or not release_page_url:
+        release_link_button.state(["disabled"])

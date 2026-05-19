@@ -622,6 +622,7 @@ settings.updates.status=Status:
 settings.updates.ready=You can check for a newer release.
 settings.updates.unsupported=In-app updates are available only on Windows.
 settings.updates.source_mode=Source mode: update flow is available for testing. The downloaded installer updates the packaged app, not this checkout.
+settings.updates.linux_manual=In-app install actions are not available yet for packaged Linux builds. Download a newer AppImage from the GitHub Releases page.
 settings.updates.check_button=Check for updates
 settings.updates.release_page=Release page
 settings.updates.checking=Checking GitHub Release...

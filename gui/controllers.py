@@ -328,6 +328,9 @@ class FinancialController:
     def get_app_version(self) -> str:
         return self._app_update.get_current_version()
 
+    def get_app_release_page_url(self) -> str:
+        return self._app_update.get_release_page_url()
+
     def is_app_update_supported(self) -> bool:
         return self._app_update.is_supported_environment()
 

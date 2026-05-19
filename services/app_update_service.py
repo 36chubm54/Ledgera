@@ -20,6 +20,10 @@ from version import __version__
 
 _INSTALLER_NAME_RE = re.compile(r"^FinAccountingApp-.+-setup\.exe$", re.IGNORECASE)
 _TAG_VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+].+)?$")
+WINDOWS_ONLY_UPDATE_MESSAGE = (
+    "In-app updates are currently available only on Windows. "
+    "Packaged Linux builds should download a newer AppImage from GitHub Releases."
+)
 
 
 class AppUpdateError(RuntimeError):
@@ -62,12 +66,15 @@ class AppUpdateService:
     def get_current_version(self) -> str:
         return __version__
 
+    def get_release_page_url(self) -> str:
+        return "https://github.com/36chubm54/FinAccountingApp/releases"
+
     def is_supported_environment(self) -> bool:
         return os.name == "nt"
 
     def check_for_app_update(self) -> AppUpdateCheckResult:
         if not self.is_supported_environment():
-            raise AppUpdateNotSupportedError("In-app updates are available only on Windows.")
+            raise AppUpdateNotSupportedError(WINDOWS_ONLY_UPDATE_MESSAGE)
 
         payload = self._fetch_latest_release_payload()
         tag_name = str(payload.get("tag_name") or "").strip()
@@ -99,7 +106,7 @@ class AppUpdateService:
         on_progress: Callable[[AppUpdateDownloadProgress], None] | None = None,
     ) -> AppUpdateDownloadResult:
         if not self.is_supported_environment():
-            raise AppUpdateNotSupportedError("In-app updates are available only on Windows.")
+            raise AppUpdateNotSupportedError(WINDOWS_ONLY_UPDATE_MESSAGE)
 
         updates_dir = get_updates_dir()
         updates_dir.mkdir(parents=True, exist_ok=True)

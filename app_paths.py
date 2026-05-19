@@ -16,6 +16,10 @@ def _is_windows() -> bool:
     return os.name == "nt"
 
 
+def _is_linux() -> bool:
+    return sys.platform.startswith("linux")
+
+
 def get_source_root() -> Path:
     return _SOURCE_ROOT
 
@@ -40,13 +44,19 @@ def get_user_data_root() -> Path:
     override = str(os.environ.get("FIN_ACCOUNTING_DATA_DIR", "") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    if _is_frozen_mode() and _is_windows():
-        base_dir = (
-            str(os.environ.get("LOCALAPPDATA", "") or "").strip()
-            or str(os.environ.get("APPDATA", "") or "").strip()
-            or str(Path.home() / "AppData" / "Local")
-        )
-        return Path(base_dir).expanduser().resolve() / APP_DATA_DIRNAME
+    if _is_frozen_mode():
+        if _is_windows():
+            base_dir = (
+                str(os.environ.get("LOCALAPPDATA", "") or "").strip()
+                or str(os.environ.get("APPDATA", "") or "").strip()
+                or str(Path.home() / "AppData" / "Local")
+            )
+            return Path(base_dir).expanduser().resolve() / APP_DATA_DIRNAME
+        if _is_linux():
+            base_dir = str(os.environ.get("XDG_DATA_HOME", "") or "").strip() or str(
+                Path.home() / ".local" / "share"
+            )
+            return Path(base_dir).expanduser().resolve() / APP_DATA_DIRNAME
     return get_source_root()
 
 
