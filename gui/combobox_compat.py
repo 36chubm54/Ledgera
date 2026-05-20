@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from tkinter import ttk
 from typing import Literal
 
+from app_paths import is_appimage_mode, is_frozen_mode
+
 LinuxComboboxPolicy = Literal["native", "patched-native", "compat-popup"]
 
 
@@ -17,6 +19,8 @@ class GuiDisplayRuntime:
     wayland_display: str
     x11_display: str
     is_linux: bool
+    is_packaged: bool
+    is_appimage: bool
     is_wayland_native: bool
     is_xwayland: bool
 
@@ -28,6 +32,8 @@ def detect_gui_display_runtime(environ: dict[str, str] | None = None) -> GuiDisp
     wayland_display = str(env.get("WAYLAND_DISPLAY", "") or "").strip()
     x11_display = str(env.get("DISPLAY", "") or "").strip()
     is_linux = platform_name.startswith("linux")
+    is_packaged = is_frozen_mode()
+    is_appimage = is_appimage_mode()
     is_xwayland = is_linux and bool(x11_display) and session_type == "wayland"
     is_wayland_native = is_linux and bool(wayland_display) and not is_xwayland
     return GuiDisplayRuntime(
@@ -36,6 +42,8 @@ def detect_gui_display_runtime(environ: dict[str, str] | None = None) -> GuiDisp
         wayland_display=wayland_display,
         x11_display=x11_display,
         is_linux=is_linux,
+        is_packaged=is_packaged,
+        is_appimage=is_appimage,
         is_wayland_native=is_wayland_native,
         is_xwayland=is_xwayland,
     )
@@ -55,6 +63,12 @@ def resolve_linux_combobox_policy(
     if not resolved.is_linux:
         return "native"
     normalized_windowing = str(tk_windowingsystem or "").strip().lower()
+    if resolved.is_appimage:
+        return "compat-popup"
+    if resolved.is_packaged:
+        if normalized_windowing and normalized_windowing != "x11":
+            return "compat-popup"
+        return "patched-native"
     if resolved.session_type == "wayland":
         return "compat-popup"
     if normalized_windowing and normalized_windowing != "x11":

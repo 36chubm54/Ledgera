@@ -14,6 +14,7 @@ def test_dev_mode_uses_source_root_for_resources_and_runtime(monkeypatch) -> Non
     assert app_paths.get_user_data_root() == app_paths.get_source_root()
     assert app_paths.get_sqlite_path() == app_paths.get_source_root() / "finance.db"
     assert app_paths.get_locales_dir() == app_paths.get_source_root() / "locales"
+    assert app_paths.is_appimage_mode() is False
 
 
 def test_data_dir_override_wins(monkeypatch, tmp_path: Path) -> None:
@@ -70,6 +71,18 @@ def test_frozen_linux_mode_prefers_xdg_data_home_for_state(
         app_paths.get_updates_dir()
         == (xdg_data_home / app_paths.APP_DATA_DIRNAME / "updates").resolve()
     )
+    assert app_paths.is_appimage_mode() is False
+
+
+def test_frozen_linux_appimage_mode_is_detected_from_environment(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(app_paths, "_is_frozen_mode", lambda: True)
+    monkeypatch.setattr(app_paths, "_is_linux", lambda: True)
+    monkeypatch.setenv("APPIMAGE", str(tmp_path / "FinAccountingApp.AppImage"))
+
+    assert app_paths.is_appimage_mode() is True
 
 
 def test_frozen_resource_root_falls_back_to_executable_parent_without_meipass(

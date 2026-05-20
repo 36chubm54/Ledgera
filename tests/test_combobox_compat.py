@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import TclError, ttk
 from unittest.mock import patch
+
+import pytest
 
 from gui.combobox_compat import (
     GuiDisplayRuntime,
@@ -19,8 +21,38 @@ def _native_wayland_runtime() -> GuiDisplayRuntime:
         wayland_display="wayland-0",
         x11_display="",
         is_linux=True,
+        is_packaged=False,
+        is_appimage=False,
         is_wayland_native=True,
         is_xwayland=False,
+    )
+
+
+def _packaged_wayland_runtime() -> GuiDisplayRuntime:
+    return GuiDisplayRuntime(
+        platform="linux",
+        session_type="wayland",
+        wayland_display="wayland-0",
+        x11_display=":0",
+        is_linux=True,
+        is_packaged=True,
+        is_appimage=False,
+        is_wayland_native=False,
+        is_xwayland=True,
+    )
+
+
+def _appimage_wayland_runtime() -> GuiDisplayRuntime:
+    return GuiDisplayRuntime(
+        platform="linux",
+        session_type="wayland",
+        wayland_display="wayland-0",
+        x11_display=":0",
+        is_linux=True,
+        is_packaged=True,
+        is_appimage=True,
+        is_wayland_native=False,
+        is_xwayland=True,
     )
 
 
@@ -34,6 +66,8 @@ def test_detect_gui_display_runtime_native_wayland() -> None:
         )
 
     assert runtime.is_linux is True
+    assert runtime.is_packaged is False
+    assert runtime.is_appimage is False
     assert runtime.is_wayland_native is True
     assert runtime.is_xwayland is False
 
@@ -49,6 +83,8 @@ def test_detect_gui_display_runtime_xwayland() -> None:
         )
 
     assert runtime.is_linux is True
+    assert runtime.is_packaged is False
+    assert runtime.is_appimage is False
     assert runtime.is_wayland_native is False
     assert runtime.is_xwayland is True
 
@@ -63,6 +99,8 @@ def test_resolve_linux_combobox_policy_uses_compat_popup_for_wayland_sessions() 
                 wayland_display="wayland-0",
                 x11_display=":0",
                 is_linux=True,
+                is_packaged=False,
+                is_appimage=False,
                 is_wayland_native=False,
                 is_xwayland=True,
             )
@@ -71,8 +109,19 @@ def test_resolve_linux_combobox_policy_uses_compat_popup_for_wayland_sessions() 
     )
 
 
+def test_resolve_linux_combobox_policy_prefers_native_guards_for_packaged_linux() -> None:
+    assert resolve_linux_combobox_policy(_packaged_wayland_runtime()) == "patched-native"
+
+
+def test_resolve_linux_combobox_policy_keeps_appimage_on_compat_popup() -> None:
+    assert resolve_linux_combobox_policy(_appimage_wayland_runtime()) == "compat-popup"
+
+
 def test_enable_wayland_combobox_support_skips_non_linux_runtime() -> None:
-    root = tk.Tk()
+    try:
+        root = tk.Tk()
+    except TclError as error:
+        pytest.skip(f"Tk runtime unavailable in this environment: {error}")
     root.withdraw()
     try:
         combo = ttk.Combobox(root, values=["A", "B"], state="readonly")
@@ -84,6 +133,8 @@ def test_enable_wayland_combobox_support_skips_non_linux_runtime() -> None:
                 wayland_display="",
                 x11_display="",
                 is_linux=False,
+                is_packaged=False,
+                is_appimage=False,
                 is_wayland_native=False,
                 is_xwayland=False,
             ),
@@ -108,6 +159,8 @@ def test_enable_wayland_combobox_support_installs_linux_native_guards_on_x11() -
                 wayland_display="",
                 x11_display=":0",
                 is_linux=True,
+                is_packaged=False,
+                is_appimage=False,
                 is_wayland_native=False,
                 is_xwayland=False,
             ),
@@ -191,12 +244,48 @@ def test_wayland_popup_support_is_enabled_for_xwayland_sessions() -> None:
                 wayland_display="wayland-0",
                 x11_display=":0",
                 is_linux=True,
+                is_packaged=False,
+                is_appimage=False,
                 is_wayland_native=False,
                 is_xwayland=True,
             ),
         )
         assert manager is not None
         assert hasattr(combo, "_linux_popup_manager")
+    finally:
+        root.destroy()
+
+
+def test_packaged_linux_uses_native_guards_instead_of_popup_manager() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        combo = ttk.Combobox(root, values=["One", "Two"], state="readonly")
+        combo.pack()
+        root.update_idletasks()
+
+        manager = enable_wayland_combobox_support(combo, runtime=_packaged_wayland_runtime())
+
+        assert manager is None
+        assert not hasattr(combo, "_linux_popup_manager")
+        assert bool(getattr(root, "_linux_combobox_native_guards_installed", False)) is True
+    finally:
+        root.destroy()
+
+
+def test_appimage_linux_uses_popup_manager_instead_of_native_guards() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        combo = ttk.Combobox(root, values=["One", "Two"], state="readonly")
+        combo.pack()
+        root.update_idletasks()
+
+        manager = enable_wayland_combobox_support(combo, runtime=_appimage_wayland_runtime())
+
+        assert manager is not None
+        assert hasattr(combo, "_linux_popup_manager")
+        assert not bool(getattr(root, "_linux_combobox_native_guards_installed", False))
     finally:
         root.destroy()
 

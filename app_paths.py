@@ -20,12 +20,24 @@ def _is_linux() -> bool:
     return sys.platform.startswith("linux")
 
 
+def _is_appimage_mode() -> bool:
+    if not _is_linux() or not _is_frozen_mode():
+        return False
+    appimage = str(os.environ.get("APPIMAGE", "") or "").strip()
+    appdir = str(os.environ.get("APPDIR", "") or "").strip()
+    return bool(appimage or appdir)
+
+
 def get_source_root() -> Path:
     return _SOURCE_ROOT
 
 
 def is_frozen_mode() -> bool:
     return _is_frozen_mode()
+
+
+def is_appimage_mode() -> bool:
+    return _is_appimage_mode()
 
 
 def get_resource_root() -> Path:
