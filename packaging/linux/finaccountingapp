@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_ROOT="/opt/FinAccountingApp"
+APP_BINARY="${APP_ROOT}/FinAccountingApp"
+
+if [[ ! -x "${APP_BINARY}" ]]; then
+  echo "Installed application binary not found or not executable: ${APP_BINARY}" >&2
+  exit 1
+fi
+
+exec "${APP_BINARY}" "$@"

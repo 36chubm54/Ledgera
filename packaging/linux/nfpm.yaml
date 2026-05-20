@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://nfpm.goreleaser.com/schema.json
+name: finaccountingapp
+arch: amd64
+platform: linux
+version: ${PACKAGE_VERSION}
+version_schema: semver
+release: 1
+section: utils
+priority: optional
+maintainer: 36chubm54 <noreply@github.com>
+description: |
+  Personal financial accounting desktop app with multicurrency support,
+  import and export flows, budgets, debts, assets, and reports.
+vendor: 36chubm54
+homepage: https://github.com/36chubm54/FinAccountingApp
+license: MIT
+contents:
+  - src: ${PACKAGE_ROOTFS}/opt/FinAccountingApp/
+    dst: /opt/FinAccountingApp
+    type: tree
+  - src: ${PACKAGE_ROOTFS}/usr/bin/finaccountingapp
+    dst: /usr/bin/finaccountingapp
+    file_info:
+      mode: 0755
+  - src: ${PACKAGE_ROOTFS}/usr/share/applications/finaccountingapp.desktop
+    dst: /usr/share/applications/finaccountingapp.desktop
+  - src: ${PACKAGE_ROOTFS}/usr/share/icons/hicolor/256x256/apps/finaccountingapp.png
+    dst: /usr/share/icons/hicolor/256x256/apps/finaccountingapp.png
+overrides:
+  deb:
+    depends:
+      - libfontconfig1
+      - libx11-6
+      - libxext6
+      - libxft2
+      - libxrender1
+  rpm:
+    depends:
+      - fontconfig
+      - libX11
+      - libXext
+      - libXft
+      - libXrender

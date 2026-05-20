@@ -33,13 +33,16 @@ jobs:
       - name: Install Linux packaging dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-tk patchelf libfuse2
+          sudo apt-get install -y python3-tk patchelf libfuse2 rpm
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           pip install .[pdf,build]
+
+      - name: Install nFPM
+        run: npm install -g @goreleaser/nfpm
 
       - name: Run targeted pytest slice
         run: >
@@ -74,6 +77,19 @@ jobs:
             artifacts/FinAccountingApp-linux.AppImage \
             tools/appimagetool.AppImage
 
+      - name: Build Linux system packages
+        run: |
+          chmod +x packaging/linux/build_system_packages.sh packaging/linux/finaccountingapp
+          bash packaging/linux/build_system_packages.sh \
+            dist/FinAccountingApp \
+            artifacts
+
+      - name: Verify Linux system packages
+        run: |
+          python packaging/linux/verify_system_packages.py \
+            --deb artifacts/FinAccountingApp-$(python -c "import runpy; print(runpy.run_path('version.py')['__version__'])")-x86_64.deb \
+            --rpm artifacts/FinAccountingApp-$(python -c "import runpy; print(runpy.run_path('version.py')['__version__'])")-x86_64.rpm
+
       - name: Upload Linux AppImage artifact
         uses: actions/upload-artifact@v4
         with:
@@ -81,8 +97,20 @@ jobs:
           path: artifacts/FinAccountingApp-linux.AppImage
           if-no-files-found: error
 
+      - name: Upload Linux system packages artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FinAccountingApp-linux-system-packages
+          path: |
+            artifacts/FinAccountingApp-*-x86_64.deb
+            artifacts/FinAccountingApp-*-x86_64.rpm
+          if-no-files-found: error
+
       - name: Attach Linux AppImage to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/FinAccountingApp-linux.AppImage
+          files: |
+            artifacts/FinAccountingApp-linux.AppImage
+            artifacts/FinAccountingApp-*-x86_64.deb
+            artifacts/FinAccountingApp-*-x86_64.rpm
