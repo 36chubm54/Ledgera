@@ -81,7 +81,8 @@ Packaging note:
 
 - the checked-in `FinAccountingApp.spec` builds the main `PyInstaller --onedir` app bundle
 - `FinAccountingApp.linux.spec` builds the Linux `PyInstaller --onedir` bundle that is then wrapped into `FinAccountingApp-linux.AppImage`
-- the current Linux package target is `X11`; native `Wayland` compatibility is not part of this packaging contract yet
+- the current Linux GUI contract supports `Wayland` / `XWayland` critical selector and popup flows through an app-managed compatibility popup path instead of relying on native Linux `ttk.Combobox` popdowns
+- Linux tag autocomplete follows the same split: custom popup path on Linux sessions, native `ttk.Combobox` behavior on Windows and other non-Linux runtimes
 - `migrate_json_to_sqlite.py` and `migrations/migration_002_rename_amount_kzt_to_base.py` are shipped inside that bundle as raw Python utility scripts rather than separate executable tools
 - the Windows release workflow can optionally sign `FinAccountingApp.exe` and the installer if certificate secrets are configured; otherwise the release remains unsigned
 - the Linux release workflow smoke-builds the AppImage path on PRs and publishes `FinAccountingApp-linux.AppImage` on tagged releases

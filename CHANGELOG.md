@@ -7,6 +7,26 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [2.3.0] - 2026-05-20
+
+### Added
+
+- Added a dedicated Wayland compatibility layer for critical `Combobox` and popup flows in the Tk GUI
+- Added native-Wayland runtime detection with `XWayland` fallback awareness for Linux GUI compatibility decisions
+
+### Changed
+
+- Packaged Linux GUI support now moves beyond the previous `X11`-only contract and treats `Wayland` / `XWayland` as supported through an app-managed compatibility popup path
+- Critical readonly selectors now use a custom popup fallback on Linux Wayland-family sessions to avoid fragile Tk `Combobox` popdowns
+- Important editable selectors now support deterministic popup selection through the same Linux compatibility layer without changing the default Windows and `X11` behavior
+- Linux tag autocomplete now uses the custom popup path only on Linux, while Windows keeps the native `ttk.Combobox` experience for that selector
+- Linux GUI compatibility documentation now states explicitly that native Linux `ttk.Combobox` dropdown behavior is not the supported contract for critical selector flows
+
+### Testing
+
+- Added regression coverage for Wayland runtime detection, popup selection behavior, status-bar selector integration, and the theme-layer popdown fallback guard
+- Added smoke coverage for Linux popup support in the `Settings -> Currency` comboboxes and a scripted self-test mode in the Wayland combobox debugger
+
 ## [2.2.0] - 2026-05-19
 
 ### Added

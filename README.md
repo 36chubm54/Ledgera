@@ -9,7 +9,7 @@
 
 Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, тегами, бюджетами, долгами, активами и целями.
 
-Текущий релиз `v2.2.0` расширяет desktop-линию до первого Linux-пакета на базе `PyInstaller --onedir` и `AppImage`, не ломая уже существующий Windows installer / updater flow. Поверх архитектуры с `amount_base` / `limit_base`, `base_currency`, per-tab GUI packages и platform-aware runtime paths приложение теперь собирает отдельный Linux bundle, публикует `FinAccountingApp-linux.AppImage` и держит mutable user data вне install tree как на Windows, так и на Linux.
+Текущий релиз `v2.3.0` развивает Linux desktop-линию дальше: поверх уже добавленного `PyInstaller --onedir` + `AppImage` теперь появился отдельный compatibility slice для `Wayland`, сфокусированный на стабильности `Combobox` и popup-flow без слома Windows installer / updater contract. Приложение по-прежнему держит mutable user data вне install tree, а Linux GUI contract теперь честно описывает поддержку `Wayland` / `XWayland` через compatibility popup path вместо зависимости от native `ttk.Combobox` popdown behavior.
 
 В актуальном runtime-контракте:
 
@@ -74,10 +74,11 @@ python main.py
 ### Linux build (`PyInstaller --onedir` + `AppImage`)
 
 - Первый Linux-артефакт собирается через `FinAccountingApp.linux.spec`, а затем упаковывается в `FinAccountingApp-linux.AppImage`
-- Текущий Linux-пакет совместим только с `X11`; `Wayland`-native поддержка в этой волне не заявляется
+- В Linux `Wayland` и `XWayland` критичные `Combobox` / popup-сценарии обслуживаются через compatibility popup path, а native `ttk.Combobox` dropdown behavior не считается надёжным runtime-контрактом
 - Linux packaged runtime по-прежнему разделяет bundle resources и mutable user data: база, конфиг валют, backups, exports и updates больше не должны попадать рядом с AppImage
 - User data для packaged Linux builds размещаются в `XDG_DATA_HOME/FinAccountingApp` или `~/.local/share/FinAccountingApp`
 - Только packaged Linux builds используют manual-update policy в этой волне: встроенный updater не выполняет скачивание/установку и вместо этого ведёт на ручное скачивание нового AppImage из GitHub Releases
+- Wayland compatibility в этой волне в первую очередь покрывает критичные `Combobox` и popup flows через app-managed popup path, включая Linux tag autocomplete; в Windows соответствующие tag selectors остаются на native `ttk.Combobox`
 
 ## ✨ Основные возможности
 

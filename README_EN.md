@@ -9,7 +9,7 @@
 
 Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals.
 
-The current `v2.2.0` release expands the desktop line with a first Linux package built around `PyInstaller --onedir` and `AppImage` without regressing the existing Windows installer / updater flow. On top of the existing `amount_base` / `limit_base` architecture, `base_currency` runtime model, per-tab GUI packages, and platform-aware runtime paths, the app now produces a dedicated Linux bundle, publishes `FinAccountingApp-linux.AppImage`, and keeps mutable user data outside the install tree on both Windows and Linux.
+The current `v2.3.0` release extends the Linux desktop line further: on top of the earlier `PyInstaller --onedir` + `AppImage` packaging work, it adds a dedicated Wayland compatibility slice focused on `Combobox` and popup stability without regressing the Windows installer / updater contract. Mutable user data still stays outside the install tree, and the Linux GUI contract now explicitly describes `Wayland` / `XWayland` support through a compatibility popup path rather than relying on native `ttk.Combobox` popdown behavior.
 
 In the current runtime contract:
 
@@ -74,10 +74,11 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 ### Linux build (`PyInstaller --onedir` + `AppImage`)
 
 - The first Linux artifact is built through `FinAccountingApp.linux.spec` and then wrapped as `FinAccountingApp-linux.AppImage`
-- The current Linux package is compatible with `X11` only; native `Wayland` support is not claimed in this release wave
+- On Linux `Wayland` and `XWayland`, critical `Combobox` / popup flows are handled through the compatibility popup path, and native `ttk.Combobox` dropdown behavior is not treated as a reliable runtime contract
 - Packaged Linux runtime keeps the same read-only resources vs mutable user-data split as Windows builds: the database, currency config, backups, exports, and updates are no longer expected to live beside the AppImage
 - User data for packaged Linux builds resolve to `XDG_DATA_HOME/FinAccountingApp` or `~/.local/share/FinAccountingApp`
 - Only packaged Linux builds use the manual-update policy in this release wave: in-app updater actions stay disabled and the supported path is manually downloading a newer AppImage from GitHub Releases
+- In this release wave, Wayland compatibility primarily covers critical `Combobox` and popup flows through an app-managed popup path, including Linux tag autocomplete; the corresponding tag selectors stay on native `ttk.Combobox` on Windows
 
 ## ✨ Core Features
 
