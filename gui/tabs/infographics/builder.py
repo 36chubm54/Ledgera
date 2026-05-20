@@ -6,6 +6,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
+from gui.combobox_compat import enable_wayland_combobox_support
 from gui.i18n import tr
 from gui.ui_theme import PAD_LG, PAD_SM, PAD_XL, create_card_section, get_palette
 
@@ -53,6 +54,7 @@ def build_infographics_tab(
         state="readonly",
     )
     pie_month_menu.grid(row=0, column=1, sticky="w", padx=(6, 0))
+    enable_wayland_combobox_support(pie_month_menu)
     pie_month_var.trace_add("write", on_chart_filter_change)
 
     daily_card = create_card_section(
@@ -135,6 +137,7 @@ def build_infographics_tab(
         state="readonly",
     )
     chart_month_menu.grid(row=0, column=1, sticky="w", padx=(6, 0))
+    enable_wayland_combobox_support(chart_month_menu)
     chart_month_var.trace_add("write", on_chart_filter_change)
 
     daily_bar_canvas = tk.Canvas(
@@ -162,6 +165,7 @@ def build_infographics_tab(
         state="readonly",
     )
     chart_year_menu.grid(row=0, column=1, sticky="w", padx=(6, 0))
+    enable_wayland_combobox_support(chart_year_menu)
     chart_year_var.trace_add("write", on_chart_filter_change)
 
     monthly_bar_canvas = tk.Canvas(

@@ -10,6 +10,7 @@ from tkinter import ttk
 
 from domain.asset import Asset
 from domain.errors import DomainError
+from gui.combobox_compat import enable_wayland_combobox_support
 from gui.i18n import tr
 from gui.logging_utils import log_ui_error
 from gui.ui_helpers import (
@@ -102,6 +103,7 @@ def show_asset_editor_dialog(
         width=12,
     )
     category_combo.grid(row=2, column=2, sticky="ew", padx=(0, 10))
+    enable_wayland_combobox_support(category_combo, bind_down=False)
 
     ttk.Label(content, text=tr("common.currency", "Валюта:")).grid(
         row=1, column=3, sticky="w", pady=(10, 0)
