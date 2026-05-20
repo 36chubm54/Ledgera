@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from tkinter import ttk
 from typing import cast
 
+from gui.combobox_compat import enable_wayland_combobox_support
 from gui.i18n import tr
 from gui.tooltip import show_popup_tooltip
 from gui.ui_helpers import enable_treeview_column_autosize
@@ -222,12 +223,14 @@ def build_journal_section(
     ).grid(row=0, column=3, sticky="ew", padx=(6, 0))
 
     ttk.Label(import_actions, text=tr("common.format", "Формат:")).grid(row=0, column=0, sticky="w")
-    ttk.Combobox(
+    import_format_combo = ttk.Combobox(
         import_actions,
         textvariable=import_format_var,
         values=format_options,
         state="readonly",
-    ).grid(row=0, column=1, sticky="ew", padx=(6, 8))
+    )
+    import_format_combo.grid(row=0, column=1, sticky="ew", padx=(6, 8))
+    enable_wayland_combobox_support(import_format_combo, bind_down=False)
     ttk.Label(import_actions, text=tr("common.mode", "Режим:")).grid(row=0, column=2, sticky="w")
     import_mode_combo = ttk.Combobox(
         import_actions,
@@ -236,6 +239,7 @@ def build_journal_section(
         state="readonly",
     )
     import_mode_combo.grid(row=0, column=3, sticky="ew", padx=(6, 8))
+    enable_wayland_combobox_support(import_mode_combo, bind_down=False)
 
     def _sync_import_mode_key(_event: object | None = None) -> None:
         idx = import_mode_combo.current()

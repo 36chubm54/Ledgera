@@ -5,6 +5,7 @@ from collections.abc import Callable
 from tkinter import ttk
 from typing import Any
 
+from gui.combobox_compat import enable_wayland_combobox_support
 from gui.i18n import tr
 from gui.ui_helpers import enable_treeview_column_autosize
 from gui.ui_theme import PAD_SM, enable_treeview_zebra
@@ -58,9 +59,14 @@ def build_mandatory_actions_row(
     ttk.Button(actions, text=tr("common.refresh", "Обновить"), command=on_refresh).grid(
         row=1, column=0, sticky="ew", padx=(0, 6)
     )
-    ttk.Combobox(actions, textvariable=format_var, values=["CSV", "XLSX"], state="readonly").grid(
-        row=1, column=1, sticky="ew", padx=6
+    format_combo = ttk.Combobox(
+        actions,
+        textvariable=format_var,
+        values=["CSV", "XLSX"],
+        state="readonly",
     )
+    format_combo.grid(row=1, column=1, sticky="ew", padx=6)
+    enable_wayland_combobox_support(format_combo, bind_down=False)
     ttk.Button(actions, text=tr("common.import", "Импорт"), command=on_import).grid(
         row=1, column=2, sticky="ew", padx=6
     )

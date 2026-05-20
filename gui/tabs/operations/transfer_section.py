@@ -10,6 +10,7 @@ from datetime import date
 from tkinter import ttk
 
 from domain.errors import DomainError
+from gui.combobox_compat import enable_wayland_combobox_support
 from gui.i18n import tr
 from gui.logging_utils import log_ui_error
 from gui.ui_helpers import show_error, show_info
@@ -55,6 +56,7 @@ def build_transfer_section(
         state="readonly",
     )
     transfer_from_menu.grid(row=0, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    enable_wayland_combobox_support(transfer_from_menu, bind_down=False)
 
     ttk.Label(
         transfer_frame,
@@ -69,6 +71,7 @@ def build_transfer_section(
         state="readonly",
     )
     transfer_to_menu.grid(row=1, column=1, sticky="ew", padx=PAD_SM, pady=PAD_XS)
+    enable_wayland_combobox_support(transfer_to_menu, bind_down=False)
 
     ttk.Label(
         transfer_frame,
