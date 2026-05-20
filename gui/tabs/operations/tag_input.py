@@ -321,6 +321,11 @@ def attach_tag_autocomplete(
         combobox.after(0, lambda: _show_popup(focus_listbox=True))
         return "break"
 
+    def _on_alt_down(_event: tk.Event | None = None) -> str:
+        _cancel_focus_check()
+        _show_popup(focus_listbox=True)
+        return "break"
+
     def _on_combobox_selected(_event: tk.Event | None = None) -> str:
         chosen = normalize_tag_name(combobox.get())
         if not chosen:
@@ -338,6 +343,7 @@ def attach_tag_autocomplete(
     combobox.configure(postcommand=_prepare_native_dropdown)
 
     if not is_linux_runtime:
+
         def _on_native_key_release(event: tk.Event | None = None) -> None:
             if event is not None and event.keysym in {"Up", "Down", "Return", "Escape", "Tab"}:
                 return
@@ -352,6 +358,8 @@ def attach_tag_autocomplete(
     combobox.bind("<KeyRelease>", _on_key_release, add="+")
     combobox.bind("<Down>", _on_down, add="+")
     combobox.bind("<Up>", _on_up, add="+")
+    combobox.bind("<Alt-Down>", _on_alt_down, add="+")
+    combobox.bind("<F4>", _on_alt_down, add="+")
     combobox.bind("<Return>", _on_return, add="+")
     combobox.bind("<KP_Enter>", _on_return, add="+")
     combobox.bind("<Escape>", _on_escape, add="+")

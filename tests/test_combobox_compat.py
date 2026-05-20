@@ -4,8 +4,6 @@ import tkinter as tk
 from tkinter import ttk
 from unittest.mock import patch
 
-import pytest
-
 from gui.combobox_compat import (
     GuiDisplayRuntime,
     detect_gui_display_runtime,
@@ -249,6 +247,31 @@ def test_wayland_popup_supports_normal_combobox_arrow_click_only() -> None:
             manager._on_click(None)
         root.update()
         assert manager.popup is not None
+    finally:
+        root.destroy()
+
+
+def test_wayland_popup_preserves_values_with_spaces() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        combo = ttk.Combobox(
+            root,
+            values=["[1] Main Wallet (KZT)", "[2] Savings Wallet (USD)"],
+            state="readonly",
+        )
+        combo.pack()
+        root.update_idletasks()
+
+        manager = enable_wayland_combobox_support(combo, runtime=_native_wayland_runtime())
+        assert manager is not None
+
+        manager.open_popup()
+        root.update()
+
+        assert manager.listbox is not None
+        assert manager.listbox.get(0) == "[1] Main Wallet (KZT)"
+        assert manager.listbox.get(1) == "[2] Savings Wallet (USD)"
     finally:
         root.destroy()
 

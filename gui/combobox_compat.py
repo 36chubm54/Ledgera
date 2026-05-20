@@ -211,7 +211,11 @@ class WaylandComboboxPopup:
     def _combo_values(self) -> tuple[str, ...]:
         raw_values = self.widget.cget("values")
         if isinstance(raw_values, str):
-            return tuple(value for value in raw_values.split() if value)
+            try:
+                parsed = self.widget.tk.splitlist(raw_values)
+            except tk.TclError:
+                parsed = tuple(value for value in raw_values.split() if value)
+            return tuple(str(value) for value in parsed if str(value))
         if isinstance(raw_values, tuple):
             return tuple(str(value) for value in raw_values if str(value))
         if isinstance(raw_values, list):
