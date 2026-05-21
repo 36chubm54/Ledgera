@@ -103,6 +103,7 @@ def render_metainfo_xml() -> str:
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>ledgera.desktop</id>
+  <pkgname>{html.escape(PACKAGE_NAME)}</pkgname>
   <name>{html.escape(PRODUCT_DISPLAY_NAME)}</name>
   <summary>{html.escape(summary)}</summary>
   <metadata_license>CC0-1.0</metadata_license>
@@ -111,6 +112,7 @@ def render_metainfo_xml() -> str:
     <name>36chubm54</name>
   </developer>
   <launchable type="desktop-id">ledgera.desktop</launchable>
+  <icon type="cached">{html.escape(PACKAGE_NAME)}</icon>
   <branding>
     <color type="primary" scheme_preference="light">#0e4c7f</color>
     <color type="primary" scheme_preference="dark">#0e4c7f</color>

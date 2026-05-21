@@ -41,7 +41,9 @@ def test_stage_system_package_rootfs_copies_bundle_and_assets(tmp_path: Path) ->
     assert "Comment=Ledgera personal finance desktop app" in desktop_entry_content
     assert "StartupWMClass=Ledgera" in desktop_entry_content
     metainfo_content = metainfo_entry.read_text(encoding="utf-8")
+    assert "<pkgname>ledgera</pkgname>" in metainfo_content
     assert '<launchable type="desktop-id">ledgera.desktop</launchable>' in metainfo_content
+    assert "<icon type=\"cached\">ledgera</icon>" in metainfo_content
     assert "<name>Ledgera</name>" in metainfo_content
     assert (
         "<summary>Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals.</summary>"
@@ -56,12 +58,14 @@ def test_render_metainfo_xml_includes_readme_summary_and_release_notes() -> None
     content = module.render_metainfo_xml()
 
     assert "<name>Ledgera</name>" in content
+    assert "<pkgname>ledgera</pkgname>" in content
     assert (
         "Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals."
         in content
     )
     assert "Added first-class Linux system-package packaging on top of the existing" in content
     assert '<launchable type="desktop-id">ledgera.desktop</launchable>' in content
+    assert "<icon type=\"cached\">ledgera</icon>" in content
 
 
 def test_write_package_env_tracks_version_and_rootfs(tmp_path: Path) -> None:
