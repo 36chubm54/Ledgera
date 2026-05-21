@@ -368,18 +368,25 @@ class Report:
         return year, rows
 
     @staticmethod
-    def _sort_key(record: Record) -> tuple[int, dt_date]:
-        parsed = Report._record_date(record)
-        if parsed is None:
-            return (1, dt_date.max)
-        return (0, parsed)
+    def _record_created_id(record: Record) -> int:
+        try:
+            return int(getattr(record, "id", 0) or 0)
+        except (TypeError, ValueError):
+            return 0
 
     @staticmethod
-    def _reverse_sort_key(record: Record) -> tuple[int, int]:
+    def _sort_key(record: Record) -> tuple[int, dt_date, int]:
         parsed = Report._record_date(record)
         if parsed is None:
-            return (1, 0)
-        return (0, -parsed.toordinal())
+            return (1, dt_date.max, Report._record_created_id(record))
+        return (0, parsed, Report._record_created_id(record))
+
+    @staticmethod
+    def _reverse_sort_key(record: Record) -> tuple[int, int, int]:
+        parsed = Report._record_date(record)
+        if parsed is None:
+            return (1, 0, 0)
+        return (0, -parsed.toordinal(), -Report._record_created_id(record))
 
     def _profit_records(self) -> list[Record]:
         if self._wallet_id is not None:
