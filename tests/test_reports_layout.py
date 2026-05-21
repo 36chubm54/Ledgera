@@ -103,3 +103,29 @@ def test_reports_layout_keeps_native_export_menu_for_packaged_x11() -> None:
         assert str(ui.export_button.cget("menu")) != ""
     finally:
         root.destroy()
+
+
+def test_linux_export_popup_closes_when_application_focus_is_lost() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        owner = _Owner(root)
+        owner.pack()
+
+        with patch(
+            "gui.tabs.reports.layout.detect_gui_display_runtime",
+            return_value=_appimage_wayland_runtime(),
+        ):
+            ui = build_reports_layout(owner)
+
+        manager = getattr(ui.export_button, "_linux_export_popup_manager")
+        manager.open_popup()
+        root.update()
+
+        assert manager.popup is not None
+        with patch.object(ui.export_button, "focus_displayof", return_value=None):
+            manager._close_if_focus_still_lost()
+
+        assert manager.popup is None
+    finally:
+        root.destroy()

@@ -82,7 +82,7 @@ class _LinuxExportPopupManager:
         if self.popup is None:
             return
         focus_widget = self.button.focus_displayof()
-        if focus_widget in (self.button, None) or self._focus_within_popup():
+        if focus_widget is self.button or self._focus_within_popup():
             return
         self.close_popup(restore_focus=False)
 
