@@ -82,7 +82,7 @@ def test_check_for_app_update_detects_newer_release(monkeypatch, service: AppUpd
         "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
         "assets": [
             {
-                "name": "FinAccountingApp-2.0.2-setup.exe",
+                "name": "Ledgera-2.0.2-setup.exe",
                 "browser_download_url": "https://example.invalid/setup.exe",
                 "size": 4096,
             }
@@ -97,7 +97,7 @@ def test_check_for_app_update_detects_newer_release(monkeypatch, service: AppUpd
     assert result.update_available is True
     assert result.latest_release is not None
     assert result.latest_release.version == "2.0.2"
-    assert result.latest_release.asset.name == "FinAccountingApp-2.0.2-setup.exe"
+    assert result.latest_release.asset.name == "Ledgera-2.0.2-setup.exe"
 
 
 def test_check_for_app_update_reports_current_when_versions_match(
@@ -129,7 +129,7 @@ def test_check_for_app_update_accepts_prerelease_tag_suffix(
         "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2-rc1",
         "assets": [
             {
-                "name": "FinAccountingApp-2.0.2-setup.exe",
+                "name": "Ledgera-2.0.2-setup.exe",
                 "browser_download_url": "https://example.invalid/setup.exe",
                 "size": 4096,
             }
@@ -155,7 +155,7 @@ def test_check_for_app_update_rejects_release_without_installer_asset(
         "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
         "assets": [
             {
-                "name": "FinAccountingApp-windows.zip",
+                "name": "Ledgera-windows.zip",
                 "browser_download_url": "https://example.invalid/bundle.zip",
             }
         ],
@@ -178,7 +178,7 @@ def test_download_app_update_streams_with_progress(
         tag_name="v2.0.2",
         release_url="https://example.invalid/release",
         asset=update_service_module.AppReleaseAsset(
-            name="FinAccountingApp-2.0.2-setup.exe",
+            name="Ledgera-2.0.2-setup.exe",
             download_url="https://example.invalid/setup.exe",
             size_bytes=6,
         ),
@@ -212,7 +212,7 @@ def test_download_app_update_cleans_partial_file_on_failure(
         tag_name="v2.0.2",
         release_url="https://example.invalid/release",
         asset=update_service_module.AppReleaseAsset(
-            name="FinAccountingApp-2.0.2-setup.exe",
+            name="Ledgera-2.0.2-setup.exe",
             download_url="https://example.invalid/setup.exe",
             size_bytes=6,
         ),
@@ -231,4 +231,4 @@ def test_download_app_update_cleans_partial_file_on_failure(
     with pytest.raises(AppUpdateDownloadError):
         service.download_app_update(release)
 
-    assert not (tmp_path / "FinAccountingApp-2.0.2-setup.exe.part").exists()
+    assert not (tmp_path / "Ledgera-2.0.2-setup.exe.part").exists()

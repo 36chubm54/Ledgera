@@ -1,5 +1,6 @@
-#define MyAppName "Финансовый учет"
+#define MyAppName "Ledgera"
 #define MyAppInternalName "FinAccountingApp"
+#define MyAppInstallDirName "Ledgera"
 #define MyAppPublisher "36chubm54"
 #define MyAppExeName "FinAccountingApp.exe"
 #define MyBundleDir AddBackslash(SourcePath) + "dist\FinAccountingApp"
@@ -19,7 +20,7 @@ AppVerName={#MyAppName} {#MyAppVersion}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppComments=Uninstall removes installed files and shortcuts only; user data remains in AppData.
-DefaultDirName={autopf}\{#MyAppInternalName}
+DefaultDirName={autopf}\{#MyAppInstallDirName}
 UsePreviousAppDir=no
 UsePreviousLanguage=no
 UsePreviousPrivileges=no
@@ -32,7 +33,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#SourcePath}\installer_dist
-OutputBaseFilename=FinAccountingApp-{#MyAppVersion}-setup
+OutputBaseFilename=Ledgera-{#MyAppVersion}-setup
 SetupIconFile={#MyIconFile}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 VersionInfoCompany={#MyAppPublisher}

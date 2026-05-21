@@ -51,9 +51,9 @@ def test_launch_installer_and_exit_spawns_process_and_closes_window(monkeypatch)
     monkeypatch.setattr(Path, "is_file", lambda self: True)
     monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(list(args)))
 
-    launch_installer_and_exit(window, "C:\\temp\\FinAccountingApp-2.0.2-setup.exe")
+    launch_installer_and_exit(window, "C:\\temp\\Ledgera-2.0.2-setup.exe")
 
-    assert calls == [["C:\\temp\\FinAccountingApp-2.0.2-setup.exe"]]
+    assert calls == [["C:\\temp\\Ledgera-2.0.2-setup.exe"]]
     assert window.destroyed is True
 
 
@@ -67,7 +67,7 @@ def test_launch_installer_and_exit_raises_when_spawn_fails(monkeypatch) -> None:
     monkeypatch.setattr(subprocess, "Popen", _raise)
 
     with pytest.raises(RuntimeError):
-        launch_installer_and_exit(window, "C:\\temp\\FinAccountingApp-2.0.2-setup.exe")
+        launch_installer_and_exit(window, "C:\\temp\\Ledgera-2.0.2-setup.exe")
 
 
 def test_launch_installer_and_exit_raises_when_installer_missing(tmp_path: Path) -> None:

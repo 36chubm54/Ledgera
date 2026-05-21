@@ -47,12 +47,12 @@ class _Controller:
             tag_name="v2.0.2",
             release_url="https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
             asset=AppReleaseAsset(
-                name="FinAccountingApp-2.0.2-setup.exe",
+                name="Ledgera-2.0.2-setup.exe",
                 download_url="https://example.invalid/setup.exe",
                 size_bytes=4096,
             ),
         )
-        self.download_path = Path("C:/Temp/FinAccountingApp-2.0.2-setup.exe")
+        self.download_path = Path("C:/Temp/Ledgera-2.0.2-setup.exe")
 
     def get_base_currency_code(self) -> str:
         return "KZT"

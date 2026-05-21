@@ -18,7 +18,7 @@ from domain.update import (
 )
 from version import __version__
 
-_INSTALLER_NAME_RE = re.compile(r"^FinAccountingApp-.+-setup\.exe$", re.IGNORECASE)
+_INSTALLER_NAME_RE = re.compile(r"^Ledgera-.+-setup\.exe$", re.IGNORECASE)
 _TAG_VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+].+)?$")
 WINDOWS_ONLY_UPDATE_MESSAGE = (
     "In-app updates are currently available only on Windows. "

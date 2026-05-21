@@ -118,7 +118,7 @@ jobs:
           if (-not $signtool) {
             throw "signtool.exe not found"
           }
-          $installer = Get-ChildItem "installer_dist\FinAccountingApp-*-setup.exe" | Select-Object -First 1 -ExpandProperty FullName
+          $installer = Get-ChildItem "installer_dist\Ledgera-*-setup.exe" | Select-Object -First 1 -ExpandProperty FullName
           if (-not $installer) {
             throw "Installer executable not found"
           }
@@ -129,21 +129,21 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Compress-Archive -Path dist\FinAccountingApp\* -DestinationPath artifacts\FinAccountingApp-windows.zip -Force
+          Compress-Archive -Path dist\FinAccountingApp\* -DestinationPath artifacts\Ledgera-windows.zip -Force
 
       - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FinAccountingApp-windows
-          path: artifacts/FinAccountingApp-windows.zip
+          name: Ledgera-windows
+          path: artifacts/Ledgera-windows.zip
           if-no-files-found: error
 
       - name: Upload Windows installer artifact
         if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
-          name: FinAccountingApp-installer
-          path: installer_dist/FinAccountingApp-*-setup.exe
+          name: Ledgera-installer
+          path: installer_dist/Ledgera-*-setup.exe
           if-no-files-found: error
 
       - name: Attach Windows assets to GitHub Release
@@ -151,5 +151,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/FinAccountingApp-windows.zip
-            installer_dist/FinAccountingApp-*-setup.exe
+            artifacts/Ledgera-windows.zip
+            installer_dist/Ledgera-*-setup.exe
