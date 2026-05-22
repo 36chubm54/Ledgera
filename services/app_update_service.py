@@ -263,6 +263,10 @@ class AppUpdateService:
                     continue
                 if bool(raw_release.get("draft")):
                     continue
+                if bool(raw_release.get("prerelease")) and not _is_prerelease_version(
+                    current_version
+                ):
+                    continue
                 tag_name = str(raw_release.get("tag_name") or "").strip()
                 if not tag_name or _parse_version(tag_name.removeprefix("v")) is None:
                     continue

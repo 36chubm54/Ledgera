@@ -203,6 +203,34 @@ def test_check_for_app_update_ignores_prerelease_for_stable_current(
     assert result.latest_release is None
 
 
+def test_check_for_app_update_ignores_prerelease_release_flag_for_stable_current(
+    monkeypatch,
+    service: AppUpdateService,
+) -> None:
+    payload = [
+        {
+            "tag_name": "v2.0.2",
+            "prerelease": True,
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "assets": [
+                {
+                    "name": "Ledgera-2.0.2-setup.exe",
+                    "browser_download_url": "https://example.invalid/setup.exe",
+                    "size": 4096,
+                }
+            ],
+        }
+    ]
+    monkeypatch.setattr(
+        update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
+    )
+
+    result = service.check_for_app_update()
+
+    assert result.update_available is False
+    assert result.latest_release is None
+
+
 def test_check_for_app_update_detects_newer_prerelease_with_same_core_version(
     monkeypatch,
     service: AppUpdateService,
