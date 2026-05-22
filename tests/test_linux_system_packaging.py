@@ -119,6 +119,10 @@ def test_verify_system_packages_normalizes_deb_revision_suffix() -> None:
 
     assert module._normalize_deb_version("2.4.0-1") == "2.4.0"
     assert module._normalize_deb_version("1:2.4.0-1") == "2.4.0"
+    assert module._normalize_deb_version("2.5.0~rc2-1") == "2.5.0-rc2"
+    assert module._normalize_deb_version("1:2.5.0~rc2-1") == "2.5.0-rc2"
+    assert module._normalize_rpm_version("2.5.0~rc2") == "2.5.0-rc2"
+    assert module._normalize_rpm_version("1:2.5.0~rc2") == "2.5.0-rc2"
 
 
 def test_verify_system_packages_parses_dpkg_contents_listing() -> None:

@@ -12,6 +12,7 @@
 #endif
 
 #define MyAppVersion GetStringFileInfo(MyBundleExe, "ProductVersion")
+#define MyAppVersionNumbers GetVersionNumbersString(MyBundleExe)
 
 [Setup]
 AppId={{A6A7D7E2-0DD4-4D44-8E0A-91DA9D76C8D5}
@@ -39,7 +40,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoProductName={#MyAppName}
-VersionInfoProductVersion={#MyAppVersion}
+VersionInfoProductVersion={#MyAppVersionNumbers}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

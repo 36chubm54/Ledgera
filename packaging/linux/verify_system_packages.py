@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import runpy
 import subprocess
 from pathlib import Path
@@ -48,9 +49,16 @@ def _normalize_deb_version(raw_version: str) -> str:
     text = str(raw_version or "").strip()
     if ":" in text:
         text = text.split(":", 1)[1]
-    if "-" in text:
+    if re.match(r"^.+-\d+$", text):
         text = text.rsplit("-", 1)[0]
-    return text
+    return text.replace("~", "-")
+
+
+def _normalize_rpm_version(raw_version: str) -> str:
+    text = str(raw_version or "").strip()
+    if ":" in text:
+        text = text.split(":", 1)[1]
+    return text.replace("~", "-")
 
 
 def verify_deb_package(path: Path) -> None:
@@ -74,7 +82,7 @@ def verify_rpm_package(path: Path) -> None:
     payload_paths = _normalize_payload_listing(_run("rpm", "-qplp", str(path)))
 
     assert package_name == "ledgera"
-    assert package_version == version
+    assert _normalize_rpm_version(package_version) == version
     assert architecture == "x86_64"
     assert REQUIRED_PAYLOAD_PATHS.issubset(payload_paths)
 
