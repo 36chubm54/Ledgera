@@ -28,6 +28,18 @@ class _FakeJsonResponse:
         return self._payload
 
 
+class _RecordedJsonGet:
+    def __init__(self, payloads: list[object]) -> None:
+        self._payloads = list(payloads)
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(self, *args, **kwargs) -> _FakeJsonResponse:
+        self.calls.append(dict(kwargs))
+        if not self._payloads:
+            raise AssertionError("Unexpected extra GitHub request")
+        return _FakeJsonResponse(self._payloads.pop(0))
+
+
 class _FakeStreamResponse:
     def __init__(
         self,
@@ -76,18 +88,28 @@ def test_check_for_app_update_rejects_non_windows_runtime() -> None:
         service.check_for_app_update()
 
 
+def test_runtime_kind_uses_windows_source_for_non_frozen_windows(monkeypatch) -> None:
+    service = AppUpdateService()
+    monkeypatch.setattr(update_service_module.os, "name", "nt")
+    monkeypatch.setattr(update_service_module, "is_frozen_mode", lambda: False)
+
+    assert service._get_runtime_kind() == "windows-source"
+
+
 def test_check_for_app_update_detects_newer_release(monkeypatch, service: AppUpdateService) -> None:
-    payload = {
-        "tag_name": "v2.0.2",
-        "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
-        "assets": [
-            {
-                "name": "Ledgera-2.0.2-setup.exe",
-                "browser_download_url": "https://example.invalid/setup.exe",
-                "size": 4096,
-            }
-        ],
-    }
+    payload = [
+        {
+            "tag_name": "v2.0.2",
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "assets": [
+                {
+                    "name": "Ledgera-2.0.2-setup.exe",
+                    "browser_download_url": "https://example.invalid/setup.exe",
+                    "size": 4096,
+                }
+            ],
+        }
+    ]
     monkeypatch.setattr(
         update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
     )
@@ -105,11 +127,13 @@ def test_check_for_app_update_reports_current_when_versions_match(
     monkeypatch,
     service: AppUpdateService,
 ) -> None:
-    payload = {
-        "tag_name": "v2.0.1",
-        "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.1",
-        "assets": [],
-    }
+    payload = [
+        {
+            "tag_name": "v2.0.1",
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.1",
+            "assets": [],
+        }
+    ]
     monkeypatch.setattr(
         update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
     )
@@ -125,17 +149,21 @@ def test_check_for_app_update_accepts_prerelease_tag_suffix(
     monkeypatch,
     service: AppUpdateService,
 ) -> None:
-    payload = {
-        "tag_name": "v2.0.2-rc1",
-        "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2-rc1",
-        "assets": [
-            {
-                "name": "Ledgera-2.0.2-setup.exe",
-                "browser_download_url": "https://example.invalid/setup.exe",
-                "size": 4096,
-            }
-        ],
-    }
+    monkeypatch.setattr(service, "get_current_version", lambda: "2.0.1-rc0")
+    payload = [
+        {
+            "tag_name": "v2.0.2-rc1",
+            "prerelease": True,
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2-rc1",
+            "assets": [
+                {
+                    "name": "Ledgera-2.0.2-setup.exe",
+                    "browser_download_url": "https://example.invalid/setup.exe",
+                    "size": 4096,
+                }
+            ],
+        }
+    ]
     monkeypatch.setattr(
         update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
     )
@@ -147,20 +175,179 @@ def test_check_for_app_update_accepts_prerelease_tag_suffix(
     assert result.latest_release.version == "2.0.2-rc1"
 
 
+def test_check_for_app_update_ignores_prerelease_for_stable_current(
+    monkeypatch,
+    service: AppUpdateService,
+) -> None:
+    payload = [
+        {
+            "tag_name": "v2.0.2-rc1",
+            "prerelease": True,
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2-rc1",
+            "assets": [
+                {
+                    "name": "Ledgera-2.0.2-setup.exe",
+                    "browser_download_url": "https://example.invalid/setup.exe",
+                    "size": 4096,
+                }
+            ],
+        }
+    ]
+    monkeypatch.setattr(
+        update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
+    )
+
+    result = service.check_for_app_update()
+
+    assert result.update_available is False
+    assert result.latest_release is None
+
+
+def test_check_for_app_update_detects_newer_prerelease_with_same_core_version(
+    monkeypatch,
+    service: AppUpdateService,
+) -> None:
+    monkeypatch.setattr(service, "get_current_version", lambda: "2.5.0-rc1")
+    payload = [
+        {
+            "tag_name": "v2.5.0-rc2",
+            "prerelease": True,
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.5.0-rc2",
+            "assets": [
+                {
+                    "name": "Ledgera-2.5.0-setup.exe",
+                    "browser_download_url": "https://example.invalid/setup.exe",
+                    "size": 4096,
+                }
+            ],
+        }
+    ]
+    monkeypatch.setattr(
+        update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
+    )
+
+    result = service.check_for_app_update()
+
+    assert result.update_available is True
+    assert result.latest_release is not None
+    assert result.latest_release.version == "2.5.0-rc2"
+
+
+def test_check_for_app_update_treats_stable_as_newer_than_same_core_prerelease(
+    monkeypatch,
+    service: AppUpdateService,
+) -> None:
+    monkeypatch.setattr(service, "get_current_version", lambda: "2.5.0-rc2")
+    payload = [
+        {
+            "tag_name": "v2.5.0",
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.5.0",
+            "assets": [
+                {
+                    "name": "Ledgera-2.5.0-setup.exe",
+                    "browser_download_url": "https://example.invalid/setup.exe",
+                    "size": 4096,
+                }
+            ],
+        }
+    ]
+    monkeypatch.setattr(
+        update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
+    )
+
+    result = service.check_for_app_update()
+
+    assert result.update_available is True
+    assert result.latest_release is not None
+    assert result.latest_release.version == "2.5.0"
+
+
+def test_check_for_app_update_allows_newer_prerelease_for_current_prerelease(
+    monkeypatch,
+    service: AppUpdateService,
+) -> None:
+    monkeypatch.setattr(service, "get_current_version", lambda: "2.5.0-rc2")
+    payload = [
+        {
+            "tag_name": "v2.6.0-rc1",
+            "prerelease": True,
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.6.0-rc1",
+            "assets": [
+                {
+                    "name": "Ledgera-2.6.0-setup.exe",
+                    "browser_download_url": "https://example.invalid/setup.exe",
+                    "size": 4096,
+                }
+            ],
+        }
+    ]
+    monkeypatch.setattr(
+        update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
+    )
+
+    result = service.check_for_app_update()
+
+    assert result.update_available is True
+    assert result.latest_release is not None
+    assert result.latest_release.version == "2.6.0-rc1"
+
+
+def test_check_for_app_update_scans_multiple_release_pages(
+    monkeypatch,
+    service: AppUpdateService,
+) -> None:
+    recorder = _RecordedJsonGet(
+        [
+            [
+                {
+                    "tag_name": "v2.0.1",
+                    "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.1",
+                    "assets": [],
+                }
+            ],
+            [
+                {
+                    "tag_name": "v2.0.2",
+                    "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+                    "assets": [
+                        {
+                            "name": "Ledgera-2.0.2-setup.exe",
+                            "browser_download_url": "https://example.invalid/setup.exe",
+                            "size": 4096,
+                        }
+                    ],
+                }
+            ],
+        ]
+    )
+    monkeypatch.setattr(update_service_module.requests, "get", recorder)
+
+    result = service.check_for_app_update()
+
+    assert result.update_available is True
+    assert result.latest_release is not None
+    assert result.latest_release.version == "2.0.2"
+    assert len(recorder.calls) == 2
+    assert recorder.calls[0]["params"] == {"per_page": service.RELEASES_PAGE_SIZE, "page": 1}
+    assert recorder.calls[1]["params"] == {"per_page": service.RELEASES_PAGE_SIZE, "page": 2}
+
+
 def test_check_for_app_update_rejects_release_without_installer_asset(
     monkeypatch,
     service: AppUpdateService,
 ) -> None:
-    payload = {
-        "tag_name": "v2.0.2",
-        "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
-        "assets": [
-            {
-                "name": "Ledgera-windows.zip",
-                "browser_download_url": "https://example.invalid/bundle.zip",
-            }
-        ],
-    }
+    payload = [
+        {
+            "tag_name": "v2.0.2",
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "assets": [
+                {
+                    "name": "Ledgera-windows.zip",
+                    "browser_download_url": "https://example.invalid/bundle.zip",
+                }
+            ],
+        }
+    ]
     monkeypatch.setattr(
         update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
     )
@@ -174,22 +361,24 @@ def test_check_for_app_update_selects_deb_asset_for_packaged_linux(
     service: AppUpdateService,
 ) -> None:
     monkeypatch.setattr(service, "_get_runtime_kind", lambda: "linux-deb")
-    payload = {
-        "tag_name": "v2.0.2",
-        "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
-        "assets": [
-            {
-                "name": "Ledgera-2.0.2-x86_64.deb",
-                "browser_download_url": "https://example.invalid/linux.deb",
-                "size": 8192,
-            },
-            {
-                "name": "Ledgera-2.0.2-x86_64.rpm",
-                "browser_download_url": "https://example.invalid/linux.rpm",
-                "size": 9216,
-            },
-        ],
-    }
+    payload = [
+        {
+            "tag_name": "v2.0.2",
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "assets": [
+                {
+                    "name": "Ledgera-2.0.2-x86_64.deb",
+                    "browser_download_url": "https://example.invalid/linux.deb",
+                    "size": 8192,
+                },
+                {
+                    "name": "Ledgera-2.0.2-x86_64.rpm",
+                    "browser_download_url": "https://example.invalid/linux.rpm",
+                    "size": 9216,
+                },
+            ],
+        }
+    ]
     monkeypatch.setattr(
         update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
     )
@@ -207,22 +396,24 @@ def test_check_for_app_update_selects_rpm_asset_for_packaged_linux(
     service: AppUpdateService,
 ) -> None:
     monkeypatch.setattr(service, "_get_runtime_kind", lambda: "linux-rpm")
-    payload = {
-        "tag_name": "v2.0.2",
-        "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
-        "assets": [
-            {
-                "name": "Ledgera-2.0.2-x86_64.deb",
-                "browser_download_url": "https://example.invalid/linux.deb",
-                "size": 8192,
-            },
-            {
-                "name": "Ledgera-2.0.2-x86_64.rpm",
-                "browser_download_url": "https://example.invalid/linux.rpm",
-                "size": 9216,
-            },
-        ],
-    }
+    payload = [
+        {
+            "tag_name": "v2.0.2",
+            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "assets": [
+                {
+                    "name": "Ledgera-2.0.2-x86_64.deb",
+                    "browser_download_url": "https://example.invalid/linux.deb",
+                    "size": 8192,
+                },
+                {
+                    "name": "Ledgera-2.0.2-x86_64.rpm",
+                    "browser_download_url": "https://example.invalid/linux.rpm",
+                    "size": 9216,
+                },
+            ],
+        }
+    ]
     monkeypatch.setattr(
         update_service_module.requests, "get", lambda *args, **kwargs: _FakeJsonResponse(payload)
     )

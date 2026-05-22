@@ -23,17 +23,17 @@ _INSTALLER_NAME_RE = re.compile(r"^Ledgera-.+-setup\.exe$", re.IGNORECASE)
 _DEB_PACKAGE_NAME_RE = re.compile(r"^Ledgera-.+-x86_64\.deb$", re.IGNORECASE)
 _RPM_PACKAGE_NAME_RE = re.compile(r"^Ledgera-.+-x86_64\.rpm$", re.IGNORECASE)
 _APPIMAGE_NAME_RE = re.compile(r"^Ledgera-linux\.AppImage$", re.IGNORECASE)
-_TAG_VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+].+)?$")
-WINDOWS_SOURCE_UPDATE_MESSAGE = (
-    "In-app updates are currently available on Windows and packaged Linux system installs. "
-    "Source-mode Linux should use GitHub Releases manually."
+_TAG_VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.+)?$")
+SOURCE_MODE_UPDATE_MESSAGE = (
+    "In-app update handoff is not supported for source-mode checkouts. "
+    "Use GitHub Releases manually."
 )
 LINUX_APPIMAGE_UPDATE_MESSAGE = (
     "In-app update handoff is not available yet for AppImage runtime. "
     "Download a newer AppImage from GitHub Releases."
 )
 LINUX_MANUAL_UPDATE_MESSAGE = (
-    "In-app updates are available only for packaged Linux system installs with a known package type. "
+    "In-app updates are available only for packaged Linux system installs with a known package type. "  # noqa: E501
     "Download a newer Linux package or AppImage from GitHub Releases."
 )
 
@@ -58,28 +58,68 @@ def _parse_version(value: str) -> tuple[int, int, int] | None:
     match = _TAG_VERSION_RE.match(str(value or "").strip())
     if not match:
         return None
-    major, minor, patch = match.groups()
+    major, minor, patch, _prerelease = match.groups()
     return (int(major), int(minor), int(patch))
 
 
+def _parse_version_key(
+    value: str,
+) -> tuple[tuple[int, int, int], tuple[tuple[int, int | str], ...] | None] | None:
+    match = _TAG_VERSION_RE.match(str(value or "").strip())
+    if not match:
+        return None
+    major, minor, patch, prerelease = match.groups()
+    core = (int(major), int(minor), int(patch))
+    if prerelease is None:
+        return core, None
+    prerelease_parts: list[tuple[int, int | str]] = []
+    for token in re.findall(r"[A-Za-z]+|\d+", prerelease):
+        if token.isdigit():
+            prerelease_parts.append((0, int(token)))
+        else:
+            prerelease_parts.append((1, token.lower()))
+    return core, tuple(prerelease_parts)
+
+
+def _is_prerelease_version(value: str) -> bool:
+    parsed = _parse_version_key(value)
+    return parsed is not None and parsed[1] is not None
+
+
 def _is_newer_version(current: str, latest: str) -> bool:
-    current_parts = _parse_version(current)
-    latest_parts = _parse_version(latest)
+    current_parts = _parse_version_key(current)
+    latest_parts = _parse_version_key(latest)
     if current_parts is None or latest_parts is None:
         return False
-    return latest_parts > current_parts
+    current_core, current_prerelease = current_parts
+    latest_core, latest_prerelease = latest_parts
+    if latest_core != current_core:
+        return latest_core > current_core
+    if current_prerelease is None:
+        return False
+    if latest_prerelease is None:
+        return True
+    return latest_prerelease > current_prerelease
+
+
+def _is_allowed_release_for_current(current: str, latest: str) -> bool:
+    return _is_prerelease_version(current) or not _is_prerelease_version(latest)
 
 
 def _runtime_not_supported_message(runtime_kind: str) -> str:
     if runtime_kind == "linux-appimage":
         return LINUX_APPIMAGE_UPDATE_MESSAGE
-    if runtime_kind in {"linux-source", "linux-unknown-package"}:
+    if runtime_kind in {"windows-source", "linux-source"}:
+        return SOURCE_MODE_UPDATE_MESSAGE
+    if runtime_kind == "linux-unknown-package":
         return LINUX_MANUAL_UPDATE_MESSAGE
-    return WINDOWS_SOURCE_UPDATE_MESSAGE
+    return SOURCE_MODE_UPDATE_MESSAGE
 
 
 class AppUpdateService:
-    RELEASES_LATEST_URL = "https://api.github.com/repos/36chubm54/FinAccountingApp/releases/latest"
+    RELEASES_LIST_URL = "https://api.github.com/repos/36chubm54/FinAccountingApp/releases"
+    RELEASES_PAGE_SIZE = 30
+    RELEASES_SCAN_PAGES = 3
     REQUEST_TIMEOUT = (10, 60)
     CHUNK_SIZE = 1024 * 64
 
@@ -94,7 +134,7 @@ class AppUpdateService:
 
     def _get_runtime_kind(self) -> str:
         if os.name == "nt":
-            return "windows"
+            return "windows" if is_frozen_mode() else "windows-source"
         if os.name != "nt" and sys.platform.startswith("linux"):
             if not is_frozen_mode():
                 return "linux-source"
@@ -111,16 +151,18 @@ class AppUpdateService:
         if runtime_kind not in {"windows", "linux-deb", "linux-rpm"}:
             raise AppUpdateNotSupportedError(_runtime_not_supported_message(runtime_kind))
 
-        payload = self._fetch_latest_release_payload()
-        tag_name = str(payload.get("tag_name") or "").strip()
-        version = tag_name.removeprefix("v")
         current_version = self.get_current_version()
-        if not _is_newer_version(current_version, version):
+        payload = self._fetch_candidate_release_payload(
+            current_version=current_version,
+        )
+        if payload is None:
             return AppUpdateCheckResult(
                 current_version=current_version,
                 latest_release=None,
                 update_available=False,
             )
+        tag_name = str(payload.get("tag_name") or "").strip()
+        version = tag_name.removeprefix("v")
 
         latest_release = AppUpdateReleaseInfo(
             version=version,
@@ -192,26 +234,44 @@ class AppUpdateService:
 
         return AppUpdateDownloadResult(release=release, downloaded_path=final_path)
 
-    def _fetch_latest_release_payload(self) -> dict[str, Any]:
-        try:
-            response = requests.get(
-                self.RELEASES_LATEST_URL,
-                timeout=self.REQUEST_TIMEOUT,
-                headers={"Accept": "application/vnd.github+json"},
-            )
-            response.raise_for_status()
-        except requests.RequestException as err:
-            raise AppUpdateMetadataError("Failed to check the latest GitHub Release.") from err
-        try:
-            payload = response.json()
-        except ValueError as err:
-            raise AppUpdateMetadataError("GitHub Release metadata is not valid JSON.") from err
-        if not isinstance(payload, dict):
-            raise AppUpdateMetadataError("GitHub Release metadata has an unexpected shape.")
-        tag_name = str(payload.get("tag_name") or "").strip()
-        if not tag_name or _parse_version(tag_name.removeprefix("v")) is None:
-            raise AppUpdateMetadataError("GitHub Release tag name is missing or invalid.")
-        return payload
+    def _fetch_candidate_release_payload(
+        self,
+        *,
+        current_version: str,
+    ) -> dict[str, Any] | None:
+        for page in range(1, self.RELEASES_SCAN_PAGES + 1):
+            try:
+                response = requests.get(
+                    self.RELEASES_LIST_URL,
+                    timeout=self.REQUEST_TIMEOUT,
+                    headers={"Accept": "application/vnd.github+json"},
+                    params={"per_page": self.RELEASES_PAGE_SIZE, "page": page},
+                )
+                response.raise_for_status()
+            except requests.RequestException as err:
+                raise AppUpdateMetadataError("Failed to check the latest GitHub Release.") from err
+            try:
+                payload = response.json()
+            except ValueError as err:
+                raise AppUpdateMetadataError("GitHub Release metadata is not valid JSON.") from err
+            if not isinstance(payload, list):
+                raise AppUpdateMetadataError("GitHub Release metadata has an unexpected shape.")
+            if not payload:
+                break
+            for raw_release in payload:
+                if not isinstance(raw_release, dict):
+                    continue
+                if bool(raw_release.get("draft")):
+                    continue
+                tag_name = str(raw_release.get("tag_name") or "").strip()
+                if not tag_name or _parse_version(tag_name.removeprefix("v")) is None:
+                    continue
+                version = tag_name.removeprefix("v")
+                if not _is_allowed_release_for_current(current_version, version):
+                    continue
+                if _is_newer_version(current_version, version):
+                    return raw_release
+        return None
 
     def _select_release_asset(self, payload: dict[str, Any], runtime_kind: str) -> AppReleaseAsset:
         if runtime_kind == "windows":
@@ -219,21 +279,21 @@ class AppUpdateService:
                 payload,
                 pattern=_INSTALLER_NAME_RE,
                 kind="windows-installer",
-                error_message="The latest GitHub Release does not contain a Windows installer asset.",
+                error_message="The latest GitHub Release does not contain a Windows installer asset.",  # noqa: E501
             )
         if runtime_kind == "linux-deb":
             return self._select_asset(
                 payload,
                 pattern=_DEB_PACKAGE_NAME_RE,
                 kind="linux-deb",
-                error_message="The latest GitHub Release does not contain a Linux .deb package asset.",
+                error_message="The latest GitHub Release does not contain a Linux .deb package asset.",  # noqa: E501
             )
         if runtime_kind == "linux-rpm":
             return self._select_asset(
                 payload,
                 pattern=_RPM_PACKAGE_NAME_RE,
                 kind="linux-rpm",
-                error_message="The latest GitHub Release does not contain a Linux .rpm package asset.",
+                error_message="The latest GitHub Release does not contain a Linux .rpm package asset.",  # noqa: E501
             )
         if runtime_kind == "linux-appimage":
             return self._select_asset(
