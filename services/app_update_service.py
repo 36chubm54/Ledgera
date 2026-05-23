@@ -107,7 +107,15 @@ def is_same_or_newer_app_version(current: str, target: str) -> bool:
     target_parts = _parse_version_key(target)
     if current_parts is None or target_parts is None:
         return False
-    return current_parts >= target_parts
+    current_core, current_prerelease = current_parts
+    target_core, target_prerelease = target_parts
+    if current_core != target_core:
+        return current_core > target_core
+    if current_prerelease is None:
+        return True
+    if target_prerelease is None:
+        return False
+    return current_prerelease >= target_prerelease
 
 
 def _is_allowed_release_for_current(current: str, latest: str) -> bool:

@@ -12,6 +12,7 @@ from services.app_update_service import (
     AppUpdateMetadataError,
     AppUpdateNotSupportedError,
     AppUpdateService,
+    is_same_or_newer_app_version,
 )
 
 
@@ -318,6 +319,14 @@ def test_check_for_app_update_allows_newer_prerelease_for_current_prerelease(
     assert result.update_available is True
     assert result.latest_release is not None
     assert result.latest_release.version == "2.6.0-rc1"
+
+
+def test_is_same_or_newer_app_version_treats_stable_as_newer_than_same_core_prerelease() -> None:
+    assert is_same_or_newer_app_version("2.5.1", "2.5.1-rc1") is True
+
+
+def test_is_same_or_newer_app_version_treats_prerelease_as_older_than_same_core_stable() -> None:
+    assert is_same_or_newer_app_version("2.5.1-rc2", "2.5.1") is False
 
 
 def test_check_for_app_update_scans_multiple_release_pages(
