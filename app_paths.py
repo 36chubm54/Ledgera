@@ -15,6 +15,7 @@ _RESOURCE_ROOT_OVERRIDE_ENV = "LEDGERA_RESOURCE_ROOT"
 _LEGACY_RESOURCE_ROOT_OVERRIDE_ENV = "FIN_ACCOUNTING_RESOURCE_ROOT"
 _LINUX_PACKAGE_KIND_OVERRIDE_ENV = "LEDGERA_LINUX_PACKAGE_KIND"
 _LEGACY_LINUX_PACKAGE_KIND_OVERRIDE_ENV = "FIN_ACCOUNTING_LINUX_PACKAGE_KIND"
+_user_data_root_cache: tuple[tuple[object, ...], Path] | None = None
 
 
 def _is_frozen_mode() -> bool:
@@ -167,10 +168,23 @@ def get_resource_root() -> Path:
 
 
 def get_user_data_root() -> Path:
+    global _user_data_root_cache
     override = _read_override(_DATA_DIR_OVERRIDE_ENV, _LEGACY_DATA_DIR_OVERRIDE_ENV)
     if override:
         return Path(override).expanduser().resolve()
-    return _migrate_legacy_user_data_root(_default_user_data_root(APP_DATA_DIRNAME))
+    signature = (
+        _is_frozen_mode(),
+        _is_windows(),
+        _is_linux(),
+        _is_appimage_mode(),
+        str(_get_platform_data_parent()),
+        str(get_source_root()),
+    )
+    if _user_data_root_cache is not None and _user_data_root_cache[0] == signature:
+        return _user_data_root_cache[1]
+    resolved = _migrate_legacy_user_data_root(_default_user_data_root(APP_DATA_DIRNAME))
+    _user_data_root_cache = (signature, resolved)
+    return resolved
 
 
 def ensure_user_data_root() -> Path:

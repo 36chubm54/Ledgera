@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from unittest.mock import Mock
 
 from gui.startup_coordinator import DeferredStartupCoordinator
 
 
 def test_deferred_startup_success_stages_ui_refreshes_via_idle_scheduler() -> None:
     events: list[tuple[str, object]] = []
-    idle_scheduled: list[tuple[str, object]] = []
-    delayed_scheduled: list[tuple[str, int, object]] = []
+    idle_scheduled: list[tuple[str, Callable[[], None]]] = []
+    delayed_scheduled: list[tuple[str, int, Callable[[], None]]] = []
 
     class Controller:
         def apply_mandatory_auto_payments(self) -> list[str]:
@@ -85,4 +87,64 @@ def test_deferred_startup_success_stages_ui_refreshes_via_idle_scheduler() -> No
         ("all", None),
         ("online", None),
         ("autopay", ["autopay"]),
+    ]
+
+
+def test_deferred_startup_staged_callback_failure_recovers_refresh_and_online_mode() -> None:
+    events: list[tuple[str, object]] = []
+    idle_scheduled: list[tuple[str, Callable[[], None]]] = []
+    delayed_scheduled: list[tuple[str, int, Callable[[], None]]] = []
+
+    class Controller:
+        def apply_mandatory_auto_payments(self) -> list[str]:
+            return ["autopay"]
+
+    repository = Mock()
+    repository.load_all.side_effect = [["initial-record"], ["fallback-record"]]
+
+    def run_background(task, *, on_success, on_error=None, busy_message="", block_ui=True):
+        del on_error, busy_message, block_ui
+        on_success(task())
+
+    def schedule_after_idle(key: str, callback) -> str:
+        idle_scheduled.append((key, callback))
+        return key
+
+    def schedule_after(key: str, delay_ms: int, callback) -> str:
+        delayed_scheduled.append((key, delay_ms, callback))
+        return key
+
+    coordinator = DeferredStartupCoordinator(
+        controller=Controller(),
+        repository=repository,
+        run_background=run_background,
+        schedule_after_idle=schedule_after_idle,
+        schedule_after=schedule_after,
+        refresh_list=lambda *, records=None: events.append(("list", records)),
+        refresh_charts=lambda *, records=None: (_ for _ in ()).throw(RuntimeError("boom")),
+        refresh_budgets=lambda: events.append(("budgets", None)),
+        refresh_all=lambda: events.append(("all", None)),
+        apply_saved_online_mode=lambda: events.append(("online", None)),
+        show_auto_payment_message=lambda items: events.append(("autopay", list(items))),
+        restore_keyboard_focus=lambda: events.append(("focus", None)),
+        set_busy=lambda busy, message: events.append(("busy", (busy, message))),
+        logger=logging.getLogger("tests.startup_coordinator"),
+    )
+
+    coordinator.start()
+
+    while idle_scheduled:
+        _key, callback = idle_scheduled.pop(0)
+        callback()
+
+    while delayed_scheduled:
+        _key, _delay_ms, callback = delayed_scheduled.pop(0)
+        callback()
+
+    assert events == [
+        ("busy", (False, "")),
+        ("focus", None),
+        ("list", ["initial-record"]),
+        ("list", ["fallback-record"]),
+        ("online", None),
     ]
