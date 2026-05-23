@@ -77,7 +77,7 @@ class _Controller:
         self.release = AppUpdateReleaseInfo(
             version="2.0.2",
             tag_name="v2.0.2",
-            release_url="https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            release_url="https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
             asset=AppReleaseAsset(
                 name="Ledgera-2.0.2-setup.exe",
                 download_url="https://example.invalid/setup.exe",
@@ -182,7 +182,7 @@ class _Controller:
         return "2.0.1"
 
     def get_app_release_page_url(self) -> str:
-        return "https://github.com/36chubm54/FinAccountingApp/releases"
+        return "https://github.com/36chubm54/Ledgera/releases"
 
     def is_app_update_supported(self) -> bool:
         return self.supported
@@ -493,7 +493,7 @@ def test_settings_tab_packaged_linux_flow_downloads_and_opens_package() -> None:
         controller.release = AppUpdateReleaseInfo(
             version="2.0.2",
             tag_name="v2.0.2",
-            release_url="https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            release_url="https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
             asset=AppReleaseAsset(
                 name="Ledgera-2.0.2-x86_64.deb",
                 download_url="https://example.invalid/linux.deb",
@@ -554,7 +554,7 @@ def test_settings_tab_packaged_linux_offers_release_page_after_launch_failure() 
         controller.release = AppUpdateReleaseInfo(
             version="2.0.2",
             tag_name="v2.0.2",
-            release_url="https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            release_url="https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
             asset=AppReleaseAsset(
                 name="Ledgera-2.0.2-x86_64.deb",
                 download_url="https://example.invalid/linux.deb",
@@ -758,7 +758,7 @@ def test_settings_tab_restores_install_cta_for_pending_download() -> None:
             version="2.0.2",
             asset_kind="linux-deb",
             artifact_path=controller.download_path,
-            release_url="https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            release_url="https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
         )
         launches: list[str] = []
         context = _build_context(controller, launches)
@@ -803,7 +803,7 @@ def test_settings_tab_restores_install_cta_for_pending_windows_installer() -> No
             version="2.0.2",
             asset_kind="windows-installer",
             artifact_path=controller.download_path,
-            release_url="https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            release_url="https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
         )
         launches: list[str] = []
         context = _build_context(controller, launches)
@@ -845,7 +845,7 @@ def test_settings_tab_clears_missing_pending_download_and_falls_back_to_check() 
             version="2.0.2",
             asset_kind="linux-deb",
             artifact_path=controller.download_path,
-            release_url="https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            release_url="https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
         )
         launches: list[str] = []
         context = _build_context(controller, launches)
