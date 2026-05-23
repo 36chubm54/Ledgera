@@ -37,3 +37,17 @@ class AppUpdateDownloadProgress:
 class AppUpdateDownloadResult:
     release: AppUpdateReleaseInfo
     downloaded_path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class PendingUpdateInstallState:
+    version: str
+    asset_kind: str
+    artifact_path: Path
+    release_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class PendingUpdateCleanupState:
+    artifact_path: Path
+    target_version: str

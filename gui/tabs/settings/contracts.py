@@ -6,7 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from domain.update import AppUpdateCheckResult, AppUpdateDownloadResult, AppUpdateReleaseInfo
+from domain.update import (
+    AppUpdateCheckResult,
+    AppUpdateDownloadResult,
+    AppUpdateReleaseInfo,
+    PendingUpdateInstallState,
+)
 from gui.i18n import tr
 
 
@@ -57,6 +62,12 @@ class SettingsController(Protocol):
         *,
         on_progress,
     ) -> AppUpdateDownloadResult: ...
+
+    def save_pending_update_install_state(self, state: PendingUpdateInstallState) -> None: ...
+
+    def load_pending_update_install_state(self) -> PendingUpdateInstallState | None: ...
+
+    def clear_pending_update_install_state(self) -> None: ...
 
     def update_runtime_currency_config(
         self,
@@ -116,7 +127,12 @@ class SettingsTabContext(Protocol):
 
     def _refresh_all(self) -> None: ...
 
-    def _launch_downloaded_update_and_exit(self, artifact_path: str) -> None: ...
+    def _launch_downloaded_update_and_exit(
+        self,
+        artifact_path: str,
+        *,
+        target_version: str | None = None,
+    ) -> None: ...
 
     def _launch_installer_and_exit(self, installer_path: str) -> None: ...
 

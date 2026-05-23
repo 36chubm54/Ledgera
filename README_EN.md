@@ -9,7 +9,7 @@
 
 Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals.
 
-The current `v2.5.0` release extends the desktop updater contract on top of the finished packaging wave: packaged Linux `deb` / `rpm` builds can now check GitHub Releases, match the artifact to the current install type, download it into a user-scoped `updates` cache, and hand installation off through a terminal-based flow, while updater logic in general is now prerelease-aware. Internal bundle/runtime paths and other compatibility-sensitive technical identifiers still keep `FinAccountingApp`, and source-mode Windows/Linux plus `AppImage` remain on an explicit manual release-page path.
+The current `v2.5.1` release hardens the updater and startup UX after `v2.5.0`: packaged Windows and packaged Linux now persist already-downloaded update state across restarts, the primary CTA in `Settings -> Application updates` switches from `Check for updates` to `Install update`, and downloaded installer/package artifacts are removed only after the next successful launch of the target-or-newer version. In parallel, the polished startup surfaces make deferred startup and the first-run setup feel more intentional while the prerelease-aware updater logic and terminal/package-manager preflight keep install handoff honest.
 
 In the current runtime contract:
 
@@ -17,6 +17,8 @@ In the current runtime contract:
 - env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` remains a runtime override over secure storage
 - packaged mutable runtime state lives in a user-scoped platform data directory: `AppData` on Windows and `XDG_DATA_HOME` / `~/.local/share/FinAccountingApp` on Linux
 - the Windows updater downloads installers into a dedicated `updates` cache under `AppData`, and the packaged Linux updater does the same for `.deb` / `.rpm` artifacts in a user-scoped Linux updates cache
+- when an installer/package has already been downloaded, the updater now restores that state after restart and offers `Install update` without re-downloading it
+- downloaded updater artifacts are removed only after the next successful launch of the upgraded target-or-newer version, not immediately after handoff
 - stable builds ignore GitHub prerelease releases, while prerelease builds can see newer prereleases and then transition to the final stable release
 - backup/export files remain plaintext financial data, and that is now reflected explicitly in the UX and docs
 - the Windows release workflow is prepared for optional code signing, but without a certificate the installer and bundle remain unsigned
@@ -87,8 +89,8 @@ The app starts a Tkinter GUI on top of SQLite runtime storage. `Infographics` an
 - User data for packaged Linux builds resolve to `XDG_DATA_HOME/FinAccountingApp` or `~/.local/share/FinAccountingApp`
 - For `.deb` / `.rpm` system packages, the bundle is installed under `/opt/FinAccountingApp`, the launcher is exposed as `/usr/bin/ledgera`, and the desktop entry plus icon are registered system-wide
 - Linux package metadata is now owned by the packaging layer: AppStream summary, description, and release notes are no longer generated directly from `README` / `CHANGELOG`, and the generated metadata is validated through `appstreamcli --pedantic`
-- Packaged Linux `deb` / `rpm` builds now support an in-app updater flow: the app detects the current package kind through an install-root marker, downloads the matching Linux package into a user-scoped `updates` cache, and after confirmation opens a terminal-based `sudo apt install ...` / `sudo dnf install ...` handoff
-- If the packaged Linux runtime cannot determine the package kind confidently or cannot resolve a supported terminal executable, the updater degrades to the manual GitHub Releases path instead of guessing an install command
+- Packaged Linux `deb` / `rpm` builds now support a persisted in-app updater flow: the app detects the current package kind through an install-root marker, downloads the matching Linux package into a user-scoped `updates` cache, survives restarts with a ready-to-install CTA, and after confirmation opens a terminal-based `sudo apt install ...` / `sudo dnf install ...` handoff
+- If the packaged Linux runtime cannot determine the package kind confidently, cannot resolve a supported terminal executable, or cannot find the required package manager (`apt` / `dnf`), the updater degrades to the manual GitHub Releases path instead of guessing an install command
 - `AppImage` and source-mode Linux still do not update in-app: for those runtimes the supported path remains manually downloading a newer Linux package or AppImage from GitHub Releases
 - In this release wave, Wayland compatibility now splits `system-package`, `AppImage`, and source runtime behavior: `deb` / `rpm` packaged Linux keeps native `ttk.Combobox` behavior by default, while `AppImage`, source-mode Linux, and Linux tag autocomplete can still use the app-managed fallback path when needed; the corresponding selectors stay on native `ttk.Combobox` on Windows
 - `GNOME Software` may display license data and release notes inconsistently for locally installed third-party packages even when AppStream metadata is present; in practice this can differ between Ubuntu GNOME and Fedora GNOME
@@ -121,7 +123,7 @@ bash packaging/linux/build_system_packages.sh dist/FinAccountingApp artifacts
 - Distribution System for monthly net-income allocation and frozen snapshots
 - Wealth layer: `Assets`, `Goals`, and a dedicated wealth `Dashboard`
 - Full backup / import / migration for `JSON` ↔ `SQLite`
-- In-app updater in `Settings`: Windows downloads `Ledgera-*-setup.exe` and hands it to the normal installer flow, while packaged Linux `deb` / `rpm` builds download the matching package and hand installation off through a terminal-based flow
+- In-app updater in `Settings`: Windows downloads `Ledgera-*-setup.exe`, packaged Linux `deb` / `rpm` builds download the matching package, and both packaged runtime paths now persist downloaded-update state across restarts before the final install handoff
 - Read-only Data Audit Engine for runtime consistency checks, including tag integrity
 - External `locales/*.txt` language packs with a shared i18n loader and fallback chain
 - Runtime `theme` / `language` preferences persisted in SQLite schema metadata
@@ -142,7 +144,7 @@ bash packaging/linux/build_system_packages.sh dist/FinAccountingApp artifacts
 - `base_currency` is chosen only during first-run setup, then SQLite `schema_meta` remains the source of truth
 - By default, the display selector is limited to the whitelist `KZT` / `USD` / `EUR` / `RUB`, even if cached rates contain more currency codes
 - `Settings -> Currency and rates` can update `display_currency`, provider mode, primary/fallback provider, `exchange_rate_api_key`, `auto_update`, and `update_interval_minutes`, but not post-startup `base_currency`
-- `Settings -> Application updates` on Windows can check the latest GitHub Release, download `Ledgera-*-setup.exe` into `AppData\\updates`, and offer install handoff through the normal installer; packaged Linux `deb` / `rpm` builds now similarly download the matching package into a user-scoped updates cache and open a terminal-based install handoff, while `AppImage` and source-mode Linux stay on the manual GitHub Releases path
+- `Settings -> Application updates` on Windows can check the latest GitHub Release, download `Ledgera-*-setup.exe` into `AppData\\updates`, survive restart with a ready-to-install CTA, and then hand off to the normal installer; packaged Linux `deb` / `rpm` builds do the same for the matching package in a user-scoped updates cache and a terminal-based install handoff, while `AppImage` and source-mode Linux stay on the manual GitHub Releases path
 - `exchange_rate_api_key` is no longer expected to live in `currency_config.json`: in packaged/runtime flows it is migrated into secure OS storage where the platform supports it, env var `FINACCOUNTING_EXCHANGE_RATE_API_KEY` remains an override path, and a plaintext fallback is only tolerated when secure storage is unavailable
 - `auto_update` is now active behavior instead of passive metadata: when online mode is enabled, rates refresh automatically according to `update_interval_minutes`
 - Exported reports are localized to the current UI language, and base-amount columns explicitly show the real base code, for example `Amount (KZT)`

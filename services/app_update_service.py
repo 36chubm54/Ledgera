@@ -54,7 +54,7 @@ class AppUpdateDownloadError(AppUpdateError):
     """Raised when the installer download fails."""
 
 
-def _parse_version(value: str) -> tuple[int, int, int] | None:
+def parse_app_version(value: str) -> tuple[int, int, int] | None:
     match = _TAG_VERSION_RE.match(str(value or "").strip())
     if not match:
         return None
@@ -81,12 +81,12 @@ def _parse_version_key(
     return core, tuple(prerelease_parts)
 
 
-def _is_prerelease_version(value: str) -> bool:
+def is_prerelease_app_version(value: str) -> bool:
     parsed = _parse_version_key(value)
     return parsed is not None and parsed[1] is not None
 
 
-def _is_newer_version(current: str, latest: str) -> bool:
+def is_newer_app_version(current: str, latest: str) -> bool:
     current_parts = _parse_version_key(current)
     latest_parts = _parse_version_key(latest)
     if current_parts is None or latest_parts is None:
@@ -102,8 +102,24 @@ def _is_newer_version(current: str, latest: str) -> bool:
     return latest_prerelease > current_prerelease
 
 
+def is_same_or_newer_app_version(current: str, target: str) -> bool:
+    current_parts = _parse_version_key(current)
+    target_parts = _parse_version_key(target)
+    if current_parts is None or target_parts is None:
+        return False
+    current_core, current_prerelease = current_parts
+    target_core, target_prerelease = target_parts
+    if current_core != target_core:
+        return current_core > target_core
+    if current_prerelease is None:
+        return True
+    if target_prerelease is None:
+        return False
+    return current_prerelease >= target_prerelease
+
+
 def _is_allowed_release_for_current(current: str, latest: str) -> bool:
-    return _is_prerelease_version(current) or not _is_prerelease_version(latest)
+    return is_prerelease_app_version(current) or not is_prerelease_app_version(latest)
 
 
 def _runtime_not_supported_message(runtime_kind: str) -> str:
@@ -263,17 +279,17 @@ class AppUpdateService:
                     continue
                 if bool(raw_release.get("draft")):
                     continue
-                if bool(raw_release.get("prerelease")) and not _is_prerelease_version(
+                if bool(raw_release.get("prerelease")) and not is_prerelease_app_version(
                     current_version
                 ):
                     continue
                 tag_name = str(raw_release.get("tag_name") or "").strip()
-                if not tag_name or _parse_version(tag_name.removeprefix("v")) is None:
+                if not tag_name or parse_app_version(tag_name.removeprefix("v")) is None:
                     continue
                 version = tag_name.removeprefix("v")
                 if not _is_allowed_release_for_current(current_version, version):
                     continue
-                if _is_newer_version(current_version, version):
+                if is_newer_app_version(current_version, version):
                     return raw_release
         return None
 

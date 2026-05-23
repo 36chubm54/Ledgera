@@ -17,6 +17,7 @@ from config import SQLITE_PATH
 from gui.combobox_compat import enable_wayland_combobox_support
 from gui.i18n import tr
 from gui.shell.shell_window import APP_LINUX_WM_CLASS, apply_window_icon
+from gui.ui_theme import PAD_LG, PAD_SM, PAD_XS, bootstrap_ui, get_palette, get_theme
 from infrastructure.currency_providers import DEFAULT_PROVIDER_REGISTRY, CurrencyProviderRegistry
 
 SUPPORTED_SETUP_CURRENCIES = ("KZT", "USD", "EUR", "RUB")
@@ -307,10 +308,19 @@ def run_initial_setup_wizard(
     root.resizable(False, False)
     root.grid_columnconfigure(0, weight=1)
     apply_window_icon(root, icons_dir=get_icons_dir())
+    bootstrap_ui(root, get_theme())
+    palette = get_palette()
 
-    content = ttk.Frame(root, padding=16)
+    content = ttk.Frame(root, padding=20, style="Card.TFrame")
     content.grid(row=0, column=0, sticky="nsew")
+    content.grid_columnconfigure(0, minsize=190)
     content.grid_columnconfigure(1, weight=1)
+
+    ttk.Label(
+        content,
+        text=tr("setup.heading", "Первый запуск Ledgera"),
+        style="Header.TLabel",
+    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
 
     ttk.Label(
         content,
@@ -318,9 +328,10 @@ def run_initial_setup_wizard(
             "setup.summary",
             "Настройте базовую валюту и параметры поставщика курсов перед первым запуском.",
         ),
-        wraplength=460,
+        style="CardText.TLabel",
+        wraplength=520,
         justify="left",
-    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
+    ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, PAD_LG))
 
     base_var = tk.StringVar(value=base_currency)
     display_var = tk.StringVar(value=display_currency)
@@ -340,7 +351,7 @@ def run_initial_setup_wizard(
     )
     error_var = tk.StringVar(value="")
 
-    row = 1
+    row = 2
 
     def _add_label(key: str, default: str) -> None:
         nonlocal row
@@ -348,7 +359,7 @@ def run_initial_setup_wizard(
             row=row,
             column=0,
             sticky="w",
-            pady=4,
+            pady=PAD_XS,
             padx=(0, 12),
         )
 
@@ -360,7 +371,7 @@ def run_initial_setup_wizard(
             state="readonly",
             width=28,
         )
-        combo.grid(row=row, column=1, sticky="ew", pady=4)
+        combo.grid(row=row, column=1, sticky="ew", pady=PAD_XS)
         enable_wayland_combobox_support(combo)
         return combo
 
@@ -389,7 +400,7 @@ def run_initial_setup_wizard(
         row=row,
         column=1,
         sticky="ew",
-        pady=4,
+        pady=PAD_XS,
     )
     row += 1
 
@@ -397,7 +408,7 @@ def run_initial_setup_wizard(
         content,
         text=tr("setup.auto_update", "Автообновление курсов"),
         variable=auto_update_var,
-    ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(8, 4))
+    ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(PAD_SM, PAD_XS))
     row += 1
 
     _add_label("setup.update_interval", "Интервал обновления (мин)")
@@ -405,16 +416,25 @@ def run_initial_setup_wizard(
         row=row,
         column=1,
         sticky="ew",
-        pady=4,
+        pady=PAD_XS,
     )
     row += 1
 
-    ttk.Label(content, textvariable=error_var, foreground="#b3261e", wraplength=460).grid(
+    ttk.Separator(content, orient="horizontal").grid(
+        row=row,
+        column=0,
+        columnspan=2,
+        sticky="ew",
+        pady=(PAD_SM, PAD_SM),
+    )
+    row += 1
+
+    ttk.Label(content, textvariable=error_var, foreground=palette.danger, wraplength=520).grid(
         row=row,
         column=0,
         columnspan=2,
         sticky="w",
-        pady=(4, 8),
+        pady=(0, PAD_SM),
     )
     row += 1
 
@@ -449,7 +469,7 @@ def run_initial_setup_wizard(
     _refresh_provider_choices()
 
     buttons = ttk.Frame(content)
-    buttons.grid(row=row, column=0, columnspan=2, sticky="e", pady=(4, 0))
+    buttons.grid(row=row, column=0, columnspan=2, sticky="e", pady=(PAD_XS, 0))
     row += 1
 
     def _cancel() -> None:
@@ -480,9 +500,14 @@ def run_initial_setup_wizard(
     ttk.Button(buttons, text=tr("common.cancel", "Отмена"), command=_cancel).grid(
         row=0,
         column=0,
-        padx=(0, 8),
+        padx=(0, PAD_SM),
     )
-    ttk.Button(buttons, text=tr("common.save", "Сохранить"), command=_save).grid(
+    ttk.Button(
+        buttons,
+        text=tr("setup.continue", "Продолжить"),
+        style="Primary.TButton",
+        command=_save,
+    ).grid(
         row=0,
         column=1,
     )

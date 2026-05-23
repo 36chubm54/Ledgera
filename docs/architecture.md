@@ -107,10 +107,13 @@ Design rules:
 
 - updater logic is separate from currency `auto_update`
 - the running app only checks and downloads; it does not patch binaries in place
+- packaged updater runtimes persist a downloaded-update state in `schema_meta` so the primary CTA can survive restart as `Install update`
+- cleanup of downloaded installer/package artifacts is deferred until the next successful launch of the target-or-newer version
 - Windows still delegates the real update to the installer, while packaged Linux delegates it to a terminal-launched package-manager command
 - packaged Linux `.deb` / `.rpm` runtime is the only Linux environment with in-app update download/handoff support in this wave
 - packaged Linux updater selects artifacts via the install-root `.linux-package-kind` marker and never guesses `.deb` vs `.rpm` heuristically
 - Linux package handoff runs through a supported terminal executable and a terminal-kept-open `sudo apt install ...` / `sudo dnf install ...` command, not through `xdg-open` or direct package-manager execution in the app process
+- terminal handoff now also preflights the required package manager (`apt` / `dnf`) before spawning the terminal UX
 - source-mode Windows/Linux and `AppImage` remain explicit manual-release-page paths rather than pretending to support in-app installation
 - stable builds ignore GitHub prerelease releases, while prerelease builds can see newer prereleases and then transition to the final stable release
 
@@ -131,6 +134,7 @@ Important startup concerns:
 - applying shell-wide theme styling to cards, tables, canvases, and popdown controls
 - optional currency refresh
 - auto-application of mandatory payments
+- early reconciliation of persisted updater install/cleanup state before the full shell build
 - deferred GUI work and safe `after(...)` scheduling through `gui.runtime_coordinator.UiRuntimeCoordinator`
 - eager build of `Infographics` and `Operations`, with the remaining tabs composed lazily on first activation
 - online-mode status refresh through `gui.status_bar_coordinator.StatusBarCoordinator`

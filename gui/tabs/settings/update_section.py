@@ -7,10 +7,17 @@ import webbrowser
 from tkinter import ttk
 from typing import Any
 
-from domain.update import AppUpdateCheckResult, AppUpdateDownloadProgress, AppUpdateReleaseInfo
+from domain.update import (
+    AppReleaseAsset,
+    AppUpdateCheckResult,
+    AppUpdateDownloadProgress,
+    AppUpdateReleaseInfo,
+    PendingUpdateInstallState,
+)
 from gui.i18n import tr
 from gui.ui_dialogs import messagebox_compat as messagebox
 from gui.ui_theme import PAD_LG, PAD_SM, PAD_XS, create_card_section, get_palette
+from services.app_update_service import is_newer_app_version
 
 from .wallets_section import MessageBoxLike
 
@@ -55,18 +62,16 @@ def build_update_section(
     is_linux = sys.platform.startswith("linux")
     is_source_mode = not packaged_mode
     is_packaged_linux = packaged_mode and is_linux
-    is_linux_system_package = (
-        is_packaged_linux
-        and not appimage_mode
-        and linux_package_kind
-        in {
-            "deb",
-            "rpm",
-        }
+    has_known_linux_package_kind = (
+        is_packaged_linux and not appimage_mode and linux_package_kind in {"deb", "rpm"}
     )
-    can_check_updates = supported or (is_packaged_linux and not appimage_mode)
+    can_check_updates = supported or has_known_linux_package_kind
     latest_release_holder: dict[str, AppUpdateReleaseInfo | None] = {"value": None}
+    pending_install_holder: dict[str, PendingUpdateInstallState | None] = {"value": None}
     update_flow_state = {"active": False}
+    primary_button_text = tk.StringVar(
+        value=tr("settings.updates.check_button", "Проверить обновления")
+    )
 
     def _artifact_label(kind: str) -> str:
         if kind in {"linux-deb", "linux-rpm"}:
@@ -78,48 +83,94 @@ def build_update_section(
     def _is_linux_package_artifact(kind: str) -> bool:
         return kind in {"linux-deb", "linux-rpm"}
 
-    status_var = tk.StringVar(
-        value=(
+    def _pending_state_to_release(state: PendingUpdateInstallState) -> AppUpdateReleaseInfo:
+        try:
+            size_bytes = (
+                state.artifact_path.stat().st_size if state.artifact_path.is_file() else None
+            )
+        except OSError:
+            size_bytes = None
+        return AppUpdateReleaseInfo(
+            version=state.version,
+            tag_name=f"v{state.version}",
+            release_url=state.release_url or release_page_url,
+            asset=AppReleaseAsset(
+                name=state.artifact_path.name,
+                download_url="",
+                size_bytes=size_bytes,
+                kind=state.asset_kind,
+            ),
+        )
+
+    def _clear_pending_install_state() -> None:
+        pending_install_holder["value"] = None
+        context.controller.clear_pending_update_install_state()
+
+    def _load_pending_install_state() -> PendingUpdateInstallState | None:
+        state = context.controller.load_pending_update_install_state()
+        if state is None:
+            return None
+        if not state.artifact_path.is_file() or not is_newer_app_version(
+            current_version, state.version
+        ):
+            context.controller.clear_pending_update_install_state()
+            return None
+        return state
+
+    def _set_primary_button_install_mode(enabled: bool) -> None:
+        primary_button_text.set(
             tr(
+                "settings.updates.install_button",
+                "Установить обновление",
+            )
+            if enabled
+            else tr("settings.updates.check_button", "Проверить обновления")
+        )
+
+    def _ready_status_text() -> str:
+        if has_known_linux_package_kind:
+            return tr(
                 "settings.updates.linux_ready",
                 "Можно проверить наличие нового Linux-пакета.",
             )
-            if can_check_updates and is_packaged_linux and not appimage_mode
-            else tr(
+        if can_check_updates and packaged_mode:
+            return tr(
                 "settings.updates.ready",
                 "Можно проверить наличие нового релиза.",
             )
-            if can_check_updates and packaged_mode
-            else tr(
+        if is_source_mode:
+            return tr(
                 "settings.updates.source_manual",
                 "Для source-mode встроенная установка обновлений не поддерживается. "
                 "Используйте страницу релизов GitHub вручную.",
             )
-            if is_source_mode
-            else tr(
+        if is_packaged_linux and appimage_mode:
+            return tr(
                 "settings.updates.linux_appimage_manual",
                 "Для AppImage встроенная установка обновлений пока недоступна. "
                 "Скачайте новый AppImage со страницы релизов GitHub.",
             )
-            if is_packaged_linux and appimage_mode
-            else tr(
+        if is_packaged_linux:
+            return tr(
                 "settings.updates.linux_manual",
                 "Для Linux packaged builds встроенная установка обновлений пока недоступна. "
                 "Скачайте новый Linux-пакет или AppImage со страницы релизов GitHub.",
             )
-            if is_packaged_linux
-            else tr(
+        if is_linux:
+            return tr(
                 "settings.updates.linux_source_manual",
                 "Для Linux source-mode встроенная установка обновлений не поддерживается. "
                 "Используйте страницу релизов GitHub вручную.",
             )
-            if is_linux
-            else tr(
-                "settings.updates.unsupported",
-                "Обновление из приложения доступно только на Windows.",
-            )
+        return tr(
+            "settings.updates.unsupported",
+            "Обновление из приложения доступно только на Windows.",
         )
-    )
+
+    def _set_ready_status() -> None:
+        status_var.set(_ready_status_text())
+
+    status_var = tk.StringVar(value=_ready_status_text())
 
     update_card = create_card_section(
         parent_panel,
@@ -161,7 +212,41 @@ def build_update_section(
         elif can_check_updates:
             check_button.state(["!disabled"])
 
+    def _refresh_release_button_state() -> None:
+        has_fallback_url = bool(
+            (pending_install_holder["value"] and pending_install_holder["value"].release_url)
+            or (latest_release_holder["value"] and latest_release_holder["value"].release_url)
+            or release_page_url
+        )
+        if update_flow_state["active"] or not has_fallback_url:
+            release_link_button.state(["disabled"])
+            return
+        if pending_install_holder["value"] is not None:
+            release_link_button.state(["!disabled"])
+            return
+        if supported or is_linux or is_source_mode:
+            release_link_button.state(["!disabled"])
+            return
+        release_link_button.state(["disabled"])
+
+    def _set_pending_install_state(state: PendingUpdateInstallState | None) -> None:
+        pending_install_holder["value"] = state
+        _set_primary_button_install_mode(state is not None)
+        if state is not None:
+            status_var.set(
+                tr(
+                    "settings.updates.install_ready",
+                    "Обновление v{version} уже скачано и готово к установке.",
+                    version=state.version,
+                )
+            )
+        _refresh_release_button_state()
+
     def _open_release_page() -> None:
+        pending_state = pending_install_holder["value"]
+        if pending_state is not None and pending_state.release_url:
+            webbrowser.open(pending_state.release_url)
+            return
         release = latest_release_holder["value"]
         if release is not None and release.release_url:
             webbrowser.open(release.release_url)
@@ -318,6 +403,14 @@ def build_update_section(
             dialog.grab_release()
             if dialog.winfo_exists():
                 dialog.destroy()
+            pending_state = PendingUpdateInstallState(
+                version=release.version,
+                asset_kind=release.asset.kind,
+                artifact_path=result.downloaded_path,
+                release_url=release.release_url or release_page_url,
+            )
+            context.controller.save_pending_update_install_state(pending_state)
+            _set_pending_install_state(pending_state)
             status_var.set(
                 tr(
                     "settings.updates.downloaded",
@@ -347,7 +440,10 @@ def build_update_section(
                 ),
             ):
                 try:
-                    context._launch_downloaded_update_and_exit(str(result.downloaded_path))
+                    context._launch_downloaded_update_and_exit(
+                        str(result.downloaded_path),
+                        target_version=release.version,
+                    )
                 except RuntimeError as error:
                     messagebox_module.showerror(
                         tr("common.error", "Ошибка"),
@@ -391,6 +487,7 @@ def build_update_section(
                     error=str(error),
                 ),
             )
+            _refresh_release_button_state()
 
         poll_after_id["value"] = dialog.after(100, _poll_progress)
         context._run_background(
@@ -404,6 +501,40 @@ def build_update_section(
     def _on_check_updates() -> None:
         if update_flow_state["active"]:
             return
+        pending_state = pending_install_holder["value"]
+        if pending_state is not None:
+            if not pending_state.artifact_path.is_file() or not is_newer_app_version(
+                current_version,
+                pending_state.version,
+            ):
+                _clear_pending_install_state()
+                _set_ready_status()
+                _refresh_release_button_state()
+            else:
+                try:
+                    context._launch_downloaded_update_and_exit(
+                        str(pending_state.artifact_path),
+                        target_version=pending_state.version,
+                    )
+                except RuntimeError as error:
+                    messagebox_module.showerror(
+                        tr("common.error", "Ошибка"),
+                        tr(
+                            "settings.updates.install.error",
+                            "Не удалось открыть скачанный файл обновления: {error}",
+                            error=str(error),
+                        ),
+                    )
+                    fallback_url = pending_state.release_url or release_page_url
+                    if fallback_url and messagebox_module.askyesno(
+                        tr("settings.updates.release_page", "Страница релиза"),
+                        tr(
+                            "settings.updates.install.release_page_fallback",
+                            "Не удалось запустить установку обновления. Открыть страницу релиза GitHub?",  # noqa: E501
+                        ),
+                    ):
+                        webbrowser.open(fallback_url)
+                return
         _set_update_flow_active(True)
         status_var.set(tr("settings.updates.checking", "Проверяем GitHub Release..."))
 
@@ -414,7 +545,7 @@ def build_update_section(
             latest_release_holder["value"] = result.latest_release
             if not result.update_available or result.latest_release is None:
                 _set_update_flow_active(False)
-                release_link_button.state(["disabled"])
+                _refresh_release_button_state()
                 status_var.set(
                     tr(
                         "settings.updates.latest",
@@ -440,7 +571,7 @@ def build_update_section(
                     version=release.version,
                 )
             )
-            release_link_button.state(["!disabled"])
+            _refresh_release_button_state()
             should_download = messagebox_module.askyesno(
                 tr("settings.updates.available.title", "Доступно обновление"),
                 tr(
@@ -458,10 +589,7 @@ def build_update_section(
         def on_error(error: BaseException) -> None:
             _set_update_flow_active(False)
             latest_release_holder["value"] = None
-            if release_page_url:
-                release_link_button.state(["!disabled"])
-            else:
-                release_link_button.state(["disabled"])
+            _refresh_release_button_state()
             status_var.set(tr("settings.updates.check.failed", "Не удалось проверить обновления."))
             messagebox_module.showerror(
                 tr("common.error", "Ошибка"),
@@ -487,7 +615,7 @@ def build_update_section(
 
     check_button = ttk.Button(
         buttons,
-        text=tr("settings.updates.check_button", "Проверить обновления"),
+        textvariable=primary_button_text,
         style="Primary.TButton",
         command=_on_check_updates,
     )
@@ -501,5 +629,9 @@ def build_update_section(
         command=_open_release_page,
     )
     release_link_button.grid(row=0, column=1, sticky="ew", padx=(PAD_XS, 0))
-    if supported or not release_page_url or not (is_linux or is_source_mode):
-        release_link_button.state(["disabled"])
+    pending_state = _load_pending_install_state()
+    if pending_state is not None:
+        latest_release_holder["value"] = _pending_state_to_release(pending_state)
+    _set_pending_install_state(pending_state)
+    if pending_state is None:
+        _refresh_release_button_state()

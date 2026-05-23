@@ -2,14 +2,14 @@
   "summary": "Graphical application for personal financial accounting with multicurrency support, import/export, tags, budgets, debts, assets, and goals",
   "description": [
     "Ledgera personal finance desktop app with multicurrency support, import and export flows, budgets, debts, assets, and reports.",
-    "This release extends the desktop updater contract: packaged Linux deb/rpm installs can now download a matching update package and hand installation off through a terminal flow, while AppImage and source-mode runtimes stay on the manual GitHub Releases path."
+    "This release hardens the desktop updater contract: packaged Linux deb/rpm installs can persist a downloaded update across restart, switch the primary action to installation, and clean up the downloaded package only after the next successful upgraded launch, while AppImage and source-mode runtimes stay on the manual GitHub Releases path."
   ],
   "release_date": "2026-05-23",
   "release_notes": [
-    "Added in-app updater support for packaged Linux deb and rpm installs, including GitHub Release checks, package-kind matching, and streamed downloads into a user-scoped updates cache.",
-    "Packaged Linux updates now hand installation off through a terminal-based sudo apt install or sudo dnf install flow instead of relying on GUI package openers.",
-    "Updater release discovery is now prerelease-aware: stable builds ignore prereleases, while prerelease builds can see newer prereleases and then transition to the final stable release.",
-    "Source-mode Windows and Linux plus AppImage now stay on an explicit manual GitHub Releases path instead of pretending to support in-app installation.",
-    "GNOME Software may still omit license details or release notes for locally installed third-party packages even when AppStream metadata is bundled."
+    "Packaged desktop updater flows now persist downloaded update state across restart and switch the primary action to installation instead of forcing a second download.",
+    "Downloaded installer and package artifacts are now cleaned up only after the next successful launch of the target-or-newer version.",
+    "Packaged Linux updater behavior is stricter and more honest: unknown package-type installs stay on the manual path, and terminal handoff now preflights the required apt or dnf package manager.",
+    "Updater cleanup gating now handles same-core stable and prerelease version comparisons correctly during startup reconciliation.",
+    "The deferred startup busy surface and first-run initial setup wizard were polished to better match the current desktop shell."
   ]
 }

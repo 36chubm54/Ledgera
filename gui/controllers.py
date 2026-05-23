@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from pathlib import Path
 from typing import TypeVar, cast
 
 from app.audit_runner import run_repository_audit
@@ -93,7 +94,13 @@ from domain.records import MandatoryExpenseRecord, Record
 from domain.reports import Report
 from domain.tags import Tag
 from domain.transfers import Transfer
-from domain.update import AppUpdateCheckResult, AppUpdateDownloadResult, AppUpdateReleaseInfo
+from domain.update import (
+    AppUpdateCheckResult,
+    AppUpdateDownloadResult,
+    AppUpdateReleaseInfo,
+    PendingUpdateCleanupState,
+    PendingUpdateInstallState,
+)
 from domain.validation import parse_ymd
 from domain.wallets import Wallet
 from gui.controller_support import (
@@ -101,7 +108,11 @@ from gui.controller_support import (
     build_list_items,
     wallets_with_system_initial_balance,
 )
-from services.app_update_service import AppUpdateService
+from services.app_update_service import (
+    AppUpdateService,
+    is_newer_app_version,
+    is_same_or_newer_app_version,
+)
 from services.asset_service import AssetService
 from services.balance_service import BalanceService, CashflowResult, WalletBalance
 from services.budget_service import BudgetService
@@ -330,6 +341,48 @@ class FinancialController:
 
     def load_linux_terminal_preference(self) -> str | None:
         return self._ui_preferences.load_linux_terminal_preference()
+
+    def save_pending_update_install_state(self, state: PendingUpdateInstallState) -> None:
+        self._ui_preferences.save_pending_update_install_state(state)
+
+    def load_pending_update_install_state(self) -> PendingUpdateInstallState | None:
+        return self._ui_preferences.load_pending_update_install_state()
+
+    def clear_pending_update_install_state(self) -> None:
+        self._ui_preferences.clear_pending_update_install_state()
+
+    def mark_pending_update_cleanup(self, *, artifact_path: str, target_version: str) -> None:
+        self._ui_preferences.save_pending_update_cleanup_state(
+            PendingUpdateCleanupState(
+                artifact_path=Path(artifact_path),
+                target_version=target_version,
+            )
+        )
+
+    def reconcile_pending_update_state(self) -> None:
+        current_version = self.get_app_version()
+
+        cleanup_state = self._ui_preferences.load_pending_update_cleanup_state()
+        if cleanup_state is not None:
+            if is_same_or_newer_app_version(current_version, cleanup_state.target_version):
+                try:
+                    cleanup_state.artifact_path.unlink(missing_ok=True)
+                except OSError:
+                    logger.exception(
+                        "Failed to remove installed update artifact: %s",
+                        cleanup_state.artifact_path,
+                    )
+                finally:
+                    self._ui_preferences.clear_pending_update_cleanup_state()
+
+        install_state = self._ui_preferences.load_pending_update_install_state()
+        if install_state is None:
+            return
+        if not install_state.artifact_path.is_file() or not is_newer_app_version(
+            current_version,
+            install_state.version,
+        ):
+            self._ui_preferences.clear_pending_update_install_state()
 
     def get_app_version(self) -> str:
         return self._app_update.get_current_version()

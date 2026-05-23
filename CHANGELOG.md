@@ -7,6 +7,31 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [2.5.1] - 2026-05-23
+
+### Added
+
+- Added persisted downloaded-update state for packaged updater flows, so Windows installers and packaged Linux packages can survive restart with a ready-to-install CTA instead of forcing a second download
+- Added best-effort post-upgrade cleanup markers so downloaded installer/package artifacts are removed only after the next successful launch of the target-or-newer version
+- Added startup polish for the deferred busy surface and the first-run initial setup wizard
+
+### Changed
+
+- `Settings -> Application updates` now uses a two-state primary CTA: `Check for updates` before download and `Install update` after a valid downloaded artifact is already present
+- Packaged Linux update UX is now stricter about runtime honesty: unknown package-kind installs stay on the manual path instead of showing an optimistic ready-to-check state
+- Linux terminal-based update handoff now checks that the required package manager (`apt` / `dnf`) exists before spawning the terminal flow
+
+### Fixed
+
+- Fixed startup reconciliation so stable-vs-prerelease comparisons with the same core version no longer raise `TypeError` during cleanup gating
+- Fixed malformed persisted updater state handling so broken JSON in `schema_meta` is cleared instead of being silently retried forever
+
+### Testing
+
+- Added regression coverage for persisted install CTA restore on packaged Linux and Windows
+- Added startup reconciliation coverage for target-version cleanup and old-version no-cleanup behavior
+- Added updater version-comparison coverage for stable vs prerelease cleanup gating
+
 ## [2.5.0] - 2026-05-23
 
 ### Added

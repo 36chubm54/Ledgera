@@ -147,13 +147,11 @@ def _linux_terminal_key(executable_path: str) -> str | None:
     return None
 
 
-def _build_linux_install_command(artifact_path: str, package_kind: str) -> str:
-    normalized_path = str(artifact_path)
-    quoted_path = shlex.quote(normalized_path)
+def _resolve_linux_package_manager(package_kind: str) -> str:
     if package_kind == "deb":
-        install_command = f"sudo apt install {quoted_path}"
+        manager = "apt"
     elif package_kind == "rpm":
-        install_command = f"sudo dnf install {quoted_path}"
+        manager = "dnf"
     else:
         raise RuntimeError(
             tr(
@@ -161,10 +159,30 @@ def _build_linux_install_command(artifact_path: str, package_kind: str) -> str:
                 "Не удалось определить тип Linux-пакета для скачанного обновления.",
             )
         )
+    if shutil.which(manager):
+        return manager
+    raise RuntimeError(
+        tr(
+            "settings.updates.install.error.missing_package_manager",
+            "Для установки обновления не найден пакетный менеджер {manager}.",
+            manager=manager,
+        )
+    )
+
+
+def _build_linux_install_command(artifact_path: str, package_kind: str) -> str:
+    normalized_path = str(artifact_path)
+    quoted_path = shlex.quote(normalized_path)
+    close_prompt = tr(
+        "settings.updates.install.terminal_close_prompt",
+        "Нажмите Enter, чтобы закрыть терминал...",
+    )
+    quoted_close_prompt = shlex.quote(f"{close_prompt}\n")
+    package_manager = _resolve_linux_package_manager(package_kind)
     return (
-        f"{install_command}; "
+        f"sudo {package_manager} install {quoted_path}; "
         "status=$?; "
-        f"printf {shlex.quote(f'{tr('settings.updates.install.terminal_close_prompt', 'Нажмите Enter, чтобы закрыть терминал...')}\\n')}; "
+        f"printf {quoted_close_prompt}; "
         "read _dummy; "
         "exit $status"
     )
@@ -286,6 +304,16 @@ def _resolve_linux_terminal_executable(
     load_saved_terminal: Callable[[], str | None] | None = None,
     save_terminal: Callable[[str], None] | None = None,
 ) -> str | None:
+    def _validate_terminal_candidate(candidate: str) -> str:
+        if not Path(candidate).is_file() or _linux_terminal_key(candidate) is None:
+            raise RuntimeError(
+                tr(
+                    "settings.updates.install.error.unsupported_terminal",
+                    "Выбранный терминал не поддерживается для установки обновления.",
+                )
+            )
+        return candidate
+
     saved_candidate = str(load_saved_terminal() or "").strip() if load_saved_terminal else ""
     if (
         saved_candidate
@@ -295,17 +323,11 @@ def _resolve_linux_terminal_executable(
         return saved_candidate
     candidates = _detect_linux_terminal_candidates()
     if len(candidates) == 1:
-        return candidates[0][1]
+        return _validate_terminal_candidate(candidates[0][1])
     chosen = _choose_linux_terminal_executable(owner, candidates)
     if not chosen:
         return None
-    if not Path(chosen).is_file() or _linux_terminal_key(chosen) is None:
-        raise RuntimeError(
-            tr(
-                "settings.updates.install.error.unsupported_terminal",
-                "Выбранный терминал не поддерживается для установки обновления.",
-            )
-        )
+    chosen = _validate_terminal_candidate(chosen)
     if save_terminal is not None:
         save_terminal(chosen)
     return chosen
@@ -317,6 +339,8 @@ def launch_downloaded_update_and_exit(
     *,
     load_saved_terminal: Callable[[], str | None] | None = None,
     save_terminal: Callable[[str], None] | None = None,
+    mark_pending_cleanup: Callable[[str, str], None] | None = None,
+    target_version: str | None = None,
 ) -> None:
     if not Path(artifact_path).is_file():
         raise RuntimeError(
@@ -371,6 +395,8 @@ def launch_downloaded_update_and_exit(
                 "Не удалось открыть скачанный файл обновления.",
             )
         ) from exc
+    if mark_pending_cleanup is not None and target_version:
+        mark_pending_cleanup(str(artifact_path), target_version)
     owner.destroy()
 
 
