@@ -30,6 +30,10 @@ def set_busy_state(owner: Any, *, busy: bool, message: str, base_title: str) -> 
     except TclError:
         pass
     if busy:
+        if hasattr(owner, "_busy_message_var"):
+            owner._busy_message_var.set(message or base_title)
+        if hasattr(owner, "_busy_frame"):
+            owner._busy_frame.grid()
         owner.progress.grid()
         owner.progress.start(12)
         owner.title(f"{base_title} - {message}" if message else base_title)
@@ -37,6 +41,8 @@ def set_busy_state(owner: Any, *, busy: bool, message: str, base_title: str) -> 
     else:
         owner.progress.stop()
         owner.progress.grid_remove()
+        if hasattr(owner, "_busy_frame"):
+            owner._busy_frame.grid_remove()
         owner.title(base_title)
         owner.config(cursor="")
 

@@ -45,6 +45,7 @@ class DeferredStartupCoordinator:
         refresh_all: Callable[[], None],
         apply_saved_online_mode: Callable[[], None],
         show_auto_payment_message: AutoPaymentsMessageCallback,
+        set_busy: Callable[[bool, str], None],
         logger: logging.Logger,
     ) -> None:
         self._controller = controller
@@ -56,6 +57,7 @@ class DeferredStartupCoordinator:
         self._refresh_all = refresh_all
         self._apply_saved_online_mode = apply_saved_online_mode
         self._show_auto_payment_message = show_auto_payment_message
+        self._set_busy = set_busy
         self._logger = logger
         self._running = False
 
@@ -76,6 +78,7 @@ class DeferredStartupCoordinator:
 
         def on_success(result: tuple[list[Any], list[Any]]) -> None:
             self._running = False
+            self._set_busy(False, "")
             created_auto_payments, records = result
             self._refresh_list(records=records)
             self._refresh_charts(records=records)
@@ -86,6 +89,7 @@ class DeferredStartupCoordinator:
 
         def on_error(exc: BaseException) -> None:
             self._running = False
+            self._set_busy(False, "")
             self._logger.exception("Deferred startup sync failed", exc_info=exc)
             try:
                 records = self._repository.load_all()

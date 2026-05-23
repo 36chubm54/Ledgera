@@ -83,6 +83,7 @@ from gui.ui_theme import (
     DEFAULT_THEME,
     PAD_SM,
     PAD_XL,
+    PAD_XS,
     bootstrap_ui,
     get_palette,
     get_theme,
@@ -161,6 +162,7 @@ class FinancialApp(tk.Tk):
             base_currency = str(get_schema_meta("base_currency") or "KZT").upper()
         self.currency = CurrencyService(base=base_currency)
         self.controller = FinancialController(self.repository, self.currency)
+        self.controller.reconcile_pending_update_state()
         apply_saved_ui_preferences(
             self,
             controller=self.controller,
@@ -218,6 +220,7 @@ class FinancialApp(tk.Tk):
                     title=tr("app.autopay.title", "Автоплатежи применены"),
                 ),
             ),
+            set_busy=self._set_busy,
             logger=logger,
         )
         initialize_shell_state(self, after_jobs=self._runtime.after_jobs)
@@ -249,11 +252,24 @@ class FinancialApp(tk.Tk):
         self._ensure_tab_built("operations")
         register_hotkeys(self)
 
-        self.progress = ttk.Progressbar(self, mode="indeterminate")
-        self.progress.grid(row=1, column=0, sticky="ew", padx=PAD_XL, pady=(0, PAD_SM))
-        self.progress.grid_remove()
+        self._busy_frame = ttk.Frame(self, style="Card.TFrame", padding=(PAD_XL, PAD_SM))
+        self._busy_frame.grid(row=1, column=0, sticky="ew", padx=PAD_XL, pady=(0, PAD_SM))
+        self._busy_frame.grid_columnconfigure(0, weight=1)
+        self._busy_message_var = tk.StringVar(
+            value=tr("app.busy.startup", "Подготавливаем рабочее пространство...")
+        )
+        self._busy_label = ttk.Label(
+            self._busy_frame,
+            textvariable=self._busy_message_var,
+            style="Hint.TLabel",
+            justify="left",
+        )
+        self._busy_label.grid(row=0, column=0, sticky="w", pady=(0, PAD_XS))
+        self.progress = ttk.Progressbar(self._busy_frame, mode="indeterminate")
+        self.progress.grid(row=1, column=0, sticky="ew")
+        self._busy_frame.grid_remove()
         self._schedule_notebook_underline()
-
+        self._set_busy(True, tr("app.busy.startup", "Подготавливаем рабочее пространство..."))
         self._schedule_after_idle("deferred_startup", self._startup.start)
 
     def destroy(self) -> None:
@@ -466,12 +482,22 @@ class FinancialApp(tk.Tk):
     def _on_legend_mousewheel(self, event: tk.Event) -> None:
         scroll_owner_legend_canvas(self, event)
 
-    def _launch_downloaded_update_and_exit(self, artifact_path: str) -> None:
+    def _launch_downloaded_update_and_exit(
+        self,
+        artifact_path: str,
+        *,
+        target_version: str | None = None,
+    ) -> None:
         launch_downloaded_update_and_exit(
             self,
             artifact_path,
             load_saved_terminal=self.controller.load_linux_terminal_preference,
             save_terminal=self.controller.save_linux_terminal_preference,
+            mark_pending_cleanup=lambda path, version: self.controller.mark_pending_update_cleanup(
+                artifact_path=path,
+                target_version=version,
+            ),
+            target_version=target_version,
         )
 
     def _launch_installer_and_exit(self, installer_path: str) -> None:
