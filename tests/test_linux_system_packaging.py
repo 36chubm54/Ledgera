@@ -22,13 +22,13 @@ def test_stage_system_package_rootfs_copies_bundle_and_assets(tmp_path: Path) ->
     assert module.ICON_SOURCE.is_file()
     assert module.APPSTREAM_METADATA_SOURCE.is_file()
     bundle_dir = tmp_path / "bundle"
-    (bundle_dir / "FinAccountingApp").parent.mkdir(parents=True, exist_ok=True)
-    (bundle_dir / "FinAccountingApp").write_text("binary", encoding="utf-8")
+    (bundle_dir / "Ledgera").parent.mkdir(parents=True, exist_ok=True)
+    (bundle_dir / "Ledgera").write_text("binary", encoding="utf-8")
     staging_dir = tmp_path / "staging"
 
     rootfs = module.stage_system_package_rootfs(bundle_dir, staging_dir)
 
-    assert (rootfs / "opt" / "FinAccountingApp" / "FinAccountingApp").is_file()
+    assert (rootfs / "opt" / "Ledgera" / "Ledgera").is_file()
     assert (rootfs / "usr" / "bin" / "ledgera").is_file()
     desktop_entry = rootfs / "usr" / "share" / "applications" / "ledgera.desktop"
     metainfo_entry = rootfs / "usr" / "share" / "metainfo" / "ledgera.metainfo.xml"
@@ -139,13 +139,13 @@ def test_verify_system_packages_parses_dpkg_contents_listing() -> None:
         [
             "drwxr-xr-x root/root         0 2026-05-21 00:00 ./",
             "drwxr-xr-x root/root         0 2026-05-21 00:00 ./opt/",
-            "-rwxr-xr-x root/root     12345 2026-05-21 00:00 ./opt/FinAccountingApp/FinAccountingApp",
+            "-rwxr-xr-x root/root     12345 2026-05-21 00:00 ./opt/Ledgera/Ledgera",
             "-rwxr-xr-x root/root       123 2026-05-21 00:00 ./usr/bin/ledgera",
         ]
     )
 
     assert module._normalize_payload_listing(listing) == {
         "/opt",
-        "/opt/FinAccountingApp/FinAccountingApp",
+        "/opt/Ledgera/Ledgera",
         "/usr/bin/ledgera",
     }

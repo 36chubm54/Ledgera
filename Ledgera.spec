@@ -9,7 +9,7 @@ import runpy
 ROOT = Path(SPECPATH).resolve()
 COMMON_SPEC_FILE = ROOT / "packaging" / "pyinstaller" / "common_spec.py"
 COMMON_SPEC_SPEC = importlib.util.spec_from_file_location(
-    "finaccounting_common_spec", str(COMMON_SPEC_FILE)
+    "ledgera_common_spec", str(COMMON_SPEC_FILE)
 )
 if COMMON_SPEC_SPEC is None or COMMON_SPEC_SPEC.loader is None:
     raise ImportError(f"Unable to load PyInstaller helper module: {COMMON_SPEC_FILE}")
@@ -59,11 +59,11 @@ def _build_windows_version_info(version: str) -> Path:
           "040904B0",
           [
             StringStruct("CompanyName", "36chubm54"),
-            StringStruct("FileDescription", "Financial Accounting"),
+            StringStruct("FileDescription", "Ledgera"),
             StringStruct("FileVersion", "{version}"),
-            StringStruct("InternalName", "FinAccountingApp"),
-            StringStruct("OriginalFilename", "FinAccountingApp.exe"),
-            StringStruct("ProductName", "Financial Accounting"),
+            StringStruct("InternalName", "Ledgera"),
+            StringStruct("OriginalFilename", "Ledgera.exe"),
+            StringStruct("ProductName", "Ledgera"),
             StringStruct("ProductVersion", "{version}"),
           ],
         )
@@ -100,7 +100,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="FinAccountingApp",
+    name="Ledgera",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -122,5 +122,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="FinAccountingApp",
+    name="Ledgera",
 )

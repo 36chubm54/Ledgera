@@ -2,4 +2,4 @@
 set -eu
 
 HERE="$(dirname "$(readlink -f "$0")")"
-exec "$HERE/usr/lib/FinAccountingApp/FinAccountingApp" "$@"
+exec "$HERE/usr/lib/Ledgera/Ledgera" "$@"

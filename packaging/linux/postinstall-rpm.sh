@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-printf '%s\n' "rpm" >/opt/FinAccountingApp/.linux-package-kind || true
+printf '%s\n' "rpm" >/opt/Ledgera/.linux-package-kind || true
 
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database /usr/share/applications || true

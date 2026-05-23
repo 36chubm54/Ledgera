@@ -60,7 +60,7 @@ jobs:
         run: npx -y pyright
 
       - name: Build Linux bundle
-        run: pyinstaller --noconfirm FinAccountingApp.linux.spec
+        run: pyinstaller --noconfirm Ledgera.linux.spec
 
       - name: Download appimagetool
         run: |
@@ -73,7 +73,7 @@ jobs:
         run: |
           chmod +x packaging/linux/build_appimage.sh
           bash packaging/linux/build_appimage.sh \
-            dist/FinAccountingApp \
+            dist/Ledgera \
             artifacts/Ledgera-linux.AppImage \
             tools/appimagetool.AppImage
 
@@ -81,7 +81,7 @@ jobs:
         run: |
           chmod +x packaging/linux/build_system_packages.sh packaging/linux/ledgera
           bash packaging/linux/build_system_packages.sh \
-            dist/FinAccountingApp \
+            dist/Ledgera \
             artifacts
 
       - name: Validate generated AppStream metadata

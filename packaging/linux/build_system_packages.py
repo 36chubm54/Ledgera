@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCT_DISPLAY_NAME = "Ledgera"
-APP_DIR_NAME = "FinAccountingApp"
+APP_DIR_NAME = "Ledgera"
 PACKAGE_NAME = "ledgera"
 ICON_SOURCE = ROOT / "gui" / "assets" / "icons" / "app.png"
 DESKTOP_SOURCE = ROOT / "packaging" / "linux" / "ledgera.desktop"
@@ -147,7 +147,7 @@ def stage_system_package_rootfs(bundle_dir: Path, staging_dir: Path) -> Path:
         / f"{PACKAGE_NAME}.png"
     )
 
-    executable = bundle_dir / "FinAccountingApp"
+    executable = bundle_dir / "Ledgera"
     if not bundle_dir.is_dir():
         raise FileNotFoundError(f"Bundle directory not found: {bundle_dir}")
     if not executable.is_file():

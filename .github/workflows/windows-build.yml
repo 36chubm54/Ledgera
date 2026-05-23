@@ -50,7 +50,7 @@ jobs:
         run: npx -y pyright
 
       - name: Build Windows bundle
-        run: pyinstaller --noconfirm FinAccountingApp.spec
+        run: pyinstaller --noconfirm Ledgera.spec
 
       - name: Detect signing availability
         id: signing
@@ -83,7 +83,7 @@ jobs:
           if (-not $signtool) {
             throw "signtool.exe not found"
           }
-          & $signtool sign /fd SHA256 /f $certPath /p $env:WINDOWS_SIGN_CERT_PASSWORD /tr $env:WINDOWS_SIGN_TIMESTAMP_URL /td SHA256 "dist\FinAccountingApp\FinAccountingApp.exe"
+          & $signtool sign /fd SHA256 /f $certPath /p $env:WINDOWS_SIGN_CERT_PASSWORD /tr $env:WINDOWS_SIGN_TIMESTAMP_URL /td SHA256 "dist\Ledgera\Ledgera.exe"
           Remove-Item $certPath -Force
 
       - name: Install Inno Setup
@@ -96,7 +96,7 @@ jobs:
           if (-not (Test-Path $iscc)) {
             throw "Inno Setup compiler not found at $iscc"
           }
-          & $iscc "FinAccountingApp.iss"
+          & $iscc "Ledgera.iss"
 
       - name: Sign Windows installer
         if: startsWith(github.ref, 'refs/tags/v') && steps.signing.outputs.enabled == 'true'
@@ -127,7 +127,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Compress-Archive -Path dist\FinAccountingApp\* -DestinationPath artifacts\Ledgera-windows.zip -Force
+          Compress-Archive -Path dist\Ledgera\* -DestinationPath artifacts\Ledgera-windows.zip -Force
 
       - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v4

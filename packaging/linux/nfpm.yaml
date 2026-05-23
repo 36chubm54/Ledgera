@@ -18,8 +18,8 @@ scripts:
   postinstall: ${POSTINSTALL_SCRIPT}
   postremove: packaging/linux/postremove.sh
 contents:
-  - src: ${PACKAGE_ROOTFS}/opt/FinAccountingApp/
-    dst: /opt/FinAccountingApp
+  - src: ${PACKAGE_ROOTFS}/opt/Ledgera/
+    dst: /opt/Ledgera
     type: tree
   - src: ${PACKAGE_ROOTFS}/usr/bin/ledgera
     dst: /usr/bin/ledgera

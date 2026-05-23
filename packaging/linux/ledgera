@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_ROOT="/opt/FinAccountingApp"
-APP_BINARY="${APP_ROOT}/FinAccountingApp"
+APP_ROOT="/opt/Ledgera"
+APP_BINARY="${APP_ROOT}/Ledgera"
 
 if [[ ! -x "${APP_BINARY}" ]]; then
   echo "Installed application binary not found or not executable: ${APP_BINARY}" >&2

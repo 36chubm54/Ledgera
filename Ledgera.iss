@@ -1,14 +1,14 @@
 #define MyAppName "Ledgera"
-#define MyAppInternalName "FinAccountingApp"
+#define MyAppInternalName "Ledgera"
 #define MyAppInstallDirName "Ledgera"
 #define MyAppPublisher "36chubm54"
-#define MyAppExeName "FinAccountingApp.exe"
-#define MyBundleDir AddBackslash(SourcePath) + "dist\FinAccountingApp"
+#define MyAppExeName "Ledgera.exe"
+#define MyBundleDir AddBackslash(SourcePath) + "dist\Ledgera"
 #define MyBundleExe MyBundleDir + "\" + MyAppExeName
 #define MyIconFile AddBackslash(SourcePath) + "gui\assets\icons\app.ico"
 
 #ifnexist MyBundleExe
-  #error "PyInstaller bundle not found. Build dist\FinAccountingApp first."
+  #error "PyInstaller bundle not found. Build dist\Ledgera first."
 #endif
 
 #define MyAppVersion GetStringFileInfo(MyBundleExe, "ProductVersion")
@@ -51,6 +51,9 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Files]
 Source: "{#MyBundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+Type: files; Name: "{app}\FinAccountingApp.exe"
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"

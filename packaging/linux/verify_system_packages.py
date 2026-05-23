@@ -9,7 +9,7 @@ from pathlib import PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[2]
 REQUIRED_PAYLOAD_PATHS = {
-    "/opt/FinAccountingApp/FinAccountingApp",
+    "/opt/Ledgera/Ledgera",
     "/usr/bin/ledgera",
     "/usr/share/applications/ledgera.desktop",
     "/usr/share/metainfo/ledgera.metainfo.xml",
