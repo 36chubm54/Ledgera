@@ -12,7 +12,7 @@ description: |
   Ledgera personal finance desktop app with multicurrency support,
   import and export flows, budgets, debts, assets, and reports.
 vendor: 36chubm54
-homepage: https://github.com/36chubm54/FinAccountingApp
+homepage: https://github.com/36chubm54/Ledgera
 license: MIT
 scripts:
   postinstall: ${POSTINSTALL_SCRIPT}

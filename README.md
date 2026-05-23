@@ -1,9 +1,9 @@
 # Ledgera
 
-[![Release](https://img.shields.io/github/v/release/36chubm54/FinAccountingApp?display_name=tag)](https://github.com/36chubm54/FinAccountingApp/releases)
-[![Windows Build](https://img.shields.io/github/actions/workflow/status/36chubm54/FinAccountingApp/windows-build.yml?branch=main&label=windows%20build)](https://github.com/36chubm54/FinAccountingApp/actions/workflows/windows-build.yml)
-[![Linux Build](https://img.shields.io/github/actions/workflow/status/36chubm54/FinAccountingApp/linux-build.yml?branch=main&label=linux%20build)](https://github.com/36chubm54/FinAccountingApp/actions/workflows/linux-build.yml)
-[![License](https://img.shields.io/github/license/36chubm54/FinAccountingApp)](https://github.com/36chubm54/FinAccountingApp/blob/main/LICENSE)
+[![Release](https://img.shields.io/github/v/release/36chubm54/Ledgera?display_name=tag)](https://github.com/36chubm54/Ledgera/releases)
+[![Windows Build](https://img.shields.io/github/actions/workflow/status/36chubm54/Ledgera/windows-build.yml?branch=main&label=windows%20build)](https://github.com/36chubm54/Ledgera/actions/workflows/windows-build.yml)
+[![Linux Build](https://img.shields.io/github/actions/workflow/status/36chubm54/Ledgera/linux-build.yml?branch=main&label=linux%20build)](https://github.com/36chubm54/Ledgera/actions/workflows/linux-build.yml)
+[![License](https://img.shields.io/github/license/36chubm54/Ledgera)](https://github.com/36chubm54/Ledgera/blob/main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![README EN](https://img.shields.io/badge/README-English-blue)](README_EN.md)
 

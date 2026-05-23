@@ -101,7 +101,7 @@ def test_check_for_app_update_detects_newer_release(monkeypatch, service: AppUpd
     payload = [
         {
             "tag_name": "v2.0.2",
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
             "assets": [
                 {
                     "name": "Ledgera-2.0.2-setup.exe",
@@ -131,7 +131,7 @@ def test_check_for_app_update_reports_current_when_versions_match(
     payload = [
         {
             "tag_name": "v2.0.1",
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.1",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.1",
             "assets": [],
         }
     ]
@@ -155,7 +155,7 @@ def test_check_for_app_update_accepts_prerelease_tag_suffix(
         {
             "tag_name": "v2.0.2-rc1",
             "prerelease": True,
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2-rc1",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2-rc1",
             "assets": [
                 {
                     "name": "Ledgera-2.0.2-setup.exe",
@@ -184,7 +184,7 @@ def test_check_for_app_update_ignores_prerelease_for_stable_current(
         {
             "tag_name": "v2.0.2-rc1",
             "prerelease": True,
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2-rc1",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2-rc1",
             "assets": [
                 {
                     "name": "Ledgera-2.0.2-setup.exe",
@@ -212,7 +212,7 @@ def test_check_for_app_update_ignores_prerelease_release_flag_for_stable_current
         {
             "tag_name": "v2.0.2",
             "prerelease": True,
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
             "assets": [
                 {
                     "name": "Ledgera-2.0.2-setup.exe",
@@ -241,7 +241,7 @@ def test_check_for_app_update_detects_newer_prerelease_with_same_core_version(
         {
             "tag_name": "v2.5.0-rc2",
             "prerelease": True,
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.5.0-rc2",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.5.0-rc2",
             "assets": [
                 {
                     "name": "Ledgera-2.5.0-setup.exe",
@@ -270,7 +270,7 @@ def test_check_for_app_update_treats_stable_as_newer_than_same_core_prerelease(
     payload = [
         {
             "tag_name": "v2.5.0",
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.5.0",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.5.0",
             "assets": [
                 {
                     "name": "Ledgera-2.5.0-setup.exe",
@@ -300,7 +300,7 @@ def test_check_for_app_update_allows_newer_prerelease_for_current_prerelease(
         {
             "tag_name": "v2.6.0-rc1",
             "prerelease": True,
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.6.0-rc1",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.6.0-rc1",
             "assets": [
                 {
                     "name": "Ledgera-2.6.0-setup.exe",
@@ -338,14 +338,14 @@ def test_check_for_app_update_scans_multiple_release_pages(
             [
                 {
                     "tag_name": "v2.0.1",
-                    "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.1",
+                    "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.1",
                     "assets": [],
                 }
             ],
             [
                 {
                     "tag_name": "v2.0.2",
-                    "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+                    "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
                     "assets": [
                         {
                             "name": "Ledgera-2.0.2-setup.exe",
@@ -376,7 +376,7 @@ def test_check_for_app_update_rejects_release_without_installer_asset(
     payload = [
         {
             "tag_name": "v2.0.2",
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
             "assets": [
                 {
                     "name": "Ledgera-windows.zip",
@@ -401,7 +401,7 @@ def test_check_for_app_update_selects_deb_asset_for_packaged_linux(
     payload = [
         {
             "tag_name": "v2.0.2",
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
             "assets": [
                 {
                     "name": "Ledgera-2.0.2-x86_64.deb",
@@ -436,7 +436,7 @@ def test_check_for_app_update_selects_rpm_asset_for_packaged_linux(
     payload = [
         {
             "tag_name": "v2.0.2",
-            "html_url": "https://github.com/36chubm54/FinAccountingApp/releases/tag/v2.0.2",
+            "html_url": "https://github.com/36chubm54/Ledgera/releases/tag/v2.0.2",
             "assets": [
                 {
                     "name": "Ledgera-2.0.2-x86_64.deb",

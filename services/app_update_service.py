@@ -133,7 +133,7 @@ def _runtime_not_supported_message(runtime_kind: str) -> str:
 
 
 class AppUpdateService:
-    RELEASES_LIST_URL = "https://api.github.com/repos/36chubm54/FinAccountingApp/releases"
+    RELEASES_LIST_URL = "https://api.github.com/repos/36chubm54/Ledgera/releases"
     RELEASES_PAGE_SIZE = 30
     RELEASES_SCAN_PAGES = 3
     REQUEST_TIMEOUT = (10, 60)
@@ -143,7 +143,7 @@ class AppUpdateService:
         return __version__
 
     def get_release_page_url(self) -> str:
-        return "https://github.com/36chubm54/FinAccountingApp/releases"
+        return "https://github.com/36chubm54/Ledgera/releases"
 
     def is_supported_environment(self) -> bool:
         return self._get_runtime_kind() in {"windows", "linux-deb", "linux-rpm"}

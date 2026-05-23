@@ -95,8 +95,8 @@ def render_metainfo_xml() -> str:
   <description>
 {description_xml}
   </description>
-  <url type="homepage">https://github.com/36chubm54/FinAccountingApp</url>
-  <url type="bugtracker">https://github.com/36chubm54/FinAccountingApp/issues</url>
+  <url type="homepage">https://github.com/36chubm54/Ledgera</url>
+  <url type="bugtracker">https://github.com/36chubm54/Ledgera/issues</url>
   <categories>
     <category>Office</category>
     <category>Finance</category>
