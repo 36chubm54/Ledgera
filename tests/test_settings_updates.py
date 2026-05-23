@@ -107,7 +107,7 @@ class _Controller:
 
     def get_runtime_security_diagnostics(self) -> dict[str, object]:
         return {
-            "user_data_root": "C:/Users/test/AppData/Local/FinAccountingApp",
+            "user_data_root": "C:/Users/test/AppData/Local/Ledgera",
             "packaged_mode": self.packaged_mode,
             "appimage_mode": self.appimage_mode,
             "linux_package_kind": self.linux_package_kind,

@@ -51,7 +51,8 @@ class CurrencyService:
 
     CACHE_FILE = get_currency_rates_path()
     CONFIG_FILE = get_currency_config_path()
-    EXCHANGE_RATE_API_KEY_ENV = "FINACCOUNTING_EXCHANGE_RATE_API_KEY"
+    EXCHANGE_RATE_API_KEY_ENV = "LEDGERA_EXCHANGE_RATE_API_KEY"
+    LEGACY_EXCHANGE_RATE_API_KEY_ENV = "FINACCOUNTING_EXCHANGE_RATE_API_KEY"
     DEFAULT_DISPLAY_CURRENCY_WHITELIST = ("KZT", "USD", "EUR", "RUB")
     DEFAULT_RATES = {"USD": 500.0, "EUR": 590.0, "RUB": 6.5}
     DEFAULT_CONFIG = {
@@ -110,8 +111,15 @@ class CurrencyService:
         return str(value or "").strip()
 
     @classmethod
+    def _read_api_key_env(cls) -> str:
+        return cls._normalized_secret(
+            os.environ.get(cls.EXCHANGE_RATE_API_KEY_ENV, "")
+            or os.environ.get(cls.LEGACY_EXCHANGE_RATE_API_KEY_ENV, "")
+        )
+
+    @classmethod
     def _build_api_key_status(cls, config: Mapping[str, object]) -> dict[str, object]:
-        env_key = cls._normalized_secret(os.environ.get(cls.EXCHANGE_RATE_API_KEY_ENV, ""))
+        env_key = cls._read_api_key_env()
         secure_key = get_exchange_rate_api_key()
         current_key = cls._normalized_secret(config.get("exchange_rate_api_key", ""))
         storage = get_secret_storage_status()
@@ -180,11 +188,7 @@ class CurrencyService:
         secure_api_key = get_exchange_rate_api_key()
         config_needs_rewrite = False
         resolved_api_key = ""
-        env_api_key = (
-            cls._normalized_secret(os.environ.get(cls.EXCHANGE_RATE_API_KEY_ENV, ""))
-            if use_env_override
-            else ""
-        )
+        env_api_key = cls._read_api_key_env() if use_env_override else ""
         if env_api_key:
             resolved_api_key = env_api_key
             config[cls.API_KEY_SOURCE_FIELD] = "environment"
@@ -291,7 +295,7 @@ class CurrencyService:
         desired_key = cls._normalized_secret(normalized.get("exchange_rate_api_key", ""))
         key_source = str(normalized.get(cls.API_KEY_SOURCE_FIELD, "") or "").strip().lower()
         persisted_key = cls._normalized_secret(normalized.get(cls.API_KEY_PERSISTED_FIELD, ""))
-        env_key = cls._normalized_secret(os.environ.get(cls.EXCHANGE_RATE_API_KEY_ENV, ""))
+        env_key = cls._read_api_key_env()
         secure_key_before = get_exchange_rate_api_key()
         storage_status = get_secret_storage_status()
         secure_storage_changed = False

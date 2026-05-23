@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 
-APP_DATA_DIRNAME = "FinAccountingApp"
+APP_DATA_DIRNAME = "Ledgera"
+LEGACY_APP_DATA_DIRNAME = "FinAccountingApp"
 LINUX_PACKAGE_KIND_MARKER = ".linux-package-kind"
 _SOURCE_ROOT = Path(__file__).resolve().parent
+_DATA_DIR_OVERRIDE_ENV = "LEDGERA_DATA_DIR"
+_LEGACY_DATA_DIR_OVERRIDE_ENV = "FIN_ACCOUNTING_DATA_DIR"
+_RESOURCE_ROOT_OVERRIDE_ENV = "LEDGERA_RESOURCE_ROOT"
+_LEGACY_RESOURCE_ROOT_OVERRIDE_ENV = "FIN_ACCOUNTING_RESOURCE_ROOT"
+_LINUX_PACKAGE_KIND_OVERRIDE_ENV = "LEDGERA_LINUX_PACKAGE_KIND"
+_LEGACY_LINUX_PACKAGE_KIND_OVERRIDE_ENV = "FIN_ACCOUNTING_LINUX_PACKAGE_KIND"
 
 
 def _is_frozen_mode() -> bool:
@@ -45,8 +53,95 @@ def _get_executable_root() -> Path:
     return Path(sys.executable).resolve().parent
 
 
+def _read_override(*names: str) -> str:
+    for name in names:
+        value = str(os.environ.get(name, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _get_platform_data_parent() -> Path | None:
+    if _is_windows():
+        base_dir = (
+            str(os.environ.get("LOCALAPPDATA", "") or "").strip()
+            or str(os.environ.get("APPDATA", "") or "").strip()
+            or str(Path.home() / "AppData" / "Local")
+        )
+        return Path(base_dir).expanduser().resolve()
+    if _is_linux():
+        base_dir = str(os.environ.get("XDG_DATA_HOME", "") or "").strip() or str(
+            Path.home() / ".local" / "share"
+        )
+        return Path(base_dir).expanduser().resolve()
+    return None
+
+
+def _default_user_data_root(dirname: str) -> Path:
+    if _is_frozen_mode():
+        base_dir = _get_platform_data_parent()
+        if base_dir is not None:
+            return base_dir / dirname
+    return get_source_root()
+
+
+def _get_legacy_user_data_root() -> Path | None:
+    if not _is_frozen_mode():
+        return None
+    base_dir = _get_platform_data_parent()
+    if base_dir is None:
+        return None
+    return base_dir / LEGACY_APP_DATA_DIRNAME
+
+
+def _merge_directory_contents(source: Path, target: Path) -> None:
+    target.mkdir(parents=True, exist_ok=True)
+    for child in source.iterdir():
+        destination = target / child.name
+        if child.is_dir():
+            if destination.exists() and destination.is_dir():
+                _merge_directory_contents(child, destination)
+                try:
+                    child.rmdir()
+                except OSError:
+                    pass
+                continue
+            shutil.move(str(child), str(destination))
+            continue
+        if destination.exists():
+            continue
+        shutil.move(str(child), str(destination))
+
+
+def _migrate_legacy_user_data_root(target_root: Path) -> Path:
+    legacy_root = _get_legacy_user_data_root()
+    if (
+        legacy_root is None
+        or legacy_root == target_root
+        or not legacy_root.exists()
+        or str(target_root).strip() == str(get_source_root()).strip()
+    ):
+        return target_root
+    if target_root.exists():
+        try:
+            _merge_directory_contents(legacy_root, target_root)
+            legacy_root.rmdir()
+        except OSError:
+            return legacy_root
+        return target_root
+    try:
+        target_root.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(legacy_root), str(target_root))
+        return target_root
+    except OSError:
+        return legacy_root
+
+
 def get_linux_package_kind() -> str | None:
-    override = str(os.environ.get("FIN_ACCOUNTING_LINUX_PACKAGE_KIND", "") or "").strip().lower()
+    override = _read_override(
+        _LINUX_PACKAGE_KIND_OVERRIDE_ENV,
+        _LEGACY_LINUX_PACKAGE_KIND_OVERRIDE_ENV,
+    ).lower()
     if override in {"deb", "rpm"}:
         return override
     if not _is_linux() or not _is_frozen_mode() or _is_appimage_mode():
@@ -60,7 +155,10 @@ def get_linux_package_kind() -> str | None:
 
 
 def get_resource_root() -> Path:
-    override = str(os.environ.get("FIN_ACCOUNTING_RESOURCE_ROOT", "") or "").strip()
+    override = _read_override(
+        _RESOURCE_ROOT_OVERRIDE_ENV,
+        _LEGACY_RESOURCE_ROOT_OVERRIDE_ENV,
+    )
     if override:
         return Path(override).expanduser().resolve()
     if _is_frozen_mode():
@@ -72,23 +170,10 @@ def get_resource_root() -> Path:
 
 
 def get_user_data_root() -> Path:
-    override = str(os.environ.get("FIN_ACCOUNTING_DATA_DIR", "") or "").strip()
+    override = _read_override(_DATA_DIR_OVERRIDE_ENV, _LEGACY_DATA_DIR_OVERRIDE_ENV)
     if override:
         return Path(override).expanduser().resolve()
-    if _is_frozen_mode():
-        if _is_windows():
-            base_dir = (
-                str(os.environ.get("LOCALAPPDATA", "") or "").strip()
-                or str(os.environ.get("APPDATA", "") or "").strip()
-                or str(Path.home() / "AppData" / "Local")
-            )
-            return Path(base_dir).expanduser().resolve() / APP_DATA_DIRNAME
-        if _is_linux():
-            base_dir = str(os.environ.get("XDG_DATA_HOME", "") or "").strip() or str(
-                Path.home() / ".local" / "share"
-            )
-            return Path(base_dir).expanduser().resolve() / APP_DATA_DIRNAME
-    return get_source_root()
+    return _migrate_legacy_user_data_root(_default_user_data_root(APP_DATA_DIRNAME))
 
 
 def ensure_user_data_root() -> Path:
@@ -130,12 +215,9 @@ def get_exports_dir() -> Path:
 
 def get_updates_dir() -> Path:
     if _is_windows():
-        base_dir = (
-            str(os.environ.get("LOCALAPPDATA", "") or "").strip()
-            or str(os.environ.get("APPDATA", "") or "").strip()
-            or str(Path.home() / "AppData" / "Local")
-        )
-        return Path(base_dir).expanduser().resolve() / APP_DATA_DIRNAME / "updates"
+        base_dir = _get_platform_data_parent()
+        if base_dir is not None:
+            return base_dir / APP_DATA_DIRNAME / "updates"
     return get_user_data_root() / "updates"
 
 

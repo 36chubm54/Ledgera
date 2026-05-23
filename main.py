@@ -5,6 +5,10 @@ APP_LANGUAGE = "ru"
 APP_THEME = "light"
 
 
+def _read_runtime_env(primary: str, legacy: str, default: str) -> str:
+    return str(os.getenv(primary) or os.getenv(legacy) or default)
+
+
 def run_app() -> bool:
     from gui.i18n import set_language
     from gui.initial_setup import ensure_initial_setup
@@ -17,8 +21,8 @@ def run_app() -> bool:
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
     enable_windows_dpi_awareness(logging.getLogger("gui.shell.shell_window"))
-    set_language(os.getenv("FIN_ACCOUNTING_LANG", APP_LANGUAGE))
-    set_theme(os.getenv("FIN_ACCOUNTING_THEME", APP_THEME))
+    set_language(_read_runtime_env("LEDGERA_LANG", "FIN_ACCOUNTING_LANG", APP_LANGUAGE))
+    set_theme(_read_runtime_env("LEDGERA_THEME", "FIN_ACCOUNTING_THEME", APP_THEME))
     setup_outcome = ensure_initial_setup()
     if not setup_outcome.should_launch:
         logging.info("[startup] Initial setup cancelled by user")

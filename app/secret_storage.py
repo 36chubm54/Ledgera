@@ -24,7 +24,8 @@ except ModuleNotFoundError:  # pragma: no cover - exercised through runtime fall
         pass
 
 
-SERVICE_NAME = "FinAccountingApp"
+SERVICE_NAME = "Ledgera"
+LEGACY_SERVICE_NAME = "FinAccountingApp"
 EXCHANGE_RATE_API_KEY_ACCOUNT = "exchange_rate_api_key"
 
 
@@ -106,16 +107,22 @@ def _require_available_status() -> SecretStorageStatus:
     return status
 
 
-def get_exchange_rate_api_key() -> str:
-    status = get_secret_storage_status()
-    if not status.available or keyring is None:
+def _get_password(service_name: str) -> str:
+    if keyring is None:
         return ""
     try:
-        value = keyring.get_password(SERVICE_NAME, EXCHANGE_RATE_API_KEY_ACCOUNT)
+        value = keyring.get_password(service_name, EXCHANGE_RATE_API_KEY_ACCOUNT)
     except (KeyringError, NoKeyringError, RuntimeError):
         logger.exception("Failed to read ExchangeRate API key from secure storage")
         return ""
     return str(value or "").strip()
+
+
+def get_exchange_rate_api_key() -> str:
+    status = get_secret_storage_status()
+    if not status.available or keyring is None:
+        return ""
+    return _get_password(SERVICE_NAME) or _get_password(LEGACY_SERVICE_NAME)
 
 
 def set_exchange_rate_api_key(value: str) -> None:
@@ -129,6 +136,10 @@ def set_exchange_rate_api_key(value: str) -> None:
         raise SecretStorageUnavailableError(
             "Failed to persist the API key in secure OS storage."
         ) from exc
+    try:
+        keyring.delete_password(LEGACY_SERVICE_NAME, EXCHANGE_RATE_API_KEY_ACCOUNT)
+    except Exception:
+        logger.debug("Legacy ExchangeRate API key cleanup skipped", exc_info=True)
 
 
 def delete_exchange_rate_api_key() -> None:
@@ -140,3 +151,7 @@ def delete_exchange_rate_api_key() -> None:
     except Exception:
         # Treat missing credentials and backend oddities as a no-op during cleanup.
         logger.debug("ExchangeRate API key cleanup skipped", exc_info=True)
+    try:
+        keyring.delete_password(LEGACY_SERVICE_NAME, EXCHANGE_RATE_API_KEY_ACCOUNT)
+    except Exception:
+        logger.debug("Legacy ExchangeRate API key cleanup skipped", exc_info=True)
