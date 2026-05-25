@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from gui.shell.windowing.window import (
+    _choose_linux_terminal_executable,
     configure_main_window,
     launch_downloaded_update_and_exit,
     launch_installer_and_exit,
@@ -80,8 +81,8 @@ def test_launch_downloaded_update_and_exit_uses_terminal_for_deb_linux(monkeypat
     )
 
     assert calls
-    assert calls[0][:4] == ["/usr/bin/kgx", "--", "sh", "-lc"]
-    assert "sudo apt install /tmp/Ledgera-2.0.2-x86_64.deb" in calls[0][4]
+    assert calls[0][:2] == ["/usr/bin/kgx", "-e"]
+    assert "sudo apt install /tmp/Ledgera-2.0.2-x86_64.deb" in calls[0][2]
     assert cleanup_markers == [("/tmp/Ledgera-2.0.2-x86_64.deb", "2.0.2")]
     assert window.destroyed is True
 
@@ -141,7 +142,8 @@ def test_launch_downloaded_update_and_exit_uses_saved_terminal_preference(monkey
     )
 
     assert calls
-    assert calls[0][:4] == ["/usr/bin/qterminal", "-e", "sh", "-lc"]
+    assert calls[0][:2] == ["/usr/bin/qterminal", "-e"]
+    assert "sudo apt install /tmp/Ledgera-2.0.2-x86_64.deb" in calls[0][2]
     assert window.destroyed is True
 
 
@@ -167,8 +169,8 @@ def test_launch_downloaded_update_and_exit_supports_x_terminal_emulator(monkeypa
     launch_downloaded_update_and_exit(window, "/tmp/Ledgera-2.0.2-x86_64.deb")
 
     assert calls
-    assert calls[0][:4] == ["/usr/bin/x-terminal-emulator", "-e", "sh", "-lc"]
-    assert "sudo apt install /tmp/Ledgera-2.0.2-x86_64.deb" in calls[0][4]
+    assert calls[0][:2] == ["/usr/bin/x-terminal-emulator", "-e"]
+    assert "sudo apt install /tmp/Ledgera-2.0.2-x86_64.deb" in calls[0][2]
     assert window.destroyed is True
 
 
@@ -204,9 +206,203 @@ def test_launch_downloaded_update_and_exit_saves_supported_terminal_from_chooser
     )
 
     assert calls
-    assert calls[0][:4] == ["/usr/bin/xfce4-terminal", "--", "sh", "-lc"]
+    assert calls[0][:4] == ["/usr/bin/xfce4-terminal", "-x", "sh", "-lc"]
     assert saved == ["/usr/bin/xfce4-terminal"]
     assert window.destroyed is True
+
+
+def test_launch_downloaded_update_and_exit_uses_exec_remainder_for_mate_terminal(
+    monkeypatch,
+) -> None:
+    window = _FakeWindow()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "posix")
+    monkeypatch.setattr("gui.shell.windowing.window.sys.platform", "linux")
+    monkeypatch.setattr("gui.shell.windowing.window.get_linux_package_kind", lambda: "deb")
+    monkeypatch.setattr("gui.shell.windowing.window.shutil.which", lambda name: "/usr/bin/apt")
+    monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(list(args)))
+
+    launch_downloaded_update_and_exit(
+        window,
+        "/tmp/Ledgera-2.0.2-x86_64.deb",
+        load_saved_terminal=lambda: "/usr/bin/mate-terminal",
+    )
+
+    assert calls
+    assert calls[0][:4] == ["/usr/bin/mate-terminal", "-x", "sh", "-lc"]
+    assert "sudo apt install /tmp/Ledgera-2.0.2-x86_64.deb" in calls[0][4]
+    assert window.destroyed is True
+
+
+def test_launch_downloaded_update_and_exit_uses_exec_string_for_tilix(monkeypatch) -> None:
+    window = _FakeWindow()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "posix")
+    monkeypatch.setattr("gui.shell.windowing.window.sys.platform", "linux")
+    monkeypatch.setattr("gui.shell.windowing.window.get_linux_package_kind", lambda: "deb")
+    monkeypatch.setattr("gui.shell.windowing.window.shutil.which", lambda name: "/usr/bin/apt")
+    monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(list(args)))
+
+    launch_downloaded_update_and_exit(
+        window,
+        "/tmp/Ledgera-2.0.2-x86_64.deb",
+        load_saved_terminal=lambda: "/usr/bin/tilix",
+    )
+
+    assert calls
+    assert calls[0][:2] == ["/usr/bin/tilix", "-e"]
+    assert "sudo apt install /tmp/Ledgera-2.0.2-x86_64.deb" in calls[0][2]
+    assert window.destroyed is True
+
+
+def test_choose_linux_terminal_executable_waits_until_dialog_is_viewable() -> None:
+    events: list[str] = []
+
+    class _OwnerWindow:
+        def cget(self, _name: str) -> str:
+            return "#ffffff"
+
+        def winfo_rootx(self) -> int:
+            return 100
+
+        def winfo_rooty(self) -> int:
+            return 120
+
+        def winfo_width(self) -> int:
+            return 800
+
+        def winfo_height(self) -> int:
+            return 600
+
+    class _Owner:
+        def winfo_toplevel(self) -> _OwnerWindow:
+            return _OwnerWindow()
+
+    class _FakeDialog:
+        def withdraw(self) -> None:
+            return None
+
+        def title(self, _value: str) -> None:
+            return None
+
+        def transient(self, _owner: object) -> None:
+            return None
+
+        def resizable(self, _width: bool, _height: bool) -> None:
+            return None
+
+        def configure(self, **_kwargs: object) -> None:
+            return None
+
+        def protocol(self, _name: str, _callback: object) -> None:
+            return None
+
+        def update_idletasks(self) -> None:
+            return None
+
+        def winfo_reqwidth(self) -> int:
+            return 320
+
+        def winfo_reqheight(self) -> int:
+            return 180
+
+        def geometry(self, _value: str) -> None:
+            return None
+
+        def deiconify(self) -> None:
+            events.append("deiconify")
+
+        def wait_visibility(self) -> None:
+            events.append("wait_visibility")
+
+        def grab_set(self) -> None:
+            events.append("grab_set")
+
+        def wait_window(self) -> None:
+            events.append("wait_window")
+
+        def destroy(self) -> None:
+            return None
+
+    class _FakeFrame:
+        def __init__(self, *_args, **_kwargs) -> None:
+            return None
+
+        def grid(self, **_kwargs: object) -> None:
+            return None
+
+        def grid_columnconfigure(self, _column: int, weight: int) -> None:
+            del weight
+            return None
+
+    class _FakeLabel:
+        def __init__(self, *_args, **_kwargs) -> None:
+            return None
+
+        def grid(self, **_kwargs: object) -> None:
+            return None
+
+    class _FakeButton:
+        def __init__(self, *_args, **_kwargs) -> None:
+            return None
+
+        def grid(self, **_kwargs: object) -> None:
+            return None
+
+    class _FakeListbox:
+        def __init__(self, *_args, **_kwargs) -> None:
+            return None
+
+        def grid(self, **_kwargs: object) -> None:
+            return None
+
+        def insert(self, _index: int, _value: str) -> None:
+            return None
+
+        def selection_set(self, _index: int) -> None:
+            return None
+
+        def activate(self, _index: int) -> None:
+            return None
+
+        def curselection(self) -> tuple[int]:
+            return (0,)
+
+        def bind(self, _event: str, _callback: object) -> None:
+            return None
+
+        def focus_set(self) -> None:
+            events.append("focus_set")
+
+    class _FakeStringVar:
+        def __init__(self, value: str) -> None:
+            self._value = value
+
+        def get(self) -> str:
+            return self._value
+
+        def set(self, value: str) -> None:
+            self._value = value
+
+    with (
+        pytest.MonkeyPatch.context() as monkeypatch,
+    ):
+        monkeypatch.setattr("gui.shell.windowing.window.tk.Toplevel", lambda _owner: _FakeDialog())
+        monkeypatch.setattr("gui.shell.windowing.window.ttk.Frame", _FakeFrame)
+        monkeypatch.setattr("gui.shell.windowing.window.ttk.Label", _FakeLabel)
+        monkeypatch.setattr("gui.shell.windowing.window.ttk.Button", _FakeButton)
+        monkeypatch.setattr("gui.shell.windowing.window.tk.Listbox", _FakeListbox)
+        monkeypatch.setattr("gui.shell.windowing.window.tk.StringVar", _FakeStringVar)
+
+        result = _choose_linux_terminal_executable(
+            _Owner(),
+            [("Console", "/usr/bin/kgx")],
+        )
+
+    assert result is None
+    assert events[:4] == ["deiconify", "wait_visibility", "focus_set", "grab_set"]
 
 
 def test_launch_downloaded_update_and_exit_rejects_unsupported_terminal_choice(

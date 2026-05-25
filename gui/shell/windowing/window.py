@@ -18,21 +18,25 @@ from gui.i18n import tr
 
 APP_LINUX_WM_CLASS = "Ledgera"
 _LINUX_TERMINALS_WITH_SEPARATOR = {
-    "kgx",
     "gnome-terminal",
     "ptyxis",
-    "xfce4-terminal",
-    "mate-terminal",
 }
-_LINUX_TERMINALS_WITH_EXEC = {
+_LINUX_TERMINALS_WITH_EXEC_REMAINDER = {
+    "mate-terminal",
+    "xfce4-terminal",
     "konsole",
+    "alacritty",
+    "xterm",
+}
+_LINUX_TERMINALS_WITH_EXEC_STRING = {
+    "kgx",
     "qterminal",
     "lxterminal",
     "tilix",
-    "kitty",
-    "alacritty",
     "x-terminal-emulator",
-    "xterm",
+}
+_LINUX_TERMINALS_WITH_DIRECT_COMMAND = {
+    "kitty",
 }
 _SUPPORTED_LINUX_TERMINALS = (
     "kgx",
@@ -157,7 +161,12 @@ def activate_main_window(owner: Any) -> None:
 
 def _linux_terminal_key(executable_path: str) -> str | None:
     key = Path(executable_path).name.strip().lower()
-    if key in _LINUX_TERMINALS_WITH_SEPARATOR or key in _LINUX_TERMINALS_WITH_EXEC:
+    if (
+        key in _LINUX_TERMINALS_WITH_SEPARATOR
+        or key in _LINUX_TERMINALS_WITH_EXEC_REMAINDER
+        or key in _LINUX_TERMINALS_WITH_EXEC_STRING
+        or key in _LINUX_TERMINALS_WITH_DIRECT_COMMAND
+    ):
         return key
     return None
 
@@ -209,7 +218,15 @@ def _build_linux_terminal_spawn_args(executable_path: str, shell_command: str) -
         raise RuntimeError("The selected terminal executable is not supported.")
     if terminal_key in _LINUX_TERMINALS_WITH_SEPARATOR:
         return [executable_path, "--", "sh", "-lc", shell_command]
-    return [executable_path, "-e", "sh", "-lc", shell_command]
+    if terminal_key in {"mate-terminal", "xfce4-terminal"}:
+        return [executable_path, "-x", "sh", "-lc", shell_command]
+    if terminal_key in {"konsole", "alacritty", "xterm"}:
+        return [executable_path, "-e", "sh", "-lc", shell_command]
+    if terminal_key in {"kgx", "qterminal", "lxterminal", "tilix", "x-terminal-emulator"}:
+        return [executable_path, "-e", f"sh -lc {shlex.quote(shell_command)}"]
+    if terminal_key == "kitty":
+        return [executable_path, "sh", "-lc", shell_command]
+    raise RuntimeError("The selected terminal executable is not supported.")
 
 
 def _detect_linux_terminal_candidates() -> list[tuple[str, str]]:
@@ -308,6 +325,8 @@ def _choose_linux_terminal_executable(
     y = owner_window.winfo_rooty() + max((owner_window.winfo_height() - height) // 2, 0)
     dialog.geometry(f"{width}x{height}+{x}+{y}")
     dialog.deiconify()
+    dialog.wait_visibility()
+    terminal_list.focus_set()
     dialog.grab_set()
     dialog.wait_window()
     return result["path"]
