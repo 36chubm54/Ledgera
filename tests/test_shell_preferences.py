@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from types import SimpleNamespace
 
-from gui.shell.shell_preferences import (
+from gui.shell.owner.preferences import (
     apply_display_currency_change,
     apply_language_change,
     apply_theme_change,
@@ -116,8 +116,8 @@ def test_owner_preference_handlers_delegate_to_owner_state(monkeypatch) -> None:
         _refresh_display_currency_views=lambda: called.append("refresh-display"),
         _refresh_status_bar=lambda: called.append("refresh-status"),
     )
-    monkeypatch.setattr("gui.shell.shell_preferences.get_language", lambda: "ru")
-    monkeypatch.setattr("gui.shell.shell_preferences.get_theme", lambda: "light")
+    monkeypatch.setattr("gui.shell.owner.preferences.get_language", lambda: "ru")
+    monkeypatch.setattr("gui.shell.owner.preferences.get_theme", lambda: "light")
 
     assert handle_owner_language_change(
         owner,

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 from tkinter import ttk
 
-from gui.ui_helpers import enable_treeview_column_autosize, normalize_numeric_input
+from gui.ui_helpers import (
+    bind_label_wrap,
+    enable_treeview_column_autosize,
+    normalize_numeric_input,
+    safe_destroy,
+)
 
 
 def test_treeview_column_autosize_expands_for_longer_values() -> None:
@@ -64,7 +70,7 @@ def test_treeview_column_autosize_cancels_pending_after_job_on_destroy() -> None
         enable_treeview_column_autosize(tree, max_width=480)
         tree.pack()
 
-        state = getattr(tree, "_column_autosize_state")
+        state = getattr(tree, "_column_autosize_state")  # noqa: B009
         assert state is not None
         assert tree.tk.call("after", "info")
 
@@ -82,3 +88,39 @@ def test_normalize_numeric_input_handles_grouping_and_decimal_separators() -> No
     assert normalize_numeric_input("15.5") == "15.5"
     assert normalize_numeric_input("15.000,25") == "15000.25"
     assert normalize_numeric_input("15,000.25") == "15000.25"
+
+
+def test_safe_destroy_logs_expected_tcl_cleanup_failures(caplog) -> None:
+    class DestroyBrokenWidget:
+        def destroy(self) -> None:
+            raise tk.TclError("already destroyed")
+
+    caplog.set_level(logging.DEBUG)
+
+    safe_destroy(DestroyBrokenWidget())  # type: ignore[arg-type]
+
+    assert "Widget destroy skipped during UI cleanup" in caplog.text
+    assert "already destroyed" in caplog.text
+
+
+def test_bind_label_wrap_logs_expected_wrap_failures(caplog) -> None:
+    class BrokenTarget:
+        def bind(self, *_args, **_kwargs) -> None:
+            return None
+
+        def winfo_width(self) -> int:
+            raise RuntimeError("width unavailable")
+
+    class RecordingLabel:
+        def __init__(self) -> None:
+            self.master = BrokenTarget()
+
+        def configure(self, **_kwargs) -> None:
+            raise AssertionError("configure should not run when width lookup fails")
+
+    caplog.set_level(logging.DEBUG)
+
+    bind_label_wrap(RecordingLabel(), padding=32)  # type: ignore[arg-type]
+
+    assert "Label wrap sync skipped during UI refresh" in caplog.text
+    assert "width unavailable" in caplog.text

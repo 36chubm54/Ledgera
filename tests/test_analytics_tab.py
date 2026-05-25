@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from app.services import CurrencyService
 from gui.controllers import FinancialController
-from gui.tabs.analytics_tab import _draw_breakdown_pie, build_analytics_tab
+from gui.tabs.analytics import _draw_breakdown_pie, build_analytics_tab
 from infrastructure.sqlite_repository import SQLiteRecordRepository
 
 

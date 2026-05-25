@@ -8,7 +8,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gui.hotkeys import _active_tab, _focus_is_entry, _show_hotkey_help, register_hotkeys
+from gui.hotkeys import (
+    _active_tab,
+    _focus_in_shell,
+    _focus_is_entry,
+    _operations_inline_editor_active,
+    _show_hotkey_help,
+    register_hotkeys,
+)
 
 if TYPE_CHECKING:
     pass
@@ -254,6 +261,20 @@ def test_ctrl_delete_deletes_all_operations_rows() -> None:
     _trigger_global_binding(app, "<Control-Delete>")
 
     app._operations_bindings.delete_all.assert_called_once()
+
+
+def test_operations_inline_editor_active_returns_false_on_runtime_error() -> None:
+    app = _make_app()
+    app._operations_bindings.inline_editor_active.side_effect = RuntimeError("broken state")
+
+    assert _operations_inline_editor_active(app) is False
+
+
+def test_focus_in_shell_returns_false_when_grab_widget_toplevel_fails() -> None:
+    app = _make_app()
+    app._grab_widget = SimpleNamespace(winfo_toplevel=lambda: (_ for _ in ()).throw(RuntimeError()))
+
+    assert _focus_in_shell(app) is False
 
 
 def test_register_hotkeys_is_idempotent() -> None:

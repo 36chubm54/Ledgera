@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import platform
 import tkinter as tk
 from collections.abc import Callable
@@ -9,6 +10,8 @@ from typing import Any, cast
 from app_paths import get_icons_dir
 from gui.i18n import tr
 from gui.ui_theme import bootstrap_ui, get_palette, get_theme
+
+logger = logging.getLogger(__name__)
 
 
 def _bind_dialog_button_navigation(buttons: list[ttk.Button]) -> None:
@@ -67,14 +70,14 @@ def _play_system_sound(kind: str) -> None:
             sound_constant = sound_map.get(kind, ok_flag)
             message_beep(sound_constant)
             return
-        except (AttributeError, ImportError):
-            pass  # falls back to tkinter.bell
+        except (AttributeError, ImportError) as error:
+            logger.debug("System sound fallback to tkinter bell: %s", error)
     default_root = tk._get_default_root()  # type: ignore[attr-defined]
     if default_root is not None:
         try:
             default_root.bell()
-        except tk.TclError:
-            pass
+        except tk.TclError as error:
+            logger.debug("Tk bell fallback failed: %s", error)
 
 
 def _get_icon_for_kind(kind: str) -> tuple[str, str]:
@@ -187,8 +190,8 @@ def _run_modal(
         if temp_root is not None:
             try:
                 temp_root.destroy()
-            except tk.TclError:
-                pass
+            except tk.TclError as error:
+                logger.debug("Temporary dialog root cleanup failed: %s", error)
 
 
 def _message_dialog(

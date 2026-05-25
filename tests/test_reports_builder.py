@@ -6,9 +6,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
-from gui.tabs.reports.builder import ReportsFrame
-from gui.tabs.reports.contracts import ReportsTabContext
-from gui.tabs.reports_tab import build_reports_tab
+from gui.tabs.reports import ReportsFrame, ReportsTabContext, build_reports_tab
 
 
 def _make_context():
@@ -80,10 +78,10 @@ def test_reports_export_is_deferred_to_background_task() -> None:
 
         with (
             patch(
-                "gui.tabs.reports.builder.filedialog.asksaveasfilename",
+                "gui.tabs.reports.core.builder.filedialog.asksaveasfilename",
                 return_value="C:\\temp\\report.csv",
             ),
-            patch("gui.tabs.reports.builder.report_to_csv") as export_csv,
+            patch("gui.tabs.reports.core.builder.report_to_csv") as export_csv,
         ):
             frame._export("csv")
 

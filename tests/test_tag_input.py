@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 from unittest.mock import patch
 
-from gui.tabs.operations.tag_input import attach_tag_autocomplete
+from gui.tabs.operations.core.tag_input import attach_tag_autocomplete
 
 
 class _Tag:
@@ -84,7 +84,7 @@ def test_attach_tag_autocomplete_uses_native_combobox_outside_linux() -> None:
         combo = ttk.Combobox(root, state="normal")
         combo.pack()
         with patch(
-            "gui.tabs.operations.tag_input.detect_gui_display_runtime",
+            "gui.tabs.operations.core.tag_input.detect_gui_display_runtime",
             return_value=_windows_runtime(),
         ):
             attach_tag_autocomplete(
@@ -106,7 +106,7 @@ def test_attach_tag_autocomplete_binds_linux_custom_popup_keys() -> None:
         combo = ttk.Combobox(root, state="normal")
         combo.pack()
         with patch(
-            "gui.tabs.operations.tag_input.detect_gui_display_runtime",
+            "gui.tabs.operations.core.tag_input.detect_gui_display_runtime",
             return_value=_linux_runtime(),
         ):
             attach_tag_autocomplete(
@@ -128,7 +128,7 @@ def test_attach_tag_autocomplete_keeps_packaged_linux_on_native_combobox_path() 
         combo = ttk.Combobox(root, state="normal")
         combo.pack()
         with patch(
-            "gui.tabs.operations.tag_input.detect_gui_display_runtime",
+            "gui.tabs.operations.core.tag_input.detect_gui_display_runtime",
             return_value=_packaged_linux_runtime(),
         ):
             attach_tag_autocomplete(
@@ -150,7 +150,7 @@ def test_attach_tag_autocomplete_keeps_appimage_linux_on_custom_popup_path() -> 
         combo = ttk.Combobox(root, state="normal")
         combo.pack()
         with patch(
-            "gui.tabs.operations.tag_input.detect_gui_display_runtime",
+            "gui.tabs.operations.core.tag_input.detect_gui_display_runtime",
             return_value=_appimage_linux_runtime(),
         ):
             attach_tag_autocomplete(

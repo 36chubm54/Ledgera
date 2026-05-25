@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.distribution_service import DistributionService
-from utils.money import to_minor_units
+from services.planning.distribution import DistributionService
+from utils.finance.money import to_minor_units
 
 
 def _schema_path() -> str:

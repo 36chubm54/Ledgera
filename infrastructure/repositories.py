@@ -17,7 +17,7 @@ from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, 
 from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
-from utils.tag_utils import color_for_tag, normalize_tag_name, normalize_tag_names
+from utils.records.tags import color_for_tag, normalize_tag_name, normalize_tag_names
 
 T = TypeVar("T", bound=Record)
 

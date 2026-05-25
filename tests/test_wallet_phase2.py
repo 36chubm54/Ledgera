@@ -4,7 +4,8 @@ from datetime import date
 import pytest
 
 from app.services import CurrencyService
-from app.use_cases import CalculateNetWorth, CreateTransfer
+from app.use_cases_pkg.transfers import CreateTransfer
+from app.use_cases_pkg.wallets import CalculateNetWorth
 from domain.reports import Report
 from domain.wallets import Wallet
 from infrastructure.repositories import JsonFileRecordRepository

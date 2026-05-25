@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.metrics_service import CategorySpend, MetricsService, MonthlySummary, TagSpend
+from services.analytics.metrics import CategorySpend, MetricsService, MonthlySummary, TagSpend
 
 
 def _schema_path() -> str:

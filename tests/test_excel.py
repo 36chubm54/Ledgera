@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 import time
@@ -22,6 +23,7 @@ from utils.csv_utils import (
     import_mandatory_expenses_from_csv,
 )
 from utils.excel_utils import (
+    _close_workbook_safely,
     export_mandatory_expenses_to_xlsx,
     export_records_to_xlsx,
     import_mandatory_expenses_from_xlsx,
@@ -91,6 +93,19 @@ def test_report_xlsx_roundtrip():
         assert abs(imported.total() - report.total()) < 1e-6
     finally:
         os.unlink(tmp_path)
+
+
+def test_close_workbook_safely_logs_expected_close_failures(caplog) -> None:
+    class _BrokenWorkbook:
+        def close(self) -> None:
+            raise RuntimeError("close failed")
+
+    caplog.set_level(logging.DEBUG)
+
+    _close_workbook_safely(_BrokenWorkbook(), context="test export")  # type: ignore[arg-type]
+
+    assert "Workbook close degraded after test export" in caplog.text
+    assert "close failed" in caplog.text
 
 
 def test_report_xlsx_by_tag_sheet_repeats_multi_tag_record_under_each_single_tag():

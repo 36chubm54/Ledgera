@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.services import CurrencyService
 from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.balance_service import BalanceService, WalletBalance
+from services.analytics.balance import BalanceService, WalletBalance
 
 
 def _schema_path() -> str:

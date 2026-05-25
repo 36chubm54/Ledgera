@@ -1,13 +1,13 @@
-from .analytics_tab import AnalyticsTabBindings, build_analytics_tab
-from .budget_tab import BudgetTabBindings, build_budget_tab
-from .dashboard_tab import DashboardTabBindings, build_dashboard_tab
-from .debts_tab import DebtsTabBindings, build_debts_tab
-from .distribution_tab import DistributionTabBindings, build_distribution_tab
-from .infographics_tab import InfographicsTabBindings, build_infographics_tab
-from .mandatory_tab import MandatoryTabBindings, build_mandatory_tab
-from .operations_tab import OperationsTabBindings, build_operations_tab
-from .reports_tab import build_reports_tab
-from .settings_tab import build_settings_tab
+from .analytics import AnalyticsTabBindings, build_analytics_tab
+from .budget import BudgetTabBindings, build_budget_tab
+from .dashboard import DashboardTabBindings, build_dashboard_tab
+from .debts import DebtsTabBindings, build_debts_tab
+from .distribution import DistributionTabBindings, build_distribution_tab
+from .infographics import InfographicsTabBindings, build_infographics_tab
+from .mandatory import MandatoryTabBindings, build_mandatory_tab
+from .operations import OperationsTabBindings, build_operations_tab
+from .reports import ReportsFrame, ReportsTabContext, build_reports_tab
+from .settings import SettingsTabBindings, SettingsTabContext, build_settings_tab
 
 __all__ = [
     "BudgetTabBindings",
@@ -18,6 +18,10 @@ __all__ = [
     "InfographicsTabBindings",
     "MandatoryTabBindings",
     "OperationsTabBindings",
+    "SettingsTabBindings",
+    "SettingsTabContext",
+    "ReportsFrame",
+    "ReportsTabContext",
     "build_budget_tab",
     "build_debts_tab",
     "build_analytics_tab",

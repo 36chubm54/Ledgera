@@ -5,7 +5,7 @@ from tkinter import ttk
 from unittest.mock import patch
 
 from gui.combobox_compat import GuiDisplayRuntime
-from gui.tabs.reports.layout import build_reports_layout
+from gui.tabs.reports.core.layout import build_reports_layout
 
 
 def _appimage_wayland_runtime() -> GuiDisplayRuntime:
@@ -72,7 +72,7 @@ def test_reports_layout_uses_linux_custom_export_popup_for_appimage() -> None:
         owner.pack()
 
         with patch(
-            "gui.tabs.reports.layout.detect_gui_display_runtime",
+            "gui.tabs.reports.core.layout.detect_gui_display_runtime",
             return_value=_appimage_wayland_runtime(),
         ):
             ui = build_reports_layout(owner)
@@ -92,10 +92,10 @@ def test_reports_layout_keeps_native_export_menu_for_packaged_x11() -> None:
 
         with (
             patch(
-                "gui.tabs.reports.layout.detect_gui_display_runtime",
+                "gui.tabs.reports.core.layout.detect_gui_display_runtime",
                 return_value=_packaged_x11_runtime(),
             ),
-            patch("gui.tabs.reports.layout._tk_windowingsystem", return_value="x11"),
+            patch("gui.tabs.reports.core.layout._tk_windowingsystem", return_value="x11"),
         ):
             ui = build_reports_layout(owner)
 
@@ -113,7 +113,7 @@ def test_linux_export_popup_closes_when_application_focus_is_lost() -> None:
         owner.pack()
 
         with patch(
-            "gui.tabs.reports.layout.detect_gui_display_runtime",
+            "gui.tabs.reports.core.layout.detect_gui_display_runtime",
             return_value=_appimage_wayland_runtime(),
         ):
             ui = build_reports_layout(owner)

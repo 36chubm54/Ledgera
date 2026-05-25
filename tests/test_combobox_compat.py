@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 from tkinter import TclError, ttk
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
 
 from gui.combobox_compat import (
     GuiDisplayRuntime,
+    WaylandComboboxPopup,
     detect_gui_display_runtime,
     enable_wayland_combobox_support,
     resolve_linux_combobox_policy,
@@ -424,3 +427,42 @@ def test_wayland_popup_height_tracks_item_count() -> None:
         assert short_height < long_height
     finally:
         root.destroy()
+
+
+def test_wayland_popup_close_logs_expected_cleanup_failure(caplog) -> None:
+    class PopupStub:
+        def place_forget(self) -> None:
+            raise tk.TclError("popup already removed")
+
+        def destroy(self) -> None:
+            raise AssertionError("destroy should not run after place_forget failure")
+
+    class WidgetStub:
+        def after_idle(self, callback):
+            callback()
+            return "after-id"
+
+        def after_cancel(self, _after_id: str) -> None:
+            return None
+
+        def focus_set(self) -> None:
+            return None
+
+    manager = cast(Any, WaylandComboboxPopup.__new__(WaylandComboboxPopup))
+    manager.widget = WidgetStub()
+    manager.bind_down = True
+    manager.popup = PopupStub()
+    manager.listbox = object()
+    manager.scrollbar = object()
+    manager.values = ("A",)
+    manager._opening_popup = False
+    manager._focus_check_after_id = None
+    manager._finish_open_after_id = None
+    manager._restore_focus_after_id = None
+
+    caplog.set_level(logging.DEBUG)
+
+    manager.close_popup()
+
+    assert "Combobox popup cleanup skipped" in caplog.text
+    assert "popup already removed" in caplog.text

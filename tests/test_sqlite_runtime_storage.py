@@ -107,8 +107,8 @@ def _export_fixture(source_repo: SQLiteRecordRepository, path: Path, fmt: str) -
         source_subitems = []
         source_budgets = []
         if hasattr(source_repo, "db_path"):
-            from services.budget_service import BudgetService
-            from services.distribution_service import DistributionService
+            from services.planning.budget import BudgetService
+            from services.planning.distribution import DistributionService
 
             source_budgets = BudgetService(source_repo).get_budgets()
             distribution_service = DistributionService(source_repo)

@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -196,6 +197,26 @@ def test_refresh_rates_updates_timestamp_when_online():
     assert svc.last_fetched_at >= old_fetched
 
 
+def test_refresh_rates_logs_failure_when_online(monkeypatch, caplog):
+    svc = CurrencyService(aggregator=StubAggregator(error=RuntimeError("provider failed")))
+    svc._use_online = True
+    monkeypatch.setattr(svc, "_safe_load_cached", lambda: None)
+    caplog.set_level(logging.WARNING)
+
+    assert svc.refresh_rates() is False
+    assert "CurrencyService: provider fetch failed: provider failed" in caplog.text
+
+
+def test_fetch_online_rates_prefers_cached_values_for_static_provider(monkeypatch):
+    svc = CurrencyService(aggregator=StubAggregator(rates={"USD": 500.0}, provider_name="static"))
+    monkeypatch.setattr(svc, "_safe_load_cached", lambda: {"USD": 501.0})
+
+    loaded = svc._fetch_online_rates()
+
+    assert loaded == {"USD": 501.0}
+    assert svc.get_rate("USD") == pytest.approx(501.0)
+
+
 def test_save_cache_is_atomic_when_replace_fails(tmp_path, monkeypatch):
     cache_path = tmp_path / "currency_rates.json"
     cache_path.write_text(json.dumps({"USD": 500.0}), encoding="utf-8")
@@ -215,6 +236,50 @@ def test_save_cache_is_atomic_when_replace_fails(tmp_path, monkeypatch):
     temp_files = list(Path(tmp_path).glob(".currency_rates_*.json"))
     assert temp_files == []
     monkeypatch.setattr(app_services.os, "replace", original_replace)
+
+
+def test_write_config_file_logs_temp_cleanup_failure(tmp_path, monkeypatch, caplog):
+    config_path = tmp_path / "currency_config.json"
+
+    def failing_replace(_src, _dst):
+        raise OSError("replace failed")
+
+    def failing_unlink(_path):
+        raise OSError("cleanup denied")
+
+    monkeypatch.setattr(app_services.os, "replace", failing_replace)
+    monkeypatch.setattr(app_services.os, "unlink", failing_unlink)
+    caplog.set_level(logging.ERROR)
+
+    with pytest.raises(OSError, match="replace failed"):
+        CurrencyService._write_config_file({}, config_path)
+
+    assert "Failed to cleanup temporary currency config" in caplog.text
+    assert "cleanup denied" in caplog.text
+
+
+def test_load_config_payload_falls_back_to_defaults_on_invalid_json(tmp_path, monkeypatch, caplog):
+    config_path = tmp_path / "currency_config.json"
+    config_path.write_text("{invalid", encoding="utf-8")
+    monkeypatch.setattr(CurrencyService, "CONFIG_FILE", config_path)
+    caplog.set_level(logging.ERROR)
+
+    loaded = CurrencyService.load_config_payload(config_file=config_path, use_env_override=False)
+
+    assert loaded["base_currency"] == CurrencyService.DEFAULT_CONFIG["base_currency"]
+    assert "Failed to load currency configuration, using defaults" in caplog.text
+
+
+def test_safe_load_cached_returns_none_on_invalid_cache_json(tmp_path, monkeypatch, caplog):
+    cache_path = tmp_path / "currency_rates.json"
+    cache_path.write_text("{invalid", encoding="utf-8")
+    monkeypatch.setattr(CurrencyService, "CACHE_FILE", cache_path)
+    caplog.set_level(logging.ERROR)
+
+    svc = CurrencyService()
+
+    assert svc._safe_load_cached() is None
+    assert "Failed to load cached currency rates" in caplog.text
 
 
 def test_nbk_provider_parses_xml_correctly(monkeypatch, nbk_xml):

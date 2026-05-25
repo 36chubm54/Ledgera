@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import tkinter as tk
@@ -10,6 +11,7 @@ from typing import Literal
 from app_paths import is_appimage_mode, is_frozen_mode
 
 LinuxComboboxPolicy = Literal["native", "patched-native", "compat-popup"]
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,8 +189,8 @@ def install_linux_combobox_native_guards(
         widget = event.widget
         try:
             widget.tk.call("wm", "attributes", str(widget), "-topmost", 0)
-        except tk.TclError:
-            pass
+        except tk.TclError as error:
+            logger.debug("Combobox popdown topmost reset skipped: %s", error)
         widget.after_idle(lambda: _monitor_popdown(widget))
 
     root.bind_class("ComboboxPopdown", "<Map>", _on_popdown_map, add="+")
@@ -339,8 +341,8 @@ class WaylandComboboxPopup:
         try:
             popup.place_forget()
             popup.destroy()
-        except tk.TclError:
-            pass
+        except tk.TclError as error:
+            logger.debug("Combobox popup cleanup skipped: %s", error)
         if restore_focus:
             self._restore_focus_after_id = self.widget.after_idle(self._release_focus)
 

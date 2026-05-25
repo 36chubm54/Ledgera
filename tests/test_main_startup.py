@@ -14,7 +14,7 @@ def test_run_app_passes_initial_base_currency(monkeypatch) -> None:
 
     i18n = ModuleType("gui.i18n")
     i18n.set_language = lambda code: None  # type: ignore[attr-defined]
-    shell_window = ModuleType("gui.shell.shell_window")
+    shell_window = ModuleType("gui.shell.windowing.window")
     shell_window.enable_windows_dpi_awareness = lambda logger: None  # type: ignore[attr-defined]
     ui_theme = ModuleType("gui.ui_theme")
     ui_theme.set_theme = lambda name: None  # type: ignore[attr-defined]
@@ -26,7 +26,7 @@ def test_run_app_passes_initial_base_currency(monkeypatch) -> None:
     )
 
     monkeypatch.setitem(__import__("sys").modules, "gui.i18n", i18n)
-    monkeypatch.setitem(__import__("sys").modules, "gui.shell.shell_window", shell_window)
+    monkeypatch.setitem(__import__("sys").modules, "gui.shell.windowing.window", shell_window)
     monkeypatch.setitem(__import__("sys").modules, "gui.ui_theme", ui_theme)
     monkeypatch.setitem(__import__("sys").modules, "gui.initial_setup", initial_setup)
     monkeypatch.setitem(__import__("sys").modules, "gui.tkinter_gui", tkinter_gui)
@@ -44,7 +44,7 @@ def test_run_app_stops_when_initial_setup_is_cancelled(monkeypatch) -> None:
 
     i18n = ModuleType("gui.i18n")
     i18n.set_language = lambda code: None  # type: ignore[attr-defined]
-    shell_window = ModuleType("gui.shell.shell_window")
+    shell_window = ModuleType("gui.shell.windowing.window")
     shell_window.enable_windows_dpi_awareness = lambda logger: None  # type: ignore[attr-defined]
     ui_theme = ModuleType("gui.ui_theme")
     ui_theme.set_theme = lambda name: None  # type: ignore[attr-defined]
@@ -54,7 +54,7 @@ def test_run_app_stops_when_initial_setup_is_cancelled(monkeypatch) -> None:
     tkinter_gui.main = lambda **kwargs: called.append("launched")  # type: ignore[attr-defined]
 
     monkeypatch.setitem(__import__("sys").modules, "gui.i18n", i18n)
-    monkeypatch.setitem(__import__("sys").modules, "gui.shell.shell_window", shell_window)
+    monkeypatch.setitem(__import__("sys").modules, "gui.shell.windowing.window", shell_window)
     monkeypatch.setitem(__import__("sys").modules, "gui.ui_theme", ui_theme)
     monkeypatch.setitem(__import__("sys").modules, "gui.initial_setup", initial_setup)
     monkeypatch.setitem(__import__("sys").modules, "gui.tkinter_gui", tkinter_gui)

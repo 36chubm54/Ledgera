@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gui.tabs.distribution_tab import _snapshot_values_to_display
+from gui.tabs.distribution import _snapshot_values_to_display
 
 
 def test_snapshot_values_to_display_reformats_numeric_distribution_columns() -> None:

@@ -4,8 +4,8 @@ from datetime import date as dt_date
 from itertools import count
 from typing import Literal
 
-from utils.money import quantize_money, to_money_float, to_rate_float
-from utils.tag_utils import normalize_tag_names
+from utils.finance.money import quantize_money, to_money_float, to_rate_float
+from utils.records.tags import normalize_tag_names
 
 from .validation import parse_ymd
 

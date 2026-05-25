@@ -5,26 +5,23 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from app.use_cases import (
+from app.use_cases_pkg.operations import CreateExpense, CreateIncome
+from app.use_cases_pkg.planning import (
     CloseDebt,
     CreateDebt,
-    CreateExpense,
-    CreateIncome,
     CreateLoan,
-    DeleteAllRecords,
     DeleteDebt,
     DeleteDebtPayment,
-    DeleteRecord,
-    GenerateReport,
     GetClosedDebts,
     GetDebtHistory,
     GetDebts,
     GetOpenDebts,
-    ImportFromCSV,
     RecalculateDebt,
     RegisterDebtPayment,
     RegisterDebtWriteOff,
 )
+from app.use_cases_pkg.reporting import GenerateReport, ImportFromCSV
+from app.use_cases_pkg.transfers import DeleteAllRecords, DeleteRecord
 from domain.import_policy import ImportPolicy
 from domain.records import ExpenseRecord, IncomeRecord, Record
 from domain.wallets import Wallet

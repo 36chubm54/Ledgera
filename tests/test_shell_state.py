@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
+from tkinter import TclError
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from gui.shell.shell_state import (
+from gui.shell.core.state import (
     apply_saved_ui_preferences,
     assign_status_bar_state,
     rebuild_status_bar,
@@ -132,3 +134,35 @@ def test_rebuild_status_bar_replaces_existing_frame_and_refreshes() -> None:
     new_frame.grid.assert_called_once()
     refresh_status_bar.assert_called_once()
     assert frame is new_frame
+
+
+def test_rebuild_status_bar_logs_expected_cleanup_failure(caplog) -> None:
+    old_frame = Mock()
+    old_frame.destroy.side_effect = TclError("status bar already gone")
+    new_frame = Mock()
+    owner = SimpleNamespace(_status_bar=old_frame)
+
+    result = StatusBarBuildResult(
+        frame=new_frame,
+        online_var=Mock(),
+        currency_status_label=Mock(),
+        price_status_label=Mock(),
+        display_currency_var=Mock(),
+        display_currency_combo=Mock(),
+        language_var=Mock(),
+        language_combo=Mock(),
+        theme_var=Mock(),
+        theme_combo=Mock(),
+        theme_label_to_key={},
+    )
+
+    caplog.set_level(logging.DEBUG)
+
+    rebuild_status_bar(
+        owner,
+        build_status_bar_result=lambda _owner: result,
+        refresh_status_bar=Mock(),
+    )
+
+    assert "Existing status bar cleanup skipped" in caplog.text
+    assert "status bar already gone" in caplog.text

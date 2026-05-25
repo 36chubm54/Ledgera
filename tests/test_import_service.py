@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from app.finance_service import ImportCapabilities
+from app.importing.finance import ImportCapabilities
 from app.services import CurrencyService
 from domain.asset import Asset, AssetCategory, AssetSnapshot
 from domain.debt import Debt, DebtKind, DebtOperationType, DebtPayment, DebtStatus
@@ -15,13 +15,16 @@ from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord
 from domain.tags import Tag
 from domain.transfers import Transfer
 from domain.wallets import Wallet
-from gui.controller_import_support import normalize_operation_ids_for_import, run_import_transaction
-from gui.controller_support import build_list_items
 from gui.controllers import FinancialController
+from gui.controllers_pkg.import_support import (
+    normalize_operation_ids_for_import,
+    run_import_transaction,
+)
+from gui.controllers_pkg.support import build_list_items
 from infrastructure.repositories import JsonFileRecordRepository
 from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.import_parser import ParsedImportData
 from services.import_service import ImportService
+from services.importing.parser import ParsedImportData
 from tests.type_helpers import typed_repo
 
 

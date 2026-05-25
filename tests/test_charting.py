@@ -1,4 +1,7 @@
-from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord
+from types import SimpleNamespace
+from typing import cast
+
+from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
 from utils.charting import (
     aggregate_daily_cashflow,
     aggregate_expenses_by_category,
@@ -135,3 +138,12 @@ def test_aggregate_monthly_cashflow_excludes_transfer():
     assert income[0] == 500.0  # Salary
     assert expense[0] == 100.0  # Food
     # Transfer amounts are not included
+
+
+def test_extract_years_ignores_non_parseable_date_values() -> None:
+    records = [
+        cast(Record, IncomeRecord(date="2026-01-10", _amount_init=10.0, category="A")),
+        cast(Record, SimpleNamespace(date=object(), category="B", amount_base=20.0)),
+    ]
+
+    assert extract_years(records) == [2026]

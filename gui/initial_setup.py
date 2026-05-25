@@ -16,7 +16,7 @@ from app_paths import get_icons_dir
 from config import SQLITE_PATH
 from gui.combobox_compat import enable_wayland_combobox_support
 from gui.i18n import tr
-from gui.shell.shell_window import APP_LINUX_WM_CLASS, apply_window_icon
+from gui.shell.windowing.window import APP_LINUX_WM_CLASS, apply_window_icon
 from gui.ui_theme import PAD_LG, PAD_SM, PAD_XS, bootstrap_ui, get_palette, get_theme
 from infrastructure.currency_providers import DEFAULT_PROVIDER_REGISTRY, CurrencyProviderRegistry
 

@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from app.services import CurrencyService
 from gui.controllers import FinancialController
-from gui.tabs.debts_tab import DebtsTabContext, _segment_widths, build_debts_tab
+from gui.tabs.debts import DebtsTabContext, _segment_widths, build_debts_tab
 from infrastructure.sqlite_repository import SQLiteRecordRepository
 
 
@@ -105,8 +105,8 @@ def test_debts_tab_local_shortcuts_are_bound_and_flow_works(tmp_path: Path) -> N
         assert action_date_entry.bind("<Up>")
 
         with (
-            patch("gui.tabs.debts_tab.messagebox.showerror"),
-            patch("gui.tabs.debts_tab.messagebox.askyesno", return_value=True),
+            patch("gui.tabs.debts.messagebox.showerror"),
+            patch("gui.tabs.debts.messagebox.askyesno", return_value=True),
         ):
             save_button = _find_button(parent, "Сохранить")
             assert save_button is not None
@@ -184,8 +184,8 @@ def test_debts_tab_delete_confirmation_explains_records_are_kept(tmp_path: Path)
         bindings.debt_tree.selection_set(str(debt.id))
 
         with (
-            patch("gui.tabs.debts_tab.messagebox.showerror"),
-            patch("gui.tabs.debts_tab.messagebox.askyesno", return_value=False) as askyesno,
+            patch("gui.tabs.debts.messagebox.showerror"),
+            patch("gui.tabs.debts.messagebox.askyesno", return_value=False) as askyesno,
         ):
             delete_button = _find_button(parent, "Удалить")
             assert delete_button is not None
@@ -226,8 +226,8 @@ def test_pay_does_not_trigger_global_refresh_when_no_debt_is_selected(tmp_path: 
         assert pay_button is not None
 
         with (
-            patch("gui.tabs.debts_tab.messagebox.showerror"),
-            patch("gui.tabs.debts.builder.refresh_debts_views") as refresh_mock,
+            patch("gui.tabs.debts.messagebox.showerror"),
+            patch("gui.tabs.debts.core.builder.refresh_debts_views") as refresh_mock,
         ):
             pay_button.invoke()
             root.update_idletasks()

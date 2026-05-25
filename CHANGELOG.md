@@ -7,6 +7,22 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- Completed the package-local decomposition wave across `app`, `gui`, `services`, `infrastructure`, and `utils` so internal code now imports direct package paths instead of flat compatibility facades
+- Removed legacy `app/*` compatibility shims and `gui/tabs/*_tab.py` wrappers in favor of direct package entrypoints and `core/` + `support/` ownership
+- Reorganized analytics, planning, import, shell, settings, report, operations, backup, export, spreadsheet, finance, and records helpers into clearer package clusters with narrower ownership boundaries
+
+### Fixed
+
+- Restored the `utils.backup_utils.json` compatibility seam so backup-export tests that patch `backup_utils.json.dump` still exercise the atomic write path after the backup helper split
+
+### Docs
+
+- Synced `README.md`, `README_EN.md`, and `docs/architecture.md` with the current package layout, direct import paths, and removal of legacy tab/app shim layers
+
 ## [2.6.0] - 2026-05-23
 
 ### Added

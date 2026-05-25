@@ -1,5 +1,5 @@
 from domain.budget import Budget, BudgetResult, BudgetStatus, PaceStatus
-from gui.tabs.budget_tab import _normalize_budget_limit_input, _visual_budget_state
+from gui.tabs.budget.support.actions import _normalize_budget_limit_input, _visual_budget_state
 
 
 def _result(*, scope_type: str, status: BudgetStatus, pace_status: PaceStatus) -> BudgetResult:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk
@@ -12,6 +13,8 @@ from gui.ui_dialogs import show_error as _show_error_dialog
 from gui.ui_dialogs import show_info as _show_info_dialog
 from gui.ui_dialogs import show_warning as _show_warning_dialog
 from gui.ui_theme import get_palette
+
+logger = logging.getLogger(__name__)
 
 
 def show_error(
@@ -157,7 +160,8 @@ def safe_destroy(widget: tk.Misc | None) -> None:
         return
     try:
         widget.destroy()
-    except tk.TclError:
+    except tk.TclError as error:
+        logger.debug("Widget destroy skipped during UI cleanup: %s", error)
         return
 
 
@@ -245,8 +249,8 @@ def enable_treeview_column_autosize(
         try:
             if configured:
                 return tkfont.nametofont(str(configured))
-        except (tk.TclError, RuntimeError):
-            pass
+        except (tk.TclError, RuntimeError) as error:
+            logger.debug("Treeview font fallback activated for %s: %s", style_name, error)
         return tkfont.Font(font=configured or fallback)
 
     body_font = _resolve_font("Treeview", "TkDefaultFont")
@@ -425,8 +429,8 @@ def bind_label_wrap(
         try:
             width = max(min_width, min(max_width, target.winfo_width() - padding))
             label.configure(wraplength=width)
-        except (tk.TclError, RuntimeError):
-            pass
+        except (tk.TclError, RuntimeError) as error:
+            logger.debug("Label wrap sync skipped during UI refresh: %s", error)
 
     target.bind("<Configure>", _sync_wrap, add="+")
     _sync_wrap()

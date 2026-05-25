@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
+import tkinter as tk
 from types import SimpleNamespace
 from typing import Any, cast
 
-from gui.shell.shell_records import (
+from gui.shell.core.records import (
     clear_records_tooltip_state,
     destroy_records_tooltip_window,
     hide_owner_records_tooltip,
@@ -161,11 +163,24 @@ def test_tooltip_row_id_and_destroy_window() -> None:
     assert tooltip.destroyed is True
 
 
+def test_destroy_records_tooltip_window_logs_expected_cleanup_failure(caplog) -> None:
+    class _BrokenTooltip:
+        def destroy(self) -> None:
+            raise tk.TclError("tooltip already closed")
+
+    caplog.set_level(logging.DEBUG)
+
+    destroy_records_tooltip_window(cast(Any, _BrokenTooltip()))
+
+    assert "Records tooltip cleanup skipped" in caplog.text
+    assert "tooltip already closed" in caplog.text
+
+
 def test_show_records_tooltip_window_returns_popup(monkeypatch) -> None:
     expected = _FakeTooltip()
 
     monkeypatch.setattr(
-        "gui.shell.shell_records.show_popup_tooltip",
+        "gui.shell.core.records.show_popup_tooltip",
         lambda **_kwargs: expected,
     )
 
@@ -187,7 +202,7 @@ def test_clear_and_process_records_tooltip_state(monkeypatch) -> None:
 
     shown = _FakeTooltip()
     monkeypatch.setattr(
-        "gui.shell.shell_records.show_popup_tooltip",
+        "gui.shell.core.records.show_popup_tooltip",
         lambda **_kwargs: shown,
     )
     tooltip_text, tooltip_window = process_records_tooltip_event(
@@ -244,7 +259,7 @@ def test_refresh_owner_record_views_and_owner_tooltip_helpers(monkeypatch) -> No
 
     shown = _FakeTooltip()
     monkeypatch.setattr(
-        "gui.shell.shell_records.show_popup_tooltip",
+        "gui.shell.core.records.show_popup_tooltip",
         lambda **_kwargs: shown,
     )
     show_owner_records_tooltip(owner, cast(Any, _FakeEvent()))
@@ -253,3 +268,43 @@ def test_refresh_owner_record_views_and_owner_tooltip_helpers(monkeypatch) -> No
 
     hide_owner_records_tooltip(owner)
     assert owner._records_tooltip_window is None
+
+
+def test_refresh_record_views_logs_expected_tag_style_failures(caplog) -> None:
+    class _BrokenTree(_FakeTree):
+        def tag_configure(self, tag: str, **kwargs: object) -> None:
+            raise tk.TclError(f"cannot style {tag}")
+
+    records_tree = _BrokenTree()
+    tags_tree = _BrokenTree()
+    controller = SimpleNamespace(
+        build_record_list_items=lambda records=None: [
+            SimpleNamespace(
+                record_id="row-1",
+                repository_index=1,
+                domain_record_id=2,
+                description_text="Desc",
+                kind="expense",
+                tags=("mandatory",),
+                tags_text="mandatory",
+            )
+        ],
+        list_tags=lambda: [SimpleNamespace(name="mandatory", color="#ff0000")],
+    )
+
+    caplog.set_level(logging.DEBUG)
+
+    refresh_record_views(
+        controller=controller,
+        records_tree=cast(Any, records_tree),
+        record_tags_tree=cast(Any, tags_tree),
+        records=None,
+        display_currency_code="USD",
+        build_record_tree_values=lambda item, kind: (item.record_id, kind),
+        kind_to_foreground={"expense": "#f00"},
+        foreground_for_kind=lambda kind: kind == "expense",
+        color_for_tag=lambda _name: "#ff0000",
+    )
+
+    assert "Records tree tag style skipped for expense" in caplog.text
+    assert "Record tags tree style skipped for tag_color_ff0000" in caplog.text

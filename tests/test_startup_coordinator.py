@@ -146,5 +146,53 @@ def test_deferred_startup_staged_callback_failure_recovers_refresh_and_online_mo
         ("focus", None),
         ("list", ["initial-record"]),
         ("list", ["fallback-record"]),
+        ("budgets", None),
+        ("all", None),
+        ("online", None),
+    ]
+
+
+def test_deferred_startup_background_error_still_applies_online_mode_after_refresh_failure() -> (
+    None
+):
+    events: list[tuple[str, object]] = []
+
+    class Controller:
+        def apply_mandatory_auto_payments(self) -> list[str]:
+            return []
+
+    repository = Mock()
+    repository.load_all.return_value = ["fallback-record"]
+
+    def run_background(task, *, on_success, on_error=None, busy_message="", block_ui=True):
+        del task, on_success, busy_message, block_ui
+        assert on_error is not None
+        on_error(RuntimeError("background failed"))
+
+    coordinator = DeferredStartupCoordinator(
+        controller=Controller(),
+        repository=repository,
+        run_background=run_background,
+        schedule_after_idle=lambda key, callback: key,
+        schedule_after=lambda key, delay_ms, callback: key,
+        refresh_list=lambda *, records=None: (_ for _ in ()).throw(RuntimeError("refresh failed")),
+        refresh_charts=lambda *, records=None: events.append(("charts", records)),
+        refresh_budgets=lambda: events.append(("budgets", None)),
+        refresh_all=lambda: events.append(("all", None)),
+        apply_saved_online_mode=lambda: events.append(("online", None)),
+        show_auto_payment_message=lambda items: events.append(("autopay", list(items))),
+        restore_keyboard_focus=lambda: events.append(("focus", None)),
+        set_busy=lambda busy, message: events.append(("busy", (busy, message))),
+        logger=logging.getLogger("tests.startup_coordinator.background_error"),
+    )
+
+    coordinator.start()
+
+    assert events == [
+        ("busy", (False, "")),
+        ("focus", None),
+        ("charts", ["fallback-record"]),
+        ("budgets", None),
+        ("all", None),
         ("online", None),
     ]

@@ -10,8 +10,8 @@ from domain.debt import Debt, DebtKind, DebtStatus
 from domain.records import ExpenseRecord, IncomeRecord
 from domain.reports import Report
 from gui.i18n import get_language, set_language
-from utils.debt_report_utils import debts_for_report_period
-from utils.pdf_utils import _should_add_by_category_section, report_to_pdf
+from utils.finance.debt_report import debts_for_report_period
+from utils.pdf_utils import _register_cyrillic_font, _should_add_by_category_section, report_to_pdf
 
 
 @pytest.fixture(autouse=True)
@@ -164,3 +164,15 @@ def test_report_pdf_includes_group_report_on_tag(monkeypatch):
         assert "Group report on tag" in captured_titles
     finally:
         os.unlink(path)
+
+
+def test_register_cyrillic_font_logs_explicit_fallback(monkeypatch, caplog):
+    monkeypatch.setattr("utils.pdf_utils.os.path.exists", lambda _path: False)
+    monkeypatch.setattr("utils.pdf_utils.os.path.isdir", lambda _path: False)
+    monkeypatch.setattr("utils.pdf_utils._try_register_font", lambda _name, _source: False)
+    caplog.set_level(logging.WARNING)
+
+    selected = _register_cyrillic_font()
+
+    assert selected == "Helvetica"
+    assert "No suitable TTF font found for Cyrillic" in caplog.text

@@ -4,15 +4,10 @@ from typing import cast
 
 import pytest
 
-from app.repository import RecordRepository
+from app.data.repository import RecordRepository
 from app.services import CurrencyService
-from app.use_cases import (
-    CalculateWalletBalance,
-    CreateTransfer,
-    DeleteRecord,
-    DeleteTransfer,
-    UpdateTransfer,
-)
+from app.use_cases_pkg.transfers import CreateTransfer, DeleteRecord, DeleteTransfer, UpdateTransfer
+from app.use_cases_pkg.wallets import CalculateWalletBalance
 from domain.errors import DomainError
 from infrastructure.repositories import JsonFileRecordRepository
 

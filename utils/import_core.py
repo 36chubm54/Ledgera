@@ -1,13 +1,14 @@
 import math
 import re
 from collections.abc import Callable
+from decimal import InvalidOperation
 from typing import Any
 
 from domain.import_policy import ImportPolicy
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
 from domain.validation import ensure_valid_period, parse_ymd
-from utils.money import quantize_money, to_decimal, to_money_float, to_rate_float
-from utils.tag_utils import normalize_tag_names, parse_tag_string
+from utils.finance.money import quantize_money, to_decimal, to_money_float, to_rate_float
+from utils.records.tags import normalize_tag_names, parse_tag_string
 
 MANDATORY_PERIODS = {"daily", "weekly", "monthly", "yearly"}
 
@@ -30,7 +31,7 @@ def as_float(value: Any, default: float | None = None) -> float | None:
         if not math.isfinite(result):
             return default
         return result
-    except Exception:
+    except (InvalidOperation, TypeError, ValueError, OverflowError):
         return default
 
 
@@ -178,7 +179,7 @@ def parse_import_row(
                 amount_base = to_money_float(
                     quantize_money(amount_original) * to_decimal(rate_at_operation)
                 )
-            except Exception as exc:
+            except (InvalidOperation, TypeError, ValueError, OverflowError, RuntimeError) as exc:
                 return (
                     None,
                     None,

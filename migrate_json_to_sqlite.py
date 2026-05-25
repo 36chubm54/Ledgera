@@ -35,8 +35,14 @@ from domain.wallets import Wallet
 from storage.json_storage import JsonStorage
 from storage.sqlite_storage import SQLiteStorage
 from utils.backup_utils import unwrap_backup_payload
-from utils.money import minor_to_money, rate_to_text, to_minor_units, to_money_float, to_rate_float
-from utils.tag_utils import color_for_tag, normalize_tag_name, normalize_tag_names
+from utils.finance.money import (
+    minor_to_money,
+    rate_to_text,
+    to_minor_units,
+    to_money_float,
+    to_rate_float,
+)
+from utils.records.tags import color_for_tag, normalize_tag_name, normalize_tag_names
 
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 MAX_MIGRATION_JSON_SIZE = 25 * 1024 * 1024  # 25 MB

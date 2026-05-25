@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.services import CurrencyService
 from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.timeline_service import (
+from services.analytics.timeline import (
     MonthlyCashflow,
     MonthlyCumulative,
     MonthlyNetWorth,

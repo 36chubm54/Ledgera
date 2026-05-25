@@ -1,0 +1,1 @@
+"""Core mandatory tab modules."""

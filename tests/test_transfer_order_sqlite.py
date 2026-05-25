@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.services import CurrencyService
-from app.use_cases import CreateIncome, CreateTransfer
+from app.use_cases_pkg.operations import CreateIncome
+from app.use_cases_pkg.transfers import CreateTransfer
 from infrastructure.sqlite_repository import SQLiteRecordRepository
 
 

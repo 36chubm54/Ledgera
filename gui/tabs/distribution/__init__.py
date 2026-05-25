@@ -1,8 +1,8 @@
 """Distribution tab subpackage."""
 
-from .builder import build_distribution_tab
-from .contracts import DistributionTabBindings, DistributionTabContext
-from .formatting import (
+from .core.builder import build_distribution_tab
+from .core.contracts import DistributionTabBindings, DistributionTabContext
+from .support.formatting import (
     _default_end,
     _default_start,
     _fmt_amount,

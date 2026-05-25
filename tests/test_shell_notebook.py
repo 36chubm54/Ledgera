@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from gui.shell.shell_notebook import (
+from gui.shell.core.notebook import (
     compute_underline_geometry,
     render_notebook_underline,
     schedule_notebook_underline,

@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 import requests
 
-import services.app_update_service as update_service_module
+import services.support.app_update as update_service_module
 from domain.update import AppUpdateDownloadProgress, AppUpdateReleaseInfo
-from services.app_update_service import (
+from services.support.app_update import (
     AppUpdateDownloadError,
     AppUpdateMetadataError,
     AppUpdateNotSupportedError,

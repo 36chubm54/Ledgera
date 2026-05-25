@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from gui.shell.shell_tabs import apply_tab_titles, rebuild_built_tabs
+from gui.shell.core.tabs import apply_tab_titles, rebuild_built_tabs
 
 
 @dataclass

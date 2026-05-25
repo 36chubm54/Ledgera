@@ -17,8 +17,8 @@ from domain.update import (
     AppUpdateReleaseInfo,
     PendingUpdateInstallState,
 )
-from gui.tabs.settings.builder import build_settings_tab
-from gui.tabs.settings.contracts import SettingsTabContext
+from gui.tabs.settings.core.builder import build_settings_tab
+from gui.tabs.settings.core.contracts import SettingsTabContext
 
 
 def _new_root() -> tk.Tk:

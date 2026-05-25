@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from gui.shell.shell_startup import report_startup_auto_payments
+from gui.shell.core.startup import report_startup_auto_payments
 
 
 def test_report_startup_auto_payments_skips_empty_batch() -> None:

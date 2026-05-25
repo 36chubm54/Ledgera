@@ -1,0 +1,1 @@
+"""Core infographics tab modules."""

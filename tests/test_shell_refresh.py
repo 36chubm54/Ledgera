@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from gui.shell.shell_refresh import (
+from gui.shell.core.refresh import (
     refresh_display_currency_views,
     refresh_optional_view,
     refresh_owner_all,

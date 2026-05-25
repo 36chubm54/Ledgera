@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-import app.secret_storage as secret_storage
-from app.secret_storage import (
+import pytest
+
+import app.runtime.secret_storage as secret_storage
+from app.runtime.secret_storage import (
     EXCHANGE_RATE_API_KEY_ACCOUNT,
     LEGACY_SERVICE_NAME,
     SERVICE_NAME,
+    SecretStorageUnavailableError,
+    delete_exchange_rate_api_key,
     get_exchange_rate_api_key,
     get_secret_storage_status,
     set_exchange_rate_api_key,
@@ -114,4 +118,51 @@ def test_set_exchange_rate_api_key_cleans_up_legacy_service(monkeypatch) -> None
     assert calls == [
         (SERVICE_NAME, EXCHANGE_RATE_API_KEY_ACCOUNT, "new-key"),
         (LEGACY_SERVICE_NAME, EXCHANGE_RATE_API_KEY_ACCOUNT, None),
+    ]
+
+
+def test_set_exchange_rate_api_key_raises_when_backend_cannot_store(monkeypatch) -> None:
+    class DummyKeyring:
+        def set_password(self, service_name: str, account: str, value: str) -> None:
+            raise RuntimeError("store failed")
+
+    monkeypatch.setattr(
+        secret_storage,
+        "get_secret_storage_status",
+        lambda: secret_storage.SecretStorageStatus(
+            available=True,
+            backend_name="DummyKeyring",
+            backend_label="OS secure secret storage",
+        ),
+    )
+    monkeypatch.setattr(secret_storage, "keyring", DummyKeyring())
+
+    with pytest.raises(SecretStorageUnavailableError, match="persist"):
+        set_exchange_rate_api_key("new-key")
+
+
+def test_delete_exchange_rate_api_key_ignores_expected_cleanup_failures(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    class DummyKeyring:
+        def delete_password(self, service_name: str, account: str) -> None:
+            calls.append((service_name, account))
+            raise RuntimeError("missing")
+
+    monkeypatch.setattr(
+        secret_storage,
+        "get_secret_storage_status",
+        lambda: secret_storage.SecretStorageStatus(
+            available=True,
+            backend_name="DummyKeyring",
+            backend_label="OS secure secret storage",
+        ),
+    )
+    monkeypatch.setattr(secret_storage, "keyring", DummyKeyring())
+
+    delete_exchange_rate_api_key()
+
+    assert calls == [
+        (SERVICE_NAME, EXCHANGE_RATE_API_KEY_ACCOUNT),
+        (LEGACY_SERVICE_NAME, EXCHANGE_RATE_API_KEY_ACCOUNT),
     ]

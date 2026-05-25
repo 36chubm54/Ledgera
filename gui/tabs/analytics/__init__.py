@@ -1,8 +1,8 @@
 """Analytics tab subpackage."""
 
-from .builder import build_analytics_tab
-from .contracts import AnalyticsTabBindings, AnalyticsTabContext
-from .render import _draw_breakdown_pie, _draw_net_worth_line
+from .core.builder import build_analytics_tab
+from .core.contracts import AnalyticsTabBindings, AnalyticsTabContext
+from .core.render import _draw_breakdown_pie, _draw_net_worth_line
 
 __all__ = [
     "AnalyticsTabBindings",

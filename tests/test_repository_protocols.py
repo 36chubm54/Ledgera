@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.repository_protocols import (
+from app.data.protocols import (
     BudgetRepositoryProtocol,
     DistributionRepositoryProtocol,
 )

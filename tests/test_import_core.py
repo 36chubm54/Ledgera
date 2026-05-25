@@ -190,3 +190,24 @@ def test_parse_import_row_accepts_legacy_amount_kzt_for_full_backup() -> None:
     assert record is not None
     assert record.amount_original == pytest.approx(10.0)
     assert record.amount_base == pytest.approx(5000.0)
+
+
+def test_parse_import_row_current_rate_surfaces_controlled_fetch_failure() -> None:
+    record, balance, error = parse_import_row(
+        {
+            "date": "2025-01-01",
+            "type": "income",
+            "wallet_id": "1",
+            "category": "Salary",
+            "amount_original": "10",
+            "currency": "USD",
+        },
+        row_label="row 10",
+        policy=ImportPolicy.CURRENT_RATE,
+        get_rate=lambda _currency: (_ for _ in ()).throw(RuntimeError("provider offline")),
+    )
+
+    assert record is None
+    assert balance is None
+    assert "failed to get current rate" in (error or "")
+    assert "provider offline" in (error or "")

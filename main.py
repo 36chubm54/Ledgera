@@ -12,7 +12,7 @@ def _read_runtime_env(primary: str, legacy: str, default: str) -> str:
 def run_app() -> bool:
     from gui.i18n import set_language
     from gui.initial_setup import ensure_initial_setup
-    from gui.shell.shell_window import enable_windows_dpi_awareness
+    from gui.shell.windowing.window import enable_windows_dpi_awareness
     from gui.tkinter_gui import main
     from gui.ui_theme import set_theme
 
@@ -20,7 +20,7 @@ def run_app() -> bool:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
-    enable_windows_dpi_awareness(logging.getLogger("gui.shell.shell_window"))
+    enable_windows_dpi_awareness(logging.getLogger("gui.shell.windowing.window"))
     set_language(_read_runtime_env("LEDGERA_LANG", "FIN_ACCOUNTING_LANG", APP_LANGUAGE))
     set_theme(_read_runtime_env("LEDGERA_THEME", "FIN_ACCOUNTING_THEME", APP_THEME))
     setup_outcome = ensure_initial_setup()

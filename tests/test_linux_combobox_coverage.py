@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import logging
 import tkinter as tk
-from types import SimpleNamespace
 from tkinter import ttk
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
-from gui.tabs.mandatory.tree_section import build_mandatory_actions_row
-from gui.tabs.operations.journal_section import build_journal_section
-from gui.tabs.operations.transfer_section import build_transfer_section
+from gui.tabs.mandatory.support.tree_section import build_mandatory_actions_row
+from gui.tabs.operations.core.journal_section import build_journal_section
+from gui.tabs.operations.core.transfer_section import build_transfer_section
 
 
 class _DummyOperationsController:
@@ -44,7 +44,7 @@ def test_transfer_section_attaches_linux_popup_support_to_wallet_selectors() -> 
         )
 
         with patch(
-            "gui.tabs.operations.transfer_section.enable_wayland_combobox_support",
+            "gui.tabs.operations.core.transfer_section.enable_wayland_combobox_support",
             wraps=lambda widget, **_kwargs: setattr(widget, "_compat_attached", True),
         ) as wrapped:
             build_transfer_section(
@@ -72,7 +72,7 @@ def test_journal_section_attaches_linux_popup_support_to_import_combos() -> None
         parent.pack(fill="both", expand=True)
 
         with patch(
-            "gui.tabs.operations.journal_section.enable_wayland_combobox_support",
+            "gui.tabs.operations.core.journal_section.enable_wayland_combobox_support",
             wraps=lambda widget, **_kwargs: setattr(widget, "_compat_attached", True),
         ) as wrapped:
             build_journal_section(
@@ -103,7 +103,7 @@ def test_mandatory_actions_row_attaches_linux_popup_support_to_format_combo() ->
         format_var = tk.StringVar(value="CSV")
 
         with patch(
-            "gui.tabs.mandatory.tree_section.enable_wayland_combobox_support",
+            "gui.tabs.mandatory.support.tree_section.enable_wayland_combobox_support",
             wraps=lambda widget, **_kwargs: setattr(widget, "_compat_attached", True),
         ) as wrapped:
             build_mandatory_actions_row(

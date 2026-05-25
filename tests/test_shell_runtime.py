@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+from tkinter import TclError
 from unittest.mock import Mock
 
-from gui.shell.shell_runtime import run_background_task, set_busy_state
+from gui.shell.core.runtime import run_background_task, set_busy_state
 
 
 @dataclass
@@ -78,3 +80,19 @@ def test_run_background_task_delegates_to_runtime() -> None:
     )
 
     runtime.run_background.assert_called_once()
+
+
+def test_set_busy_state_logs_expected_disable_toggle_failure(caplog) -> None:
+    @dataclass
+    class _BrokenOwner(_Owner):
+        def attributes(self, flag: str, value: bool) -> object:
+            raise TclError("disable unavailable")
+
+    owner = _BrokenOwner()
+    caplog.set_level(logging.DEBUG)
+
+    set_busy_state(owner, busy=True, message="Loading", base_title="App")
+
+    assert "Busy-state window disable toggle skipped" in caplog.text
+    assert "disable unavailable" in caplog.text
+    assert owner.progress.calls == ["grid", "start:12"]

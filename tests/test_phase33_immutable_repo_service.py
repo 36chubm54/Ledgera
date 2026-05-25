@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.record_service import RecordService
+from app.data.records import RecordService
 from domain.records import ExpenseRecord, IncomeRecord
 from domain.wallets import Wallet
 from infrastructure.repositories import JsonFileRecordRepository, RecordRepository

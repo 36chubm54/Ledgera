@@ -47,8 +47,8 @@ def test_bootstrap_ui_skips_combobox_popdown_theme_under_compat_popup_policy() -
         combo = ttk.Combobox(root, values=["A", "B"], state="readonly")
         combo.pack()
         with (
-            patch("gui.ui_theme.should_style_native_linux_popdown", return_value=False),
-            patch("gui.ui_theme._configure_combobox_popdown") as configure_mock,
+            patch("gui.ui.theme_widgets.should_style_native_linux_popdown", return_value=False),
+            patch("gui.ui.theme_widgets._configure_combobox_popdown") as configure_mock,
         ):
             bootstrap_ui(root, "light")
 

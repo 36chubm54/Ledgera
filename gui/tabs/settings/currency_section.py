@@ -1,22 +1,23 @@
 from __future__ import annotations
 
-import logging
 import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
-from domain.errors import DomainError
 from gui.combobox_compat import enable_wayland_combobox_support
 from gui.i18n import tr
-from gui.logging_utils import log_ui_error
 from gui.tooltip import Tooltip
 from gui.ui_dialogs import messagebox_compat as messagebox
 from gui.ui_theme import PAD_LG, PAD_SM, PAD_XS, create_card_section
 
-from .audit_dialog import show_audit_report_dialog
-from .wallets_section import MessageBoxLike
-
-logger = logging.getLogger(__name__)
+from .dialogs.audit import show_audit_report_dialog
+from .support.currency_support import (
+    build_currency_section_state,
+    refresh_provider_choices,
+    run_audit_action,
+    save_currency_settings,
+)
+from .support.wallets_support import MessageBoxLike
 
 
 def build_currency_section(
@@ -37,33 +38,14 @@ def build_currency_section(
     currency_frame = currency_card.winfo_children()[-1]
     currency_frame.grid_columnconfigure(1, weight=1)
 
-    runtime_config = context.controller.get_runtime_currency_config()
-    security_diagnostics = context.controller.get_runtime_security_diagnostics()
-    provider_names = context.controller.get_supported_currency_provider_names()
-
-    base_currency_text = str(runtime_config.get("base_currency", "KZT") or "KZT").upper()
-    display_currency_var = tk.StringVar(
-        value=str(
-            runtime_config.get("display_currency", context.controller.get_display_currency_code())
-            or context.controller.get_display_currency_code()
-        ).upper()
-    )
-    provider_mode_var = tk.StringVar(
-        value=str(runtime_config.get("provider_mode", "personal") or "personal").lower()
-    )
-    primary_provider_var = tk.StringVar(
-        value=str(runtime_config.get("primary_provider", "") or "").lower()
-    )
-    fallback_provider_var = tk.StringVar(
-        value=str(runtime_config.get("fallback_provider", "") or "").lower()
-    )
-    exchange_api_key_var = tk.StringVar(
-        value=str(runtime_config.get("exchange_rate_api_key", "") or "")
-    )
-    auto_update_var = tk.BooleanVar(value=bool(runtime_config.get("auto_update", True)))
-    update_interval_var = tk.StringVar(
-        value=str(runtime_config.get("update_interval_minutes", 60) or 60)
-    )
+    state = build_currency_section_state(context)
+    display_currency_var = tk.StringVar(value=state.display_currency)
+    provider_mode_var = tk.StringVar(value=state.provider_mode)
+    primary_provider_var = tk.StringVar(value=state.primary_provider)
+    fallback_provider_var = tk.StringVar(value=state.fallback_provider)
+    exchange_api_key_var = tk.StringVar(value=state.exchange_api_key)
+    auto_update_var = tk.BooleanVar(value=state.auto_update)
+    update_interval_var = tk.StringVar(value=state.update_interval)
 
     ttk.Label(
         currency_frame,
@@ -74,7 +56,7 @@ def build_currency_section(
     base_currency_frame.grid(row=0, column=1, sticky="w", padx=(0, pad_x), pady=pad_y)
     ttk.Label(
         base_currency_frame,
-        text=base_currency_text,
+        text=state.base_currency_text,
         style="FormField.TLabel",
     ).grid(row=0, column=0, sticky="w")
     base_currency_info = ttk.Label(base_currency_frame, text="ⓘ", style="FormField.TLabel")
@@ -125,7 +107,7 @@ def build_currency_section(
     primary_provider_combo = ttk.Combobox(
         currency_frame,
         textvariable=primary_provider_var,
-        values=provider_names,
+        values=state.provider_names,
         state="readonly",
         width=18,
     )
@@ -140,7 +122,7 @@ def build_currency_section(
     fallback_provider_combo = ttk.Combobox(
         currency_frame,
         textvariable=fallback_provider_var,
-        values=provider_names,
+        values=state.provider_names,
         state="readonly",
         width=18,
     )
@@ -160,7 +142,7 @@ def build_currency_section(
         text=tr(
             "settings.currency.api_key_storage",
             "Хранение API key: {label}",
-            label=str(runtime_config.get("exchange_rate_api_key_storage_label", "") or ""),
+            label=str(state.runtime_config.get("exchange_rate_api_key_storage_label", "") or ""),
         ),
         style="CardText.TLabel",
     ).grid(row=6, column=0, columnspan=2, sticky="w", padx=pad_x, pady=(0, pad_y))
@@ -185,10 +167,10 @@ def build_currency_section(
         text=tr(
             "settings.currency.security_diag",
             "Данные: {data_dir} | Режим: {mode}",
-            data_dir=str(security_diagnostics.get("user_data_root", "") or ""),
+            data_dir=str(state.security_diagnostics.get("user_data_root", "") or ""),
             mode=(
                 tr("settings.currency.mode.packaged", "packaged")
-                if bool(security_diagnostics.get("packaged_mode", False))
+                if bool(state.security_diagnostics.get("packaged_mode", False))
                 else tr("settings.currency.mode.source", "source")
             ),
         ),
@@ -198,57 +180,27 @@ def build_currency_section(
     ).grid(row=9, column=0, columnspan=2, sticky="w", padx=pad_x, pady=(0, pad_y))
 
     def _refresh_provider_choices(*_args: object) -> None:
-        available = context.controller.get_supported_currency_provider_names()
-        current_primary = str(primary_provider_var.get() or "").strip().lower()
-        if current_primary not in available:
-            current_primary = available[0] if available else ""
-            primary_provider_var.set(current_primary)
-        primary_provider_combo.config(values=available)
-
-        fallback_values = [name for name in available if name != current_primary] or available
-        current_fallback = str(fallback_provider_var.get() or "").strip().lower()
-        if current_fallback not in fallback_values:
-            for candidate in ("exchange_rate", "static", "cbr", "nbk"):
-                if candidate in fallback_values:
-                    current_fallback = candidate
-                    break
-            if not current_fallback and fallback_values:
-                current_fallback = fallback_values[0]
-            fallback_provider_var.set(current_fallback)
-        fallback_provider_combo.config(values=fallback_values)
+        refresh_provider_choices(
+            context=context,
+            primary_provider_var=primary_provider_var,
+            fallback_provider_var=fallback_provider_var,
+            primary_provider_combo=primary_provider_combo,
+            fallback_provider_combo=fallback_provider_combo,
+        )
 
     def _save_currency_settings() -> None:
-        try:
-            context.controller.update_runtime_currency_config(
-                display_currency=str(display_currency_var.get() or ""),
-                provider_mode=str(provider_mode_var.get() or ""),
-                primary_provider=str(primary_provider_var.get() or ""),
-                fallback_provider=str(fallback_provider_var.get() or ""),
-                exchange_rate_api_key=str(exchange_api_key_var.get() or ""),
-                auto_update=auto_update_var.get(),
-                update_interval_minutes=str(update_interval_var.get() or ""),
-            )
-        except (ValueError, RuntimeError) as error:
-            log_ui_error(logger, "UI_SETTINGS_UPDATE_CURRENCY_CONFIG_FAILED", error)
-            messagebox_module.showerror(
-                tr("common.error", "Ошибка"),
-                tr(
-                    "settings.currency.error.save",
-                    "Не удалось сохранить настройки валюты: {error}",
-                    error=str(error),
-                ),
-            )
-            return
-
-        display_currency_combo.config(values=context.controller.get_available_display_currencies())
-        _refresh_provider_choices()
-        context._refresh_list()
-        context._refresh_charts()
-        context._refresh_budgets()
-        context._refresh_all()
-        messagebox_module.showinfo(
-            tr("common.done", "Готово"),
-            tr("settings.currency.saved", "Настройки валюты сохранены."),
+        save_currency_settings(
+            context=context,
+            messagebox_module=messagebox_module,
+            display_currency_var=display_currency_var,
+            provider_mode_var=provider_mode_var,
+            primary_provider_var=primary_provider_var,
+            fallback_provider_var=fallback_provider_var,
+            exchange_api_key_var=exchange_api_key_var,
+            auto_update_var=auto_update_var,
+            update_interval_var=update_interval_var,
+            display_currency_combo=display_currency_combo,
+            refresh_provider_choices_callback=_refresh_provider_choices,
         )
 
     provider_mode_combo.bind("<<ComboboxSelected>>", _refresh_provider_choices, add="+")
@@ -283,14 +235,12 @@ def build_audit_section(
     audit_frame.grid_columnconfigure(0, weight=1)
 
     def _on_run_audit() -> None:
-        try:
-            report = context.controller.run_audit()
-            show_audit_report_dialog(report, parent)
-        except (DomainError, ValueError, TypeError, RuntimeError) as error:
-            log_ui_error(logger, "UI_SETTINGS_AUDIT_FAILED", error)
-            messagebox_module.showerror(
-                tr("settings.audit.error_title", "Ошибка аудита"), str(error)
-            )
+        run_audit_action(
+            context=context,
+            parent=parent,
+            messagebox_module=messagebox_module,
+            show_audit_report_dialog=show_audit_report_dialog,
+        )
 
     ttk.Button(
         audit_frame, text=tr("settings.audit.run", "Запустить аудит"), command=_on_run_audit

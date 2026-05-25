@@ -3,12 +3,12 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import gui.tabs.reports.controller as reports_controller_module
+import gui.tabs.reports.core.controller as reports_controller_module
 from app.services import CurrencyService
 from gui.controllers import FinancialController
-from gui.tabs.reports.controller import ReportsController
+from gui.tabs.reports.core.controller import ReportsController
 from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.report_service import ReportFilters
+from services.analytics.report import ReportFilters
 
 
 def _schema_path() -> str:

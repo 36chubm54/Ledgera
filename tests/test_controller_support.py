@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from domain.records import ExpenseRecord, IncomeRecord
 from domain.wallets import Wallet
-from gui.controller_support import build_list_items, wallets_with_system_initial_balance
+from gui.controllers_pkg.support import build_list_items, wallets_with_system_initial_balance
 
 
 def test_transfer_list_item_includes_description_in_category_and_label() -> None:

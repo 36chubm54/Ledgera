@@ -13,7 +13,7 @@ from domain.dashboard import (
     DashboardTrendPoint,
 )
 from domain.goal import Goal, GoalProgress
-from gui.tabs.dashboard_tab import _parse_positive_amount, build_dashboard_tab
+from gui.tabs.dashboard import _parse_positive_amount, build_dashboard_tab
 
 
 @dataclass
@@ -292,7 +292,7 @@ def test_dashboard_tab_goal_complete_button_updates_goal_state() -> None:
 
 
 def test_prepare_bulk_snapshot_entries_skips_blank_rows() -> None:
-    from gui.tabs.dashboard_tab import _prepare_bulk_snapshot_entries
+    from gui.tabs.dashboard import _prepare_bulk_snapshot_entries
 
     assets = [
         Asset(
@@ -332,7 +332,7 @@ def test_prepare_bulk_snapshot_entries_skips_blank_rows() -> None:
 
 
 def test_prepare_goal_payload_normalizes_values() -> None:
-    from gui.tabs.dashboard_tab import _prepare_goal_payload
+    from gui.tabs.dashboard import _prepare_goal_payload
 
     payload = _prepare_goal_payload(
         title=" Emergency fund ",
@@ -354,7 +354,7 @@ def test_prepare_goal_payload_normalizes_values() -> None:
 
 
 def test_prepare_goal_payload_rejects_invalid_currency() -> None:
-    from gui.tabs.dashboard_tab import _prepare_goal_payload
+    from gui.tabs.dashboard import _prepare_goal_payload
 
     try:
         _prepare_goal_payload(
@@ -372,7 +372,7 @@ def test_prepare_goal_payload_rejects_invalid_currency() -> None:
 
 
 def test_prepare_goal_payload_rejects_non_numeric_amount() -> None:
-    from gui.tabs.dashboard_tab import _prepare_goal_payload
+    from gui.tabs.dashboard import _prepare_goal_payload
 
     try:
         _prepare_goal_payload(
@@ -390,7 +390,7 @@ def test_prepare_goal_payload_rejects_non_numeric_amount() -> None:
 
 
 def test_goal_form_error_reports_missing_title() -> None:
-    from gui.tabs.dashboard_tab import _goal_form_error
+    from gui.tabs.dashboard import _goal_form_error
 
     error = _goal_form_error(
         title="",
@@ -405,7 +405,7 @@ def test_goal_form_error_reports_missing_title() -> None:
 
 
 def test_prepare_goal_payload_rejects_target_date_earlier_than_created_at() -> None:
-    from gui.tabs.dashboard_tab import _prepare_goal_payload
+    from gui.tabs.dashboard import _prepare_goal_payload
 
     try:
         _prepare_goal_payload(
@@ -423,7 +423,7 @@ def test_prepare_goal_payload_rejects_target_date_earlier_than_created_at() -> N
 
 
 def test_prepare_asset_payload_normalizes_values() -> None:
-    from gui.tabs.dashboard_tab import _prepare_asset_payload
+    from gui.tabs.dashboard import _prepare_asset_payload
 
     payload = _prepare_asset_payload(
         name=" Brokerage ",
@@ -443,7 +443,7 @@ def test_prepare_asset_payload_normalizes_values() -> None:
 
 
 def test_prepare_asset_payload_rejects_missing_created_at() -> None:
-    from gui.tabs.dashboard_tab import _prepare_asset_payload
+    from gui.tabs.dashboard import _prepare_asset_payload
 
     try:
         _prepare_asset_payload(
@@ -460,7 +460,7 @@ def test_prepare_asset_payload_rejects_missing_created_at() -> None:
 
 
 def test_prepare_asset_payload_rejects_invalid_category() -> None:
-    from gui.tabs.dashboard_tab import _prepare_asset_payload
+    from gui.tabs.dashboard import _prepare_asset_payload
 
     try:
         _prepare_asset_payload(
@@ -477,7 +477,7 @@ def test_prepare_asset_payload_rejects_invalid_category() -> None:
 
 
 def test_asset_form_error_reports_invalid_currency() -> None:
-    from gui.tabs.dashboard_tab import _asset_form_error
+    from gui.tabs.dashboard import _asset_form_error
 
     error = _asset_form_error(
         name="Brokerage",
@@ -491,7 +491,7 @@ def test_asset_form_error_reports_invalid_currency() -> None:
 
 
 def test_prepare_bulk_snapshot_entries_reports_asset_specific_invalid_value() -> None:
-    from gui.tabs.dashboard_tab import _prepare_bulk_snapshot_entries
+    from gui.tabs.dashboard import _prepare_bulk_snapshot_entries
 
     assets = [
         Asset(
@@ -518,7 +518,7 @@ def test_prepare_bulk_snapshot_entries_reports_asset_specific_invalid_value() ->
 
 
 def test_prepare_bulk_snapshot_entries_rejects_negative_value() -> None:
-    from gui.tabs.dashboard_tab import _prepare_bulk_snapshot_entries
+    from gui.tabs.dashboard import _prepare_bulk_snapshot_entries
 
     assets = [
         Asset(
@@ -545,7 +545,7 @@ def test_prepare_bulk_snapshot_entries_rejects_negative_value() -> None:
 
 
 def test_bulk_snapshot_form_error_requires_at_least_one_value() -> None:
-    from gui.tabs.dashboard_tab import _bulk_snapshot_form_error
+    from gui.tabs.dashboard import _bulk_snapshot_form_error
 
     assets = [
         Asset(
@@ -569,7 +569,7 @@ def test_bulk_snapshot_form_error_requires_at_least_one_value() -> None:
 
 
 def test_asset_actions_state_handles_selection_and_inactive_asset() -> None:
-    from gui.tabs.dashboard_tab import _asset_actions_state
+    from gui.tabs.dashboard import _asset_actions_state
 
     active_asset = Asset(
         id=1,
@@ -632,16 +632,16 @@ def test_dashboard_tab_goal_delete_button_is_rendered() -> None:
 
 def test_tab_subpackages_are_importable_from_stable_paths() -> None:
     operations_pkg = importlib.import_module("gui.tabs.operations")
-    operations_builder = importlib.import_module("gui.tabs.operations.builder")
-    operations_form = importlib.import_module("gui.tabs.operations.form_section")
-    operations_journal = importlib.import_module("gui.tabs.operations.journal_section")
-    operations_inline = importlib.import_module("gui.tabs.operations.inline_editors")
-    operations_transfer = importlib.import_module("gui.tabs.operations.transfer_section")
+    operations_builder = importlib.import_module("gui.tabs.operations.core.builder")
+    operations_form = importlib.import_module("gui.tabs.operations.core.form_section")
+    operations_journal = importlib.import_module("gui.tabs.operations.core.journal_section")
+    operations_inline = importlib.import_module("gui.tabs.operations.core.inline_editors")
+    operations_transfer = importlib.import_module("gui.tabs.operations.core.transfer_section")
     dashboard_pkg = importlib.import_module("gui.tabs.dashboard")
-    dashboard_builder = importlib.import_module("gui.tabs.dashboard.builder")
-    dashboard_actions = importlib.import_module("gui.tabs.dashboard.actions")
-    dashboard_dialogs = importlib.import_module("gui.tabs.dashboard.dialogs")
-    dashboard_render = importlib.import_module("gui.tabs.dashboard.render")
+    dashboard_builder = importlib.import_module("gui.tabs.dashboard.core.builder")
+    dashboard_actions = importlib.import_module("gui.tabs.dashboard.support.actions")
+    dashboard_dialogs = importlib.import_module("gui.tabs.dashboard.support.dialogs")
+    dashboard_render = importlib.import_module("gui.tabs.dashboard.support.render")
 
     assert operations_pkg.build_operations_tab is operations_builder.build_operations_tab
     assert hasattr(operations_form, "build_operation_form_section")

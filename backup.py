@@ -96,8 +96,8 @@ def export_to_json(
     *,
     autofreeze_closed_months: bool = True,
 ) -> None:
-    from services.budget_service import BudgetService
-    from services.distribution_service import DistributionService
+    from services.planning.budget import BudgetService
+    from services.planning.distribution import DistributionService
 
     sqlite_repo = SQLiteRecordRepository(sqlite_path, schema_path=schema_path)
     snapshot_path = None

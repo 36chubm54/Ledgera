@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
 
-from gui.tabs.operations.contracts import OperationsRepository
-from gui.tabs.operations_tab import OperationsTabContext, build_operations_tab
+from gui.tabs.operations import OperationsTabContext, build_operations_tab
+from gui.tabs.operations.core.contracts import OperationsRepository
 
 
 def _find_button(parent: tk.Misc, text: str) -> tk.Button | ttk.Button | None:
@@ -188,7 +188,7 @@ def test_operations_export_defers_repository_loads_to_background_task() -> None:
         assert export_button is not None
 
         with patch(
-            "gui.tabs.operations.builder.filedialog.asksaveasfilename",
+            "gui.tabs.operations.core.builder.filedialog.asksaveasfilename",
             return_value="C:\\temp\\records.csv",
         ):
             export_button.invoke()

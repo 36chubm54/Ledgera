@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from gui.shell.shell_window import (
+from gui.shell.windowing.window import (
     configure_main_window,
     launch_downloaded_update_and_exit,
     launch_installer_and_exit,
@@ -66,10 +66,10 @@ def test_launch_downloaded_update_and_exit_uses_terminal_for_deb_linux(monkeypat
     calls: list[list[str]] = []
     cleanup_markers: list[tuple[str, str]] = []
     monkeypatch.setattr(Path, "is_file", lambda self: True)
-    monkeypatch.setattr("gui.shell.shell_window.os.name", "posix")
-    monkeypatch.setattr("gui.shell.shell_window.sys.platform", "linux")
-    monkeypatch.setattr("gui.shell.shell_window.get_linux_package_kind", lambda: "deb")
-    monkeypatch.setattr("gui.shell.shell_window.shutil.which", lambda name: "/usr/bin/kgx")
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "posix")
+    monkeypatch.setattr("gui.shell.windowing.window.sys.platform", "linux")
+    monkeypatch.setattr("gui.shell.windowing.window.get_linux_package_kind", lambda: "deb")
+    monkeypatch.setattr("gui.shell.windowing.window.shutil.which", lambda name: "/usr/bin/kgx")
     monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(list(args)))
 
     launch_downloaded_update_and_exit(
@@ -89,11 +89,11 @@ def test_launch_downloaded_update_and_exit_uses_terminal_for_deb_linux(monkeypat
 def test_launch_downloaded_update_and_exit_requires_apt_for_deb_linux(monkeypatch) -> None:
     window = _FakeWindow()
     monkeypatch.setattr(Path, "is_file", lambda self: True)
-    monkeypatch.setattr("gui.shell.shell_window.os.name", "posix")
-    monkeypatch.setattr("gui.shell.shell_window.sys.platform", "linux")
-    monkeypatch.setattr("gui.shell.shell_window.get_linux_package_kind", lambda: "deb")
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "posix")
+    monkeypatch.setattr("gui.shell.windowing.window.sys.platform", "linux")
+    monkeypatch.setattr("gui.shell.windowing.window.get_linux_package_kind", lambda: "deb")
     monkeypatch.setattr(
-        "gui.shell.shell_window.shutil.which",
+        "gui.shell.windowing.window.shutil.which",
         lambda name: "/usr/bin/kgx" if name == "kgx" else None,
     )
 
@@ -107,10 +107,10 @@ def test_launch_downloaded_update_and_exit_uses_terminal_for_rpm_linux(monkeypat
     window = _FakeWindow()
     calls: list[list[str]] = []
     monkeypatch.setattr(Path, "is_file", lambda self: True)
-    monkeypatch.setattr("gui.shell.shell_window.os.name", "posix")
-    monkeypatch.setattr("gui.shell.shell_window.sys.platform", "linux")
-    monkeypatch.setattr("gui.shell.shell_window.get_linux_package_kind", lambda: "rpm")
-    monkeypatch.setattr("gui.shell.shell_window.shutil.which", lambda name: "/usr/bin/konsole")
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "posix")
+    monkeypatch.setattr("gui.shell.windowing.window.sys.platform", "linux")
+    monkeypatch.setattr("gui.shell.windowing.window.get_linux_package_kind", lambda: "rpm")
+    monkeypatch.setattr("gui.shell.windowing.window.shutil.which", lambda name: "/usr/bin/konsole")
     monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(list(args)))
 
     launch_downloaded_update_and_exit(window, "/tmp/Ledgera-2.0.2-x86_64.rpm")
@@ -125,11 +125,11 @@ def test_launch_downloaded_update_and_exit_uses_saved_terminal_preference(monkey
     window = _FakeWindow()
     calls: list[list[str]] = []
     monkeypatch.setattr(Path, "is_file", lambda self: True)
-    monkeypatch.setattr("gui.shell.shell_window.os.name", "posix")
-    monkeypatch.setattr("gui.shell.shell_window.sys.platform", "linux")
-    monkeypatch.setattr("gui.shell.shell_window.get_linux_package_kind", lambda: "deb")
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "posix")
+    monkeypatch.setattr("gui.shell.windowing.window.sys.platform", "linux")
+    monkeypatch.setattr("gui.shell.windowing.window.get_linux_package_kind", lambda: "deb")
     monkeypatch.setattr(
-        "gui.shell.shell_window.shutil.which",
+        "gui.shell.windowing.window.shutil.which",
         lambda name: "/usr/bin/apt" if name == "apt" else None,
     )
     monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(list(args)))
@@ -149,11 +149,11 @@ def test_launch_downloaded_update_and_exit_supports_x_terminal_emulator(monkeypa
     window = _FakeWindow()
     calls: list[list[str]] = []
     monkeypatch.setattr(Path, "is_file", lambda self: True)
-    monkeypatch.setattr("gui.shell.shell_window.os.name", "posix")
-    monkeypatch.setattr("gui.shell.shell_window.sys.platform", "linux")
-    monkeypatch.setattr("gui.shell.shell_window.get_linux_package_kind", lambda: "deb")
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "posix")
+    monkeypatch.setattr("gui.shell.windowing.window.sys.platform", "linux")
+    monkeypatch.setattr("gui.shell.windowing.window.get_linux_package_kind", lambda: "deb")
     monkeypatch.setattr(
-        "gui.shell.shell_window.shutil.which",
+        "gui.shell.windowing.window.shutil.which",
         lambda name: (
             "/usr/bin/x-terminal-emulator"
             if name == "x-terminal-emulator"
@@ -179,21 +179,21 @@ def test_launch_downloaded_update_and_exit_saves_supported_terminal_from_chooser
     calls: list[list[str]] = []
     saved: list[str] = []
     monkeypatch.setattr(Path, "is_file", lambda self: True)
-    monkeypatch.setattr("gui.shell.shell_window.os.name", "posix")
-    monkeypatch.setattr("gui.shell.shell_window.sys.platform", "linux")
-    monkeypatch.setattr("gui.shell.shell_window.get_linux_package_kind", lambda: "deb")
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "posix")
+    monkeypatch.setattr("gui.shell.windowing.window.sys.platform", "linux")
+    monkeypatch.setattr("gui.shell.windowing.window.get_linux_package_kind", lambda: "deb")
     monkeypatch.setattr(
-        "gui.shell.shell_window._detect_linux_terminal_candidates",
+        "gui.shell.windowing.window._detect_linux_terminal_candidates",
         lambda: [
             ("Console", "/usr/bin/kgx"),
             ("Xfce Terminal", "/usr/bin/xfce4-terminal"),
         ],
     )
     monkeypatch.setattr(
-        "gui.shell.shell_window._choose_linux_terminal_executable",
+        "gui.shell.windowing.window._choose_linux_terminal_executable",
         lambda owner, candidates: "/usr/bin/xfce4-terminal",
     )
-    monkeypatch.setattr("gui.shell.shell_window.shutil.which", lambda name: "/usr/bin/apt")
+    monkeypatch.setattr("gui.shell.windowing.window.shutil.which", lambda name: "/usr/bin/apt")
     monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(list(args)))
 
     launch_downloaded_update_and_exit(
@@ -214,11 +214,11 @@ def test_launch_downloaded_update_and_exit_rejects_unsupported_terminal_choice(
 ) -> None:
     window = _FakeWindow()
     monkeypatch.setattr(Path, "is_file", lambda self: True)
-    monkeypatch.setattr("gui.shell.shell_window.os.name", "posix")
-    monkeypatch.setattr("gui.shell.shell_window.sys.platform", "linux")
-    monkeypatch.setattr("gui.shell.shell_window.get_linux_package_kind", lambda: "deb")
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "posix")
+    monkeypatch.setattr("gui.shell.windowing.window.sys.platform", "linux")
+    monkeypatch.setattr("gui.shell.windowing.window.get_linux_package_kind", lambda: "deb")
     monkeypatch.setattr(
-        "gui.shell.shell_window._detect_linux_terminal_candidates",
+        "gui.shell.windowing.window._detect_linux_terminal_candidates",
         lambda: [("Custom", "/usr/bin/custom-terminal")],
     )
 
@@ -247,4 +247,27 @@ def test_launch_installer_and_exit_raises_when_installer_missing(tmp_path: Path)
     with pytest.raises(RuntimeError):
         launch_installer_and_exit(window, str(tmp_path / "missing-setup.exe"))
 
+    assert window.destroyed is False
+
+
+def test_launch_downloaded_update_and_exit_does_not_spawn_when_cleanup_marker_fails(
+    monkeypatch,
+) -> None:
+    window = _FakeWindow()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    monkeypatch.setattr("gui.shell.windowing.window.os.name", "nt")
+    monkeypatch.setattr(subprocess, "Popen", lambda args: calls.append(list(args)))
+
+    with pytest.raises(RuntimeError, match="marker failed"):
+        launch_downloaded_update_and_exit(
+            window,
+            "C:\\temp\\Ledgera-2.0.2-setup.exe",
+            mark_pending_cleanup=lambda _path, _version: (_ for _ in ()).throw(
+                RuntimeError("marker failed")
+            ),
+            target_version="2.0.2",
+        )
+
+    assert calls == []
     assert window.destroyed is False

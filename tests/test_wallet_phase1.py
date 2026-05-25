@@ -3,7 +3,8 @@ import tempfile
 from datetime import date
 
 from app.services import CurrencyService
-from app.use_cases import CreateIncome, GenerateReport
+from app.use_cases_pkg.operations import CreateIncome
+from app.use_cases_pkg.reporting import GenerateReport
 from domain.records import ExpenseRecord, IncomeRecord
 from domain.reports import Report
 from infrastructure.repositories import JsonFileRecordRepository

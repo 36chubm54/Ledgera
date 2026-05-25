@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from domain.import_policy import ImportPolicy
-from gui.shell.shell_support import (
+from gui.shell.core.support import (
     build_record_tree_values,
     build_startup_autopay_message,
     display_record_category_label,

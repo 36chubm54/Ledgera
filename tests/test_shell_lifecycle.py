@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gui.shell.shell_lifecycle import ensure_tab_built, handle_tab_changed, schedule_deferred_action
+from gui.shell.core.lifecycle import ensure_tab_built, handle_tab_changed, schedule_deferred_action
 
 
 @dataclass

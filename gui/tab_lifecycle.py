@@ -3,15 +3,15 @@ from __future__ import annotations
 from tkinter import ttk
 from typing import Protocol, cast
 
-from gui.tabs.analytics_tab import AnalyticsTabContext
-from gui.tabs.budget_tab import BudgetTabContext
-from gui.tabs.dashboard_tab import DashboardTabContext
-from gui.tabs.debts_tab import DebtsTabContext
-from gui.tabs.distribution_tab import DistributionTabContext
-from gui.tabs.mandatory_tab import MandatoryTabContext
-from gui.tabs.operations_tab import OperationsTabContext
-from gui.tabs.reports_tab import ReportsTabContext
-from gui.tabs.settings_tab import SettingsTabContext
+from gui.tabs.analytics import AnalyticsTabContext
+from gui.tabs.budget import BudgetTabContext
+from gui.tabs.dashboard import DashboardTabContext
+from gui.tabs.debts import DebtsTabContext
+from gui.tabs.distribution import DistributionTabContext
+from gui.tabs.mandatory import MandatoryTabContext
+from gui.tabs.operations import OperationsTabContext
+from gui.tabs.reports import ReportsTabContext
+from gui.tabs.settings import SettingsTabContext
 from gui.ui_text import get_tab_titles
 
 TAB_ORDER = [
@@ -134,7 +134,7 @@ class _SettingsTabHost(Protocol):
 
 
 def _build_infographics_tab(app: _InfographicsTabHost) -> bool:
-    from gui.tabs.infographics_tab import build_infographics_tab
+    from gui.tabs.infographics import build_infographics_tab
 
     def _after(delay_ms: int, callback) -> str:
         return str(app.after(delay_ms, callback))
@@ -162,7 +162,7 @@ def _build_infographics_tab(app: _InfographicsTabHost) -> bool:
 
 
 def _build_operations_tab(app: _OperationsTabHost) -> bool:
-    from gui.tabs.operations_tab import build_operations_tab
+    from gui.tabs.operations import build_operations_tab
 
     operations = build_operations_tab(
         app.tab_operations,
@@ -182,14 +182,14 @@ def _build_operations_tab(app: _OperationsTabHost) -> bool:
 
 
 def _build_reports_tab(app: _ReportsTabHost) -> bool:
-    from gui.tabs.reports_tab import build_reports_tab
+    from gui.tabs.reports import build_reports_tab
 
     app._reports_tab = build_reports_tab(app.tab_reports, cast(ReportsTabContext, app))
     return True
 
 
 def _build_analytics_tab(app: _AnalyticsTabHost) -> bool:
-    from gui.tabs.analytics_tab import build_analytics_tab
+    from gui.tabs.analytics import build_analytics_tab
 
     app._analytics_bindings = build_analytics_tab(
         app.tab_analytics,
@@ -199,7 +199,7 @@ def _build_analytics_tab(app: _AnalyticsTabHost) -> bool:
 
 
 def _build_dashboard_tab(app: _DashboardTabHost) -> bool:
-    from gui.tabs.dashboard_tab import build_dashboard_tab
+    from gui.tabs.dashboard import build_dashboard_tab
 
     app._dashboard_bindings = build_dashboard_tab(
         app.tab_dashboard,
@@ -209,7 +209,7 @@ def _build_dashboard_tab(app: _DashboardTabHost) -> bool:
 
 
 def _build_budget_tab(app: _BudgetTabHost) -> bool:
-    from gui.tabs.budget_tab import build_budget_tab
+    from gui.tabs.budget import build_budget_tab
 
     app._budget_bindings = build_budget_tab(
         app.tab_budget,
@@ -220,7 +220,7 @@ def _build_budget_tab(app: _BudgetTabHost) -> bool:
 
 
 def _build_mandatory_tab(app: _MandatoryTabHost) -> bool:
-    from gui.tabs.mandatory_tab import build_mandatory_tab
+    from gui.tabs.mandatory import build_mandatory_tab
 
     app._mandatory_bindings = build_mandatory_tab(
         app.tab_mandatory,
@@ -232,7 +232,7 @@ def _build_mandatory_tab(app: _MandatoryTabHost) -> bool:
 
 
 def _build_debts_tab(app: _DebtsTabHost) -> bool:
-    from gui.tabs.debts_tab import build_debts_tab
+    from gui.tabs.debts import build_debts_tab
 
     app._debt_bindings = build_debts_tab(
         app.tab_debts,
@@ -242,7 +242,7 @@ def _build_debts_tab(app: _DebtsTabHost) -> bool:
 
 
 def _build_distribution_tab(app: _DistributionTabHost) -> bool:
-    from gui.tabs.distribution_tab import build_distribution_tab
+    from gui.tabs.distribution import build_distribution_tab
 
     app._distribution_bindings = build_distribution_tab(
         app.tab_distribution,
@@ -253,7 +253,7 @@ def _build_distribution_tab(app: _DistributionTabHost) -> bool:
 
 
 def _build_settings_tab(app: _SettingsTabHost) -> bool:
-    from gui.tabs.settings_tab import build_settings_tab
+    from gui.tabs.settings import build_settings_tab
 
     app._settings_bindings = build_settings_tab(
         app.tab_settings,

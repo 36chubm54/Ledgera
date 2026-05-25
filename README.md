@@ -9,7 +9,7 @@
 
 Графическое приложение для персонального финансового учёта с мультивалютностью, импортом/экспортом, тегами, бюджетами, долгами, активами и целями.
 
-Текущий релиз `v2.6.0` завершает полный `FinAccountingApp -> Ledgera` rename через product, installer/artifact и runtime/internal identity. `Ledgera` теперь является не только user-facing brand, но и реальным bundle/runtime именем: Windows и Linux packaged builds используют `Ledgera` как executable, install root, user-data root и secure-storage service name, а startup-маршрут выполняет best-effort миграцию старых `FinAccountingApp` data paths и credentials.
+Текущий shipping-релиз `v2.6.0` завершает полный `FinAccountingApp -> Ledgera` rename через product, installer/artifact и runtime/internal identity. Поверх него текущее рабочее дерево закрывает большую internal decomposition wave: `app`, `gui`, `services`, `infrastructure` и `utils` теперь собраны в более узкие package-кластеры с прямыми import-path вместо старых flat compat-фасадов.
 
 В актуальном runtime-контракте:
 
@@ -191,19 +191,19 @@ python packaging/linux/verify_system_packages.py --deb artifacts/Ledgera-<versio
 | Точка | Когда использовать |
 | --- | --- |
 | `gui.controllers.FinancialController` | Главная точка входа для GUI и интеграций верхнего уровня |
-| `app.repository.RecordRepository` | Application-level repository contract для use case-ов |
-| `app.repository_protocols` | Узкие capability-contracts для runtime repository вместо direct concrete typing |
-| `app.import_support.run_import_transaction(...)` | Rollback-safe orchestration между controller/import service и runtime repository |
-| `app.preferences_service` | Сохранение runtime UI preferences: `theme`, `language`, online-mode |
-| `app.audit_runner` | App-level запуск audit-flow из GUI/controller |
+| `app.data.repository.RecordRepository` | Application-level repository contract для use case-ов |
+| `app.data.protocols` | Узкие capability-contracts для runtime repository вместо direct concrete typing |
+| `app.importing.support.run_import_transaction(...)` | Rollback-safe orchestration между controller/import service и runtime repository |
+| `app.runtime.preferences.UIPreferencesService` | Сохранение runtime UI preferences: `theme`, `language`, online-mode |
+| `app.runtime.audit.run_repository_audit(...)` | App-level запуск audit-flow из GUI/controller |
 | `services.import_service.ImportService` | Основной import coordinator, который делегирует payload/replacement/execution/mandatory flows support-модулям |
-| `services.audit_service.AuditService` | Read-only проверка целостности SQLite-данных |
-| `services.balance_service.BalanceService` | Балансы кошельков, total balance, cashflow |
-| `services.metrics_service.MetricsService` | Savings rate, burn rate, monthly/category/tag analytics |
-| `services.budget_service.BudgetService` | Budget CRUD, category/tag budgets и live tracking |
-| `services.debt_service.DebtService` | Debt/loan lifecycle |
-| `services.distribution_service.DistributionService` | Monthly distribution и frozen rows |
-| `services.app_update_service.AppUpdateService` | Проверка GitHub Releases, prerelease-aware asset selection и stream-download updater payload для Windows installer и packaged Linux packages |
+| `services.analytics.audit.AuditService` | Read-only проверка целостности SQLite-данных |
+| `services.analytics.balance.BalanceService` | Балансы кошельков, total balance, cashflow |
+| `services.analytics.metrics.MetricsService` | Savings rate, burn rate, monthly/category/tag analytics |
+| `services.planning.budget.BudgetService` | Budget CRUD, category/tag budgets и live tracking |
+| `services.planning.debts.DebtService` | Debt/loan lifecycle |
+| `services.planning.distribution.DistributionService` | Monthly distribution и frozen rows |
+| `services.support.app_update.AppUpdateService` | Проверка GitHub Releases, prerelease-aware asset selection и stream-download updater payload для Windows installer и packaged Linux packages |
 | `infrastructure.sqlite_repository.SQLiteRecordRepository` | Основной runtime repository |
 | `storage.sqlite_storage.SQLiteStorage` | Низкоуровневый SQLite adapter / schema bootstrap |
 | `infrastructure.currency_providers.CurrencyProviderRegistry` | Реестр и extension point для rate providers |
@@ -217,11 +217,11 @@ python packaging/linux/verify_system_packages.py --deb artifacts/Ledgera-<versio
 - `gui.status_bar_coordinator.StatusBarCoordinator` — online-mode toggle и периодический status refresh
 - `gui.tab_lifecycle` — lazy tab build и lifecycle dispatch вне основного shell-класса
 - `gui.shell.*` — shell-specific lifecycle/refresh/preferences/status helpers, вынесенные из `gui.tkinter_gui`
-- `gui.tabs.*` — реальные tab packages, где `*_tab.py` оставлены как тонкие compatibility shims
+- `gui.tabs.*` — реальные tab packages с package entrypoint-ами и внутренним разрезом на `core/` и `support/`
 - `gui.tabs.settings.update_section` — updater/update-section UI с Windows installer flow, packaged Linux package download + terminal handoff и manual fallback для `AppImage` / source-mode
 - `CurrencyService.get_available_display_currencies()` — whitelist-aware набор кодов для status-bar switcher вместо полного набора из кэша
-- `FinanceService.get_import_capabilities()` — единая capability-модель для import pipeline вместо ad-hoc проверок по атрибутам
-- `services.import_payload_support`, `services.import_replace_support`, `services.import_execution_support`, `services.import_mandatory_support` — разрезанный import stack вместо одного разросшегося service body
+- `app.importing.finance.FinanceService.get_import_capabilities()` — единая capability-модель для import pipeline вместо ad-hoc проверок по атрибутам
+- `services.importing.*` — разрезанный import stack вместо одного разросшегося service body
 - `FinancialController.list_tags()` / `search_tags()` / `set_tag_color()` — app-level entry points для tag-aware UI и аналитики
 - `SQLiteRecordRepository.replace_records_and_transfers(...)` — безопасная bulk-замена операций с ремапом связанных debt-payment ссылок
 - `gui.logging_utils.log_ui_error(...)` — общий structured logging helper для GUI ошибок и деградаций
@@ -231,7 +231,7 @@ python packaging/linux/verify_system_packages.py --deb artifacts/Ledgera-<versio
 | Точка | Назначение |
 | --- | --- |
 | `FinancialController.import_records(...)` | Основной app-level импорт из GUI/controller |
-| `app.import_support.run_import_transaction(...)` | Transaction/snapshot orchestration с rollback semantics |
+| `app.importing.support.run_import_transaction(...)` | Transaction/snapshot orchestration с rollback semantics |
 | `ImportService.import_file(...)` | Основной pipeline импорта операций |
 | `utils.backup_utils.export_full_backup_to_json(...)` | Low-level full backup export |
 | `utils.backup_utils.import_full_backup_from_json(...)` | Low-level backup parser, возвращает `ImportedBackupData` |
@@ -240,9 +240,9 @@ python packaging/linux/verify_system_packages.py --deb artifacts/Ledgera-<versio
 
 ### Важные developer-сценарии
 
-- Добавление новой сущности обычно затрагивает `domain` → `repository/storage` → `app/use_cases_*` → `gui/controllers` → нужную вкладку
-- Новые read-only метрики лучше добавлять в `services/*_service.py`, а не в GUI
-- Новые форматы/варианты импорта лучше подключать через `ImportService`, `app.import_support` и `utils/import_core.py`
+- Добавление новой сущности обычно затрагивает `domain` → `repository/storage` → `app/use_cases_pkg/*` → `gui/controllers` → нужную вкладку
+- Новые read-only метрики лучше добавлять в `services.analytics.*`, а не в GUI
+- Новые форматы/варианты импорта лучше подключать через `ImportService`, `app.importing.support` и `utils/import_core.py`
 - Если меняется schema, нужно синхронно обновлять `db/schema.sql`, bootstrap/migration flow и regression tests
 
 ## ⌨️ Горячие клавиши
@@ -325,7 +325,7 @@ pytest --cov=. --cov-report=term-missing
 - Если секция `debts` явно отсутствует, pipeline старается сохранить существующие `related_debt_id` связи; если секция есть, ссылки нормализуются только по допустимым debt IDs
 - `CSV` / `XLSX` import по-прежнему идёт через create-path и не использует bulk replace; `related_debt_id` и `tags` теперь корректно прокидываются и там
 - Generic import parser понимает и локализованные report `CSV` / `XLSX` exports: title rows, opening balance и subtotal/final rows не принимаются за обычные операции
-- Import orchestration вынесен в `app.import_support`, а service-слой разделён на focused `services/import_*_support.py` helpers
+- Import orchestration вынесен в `app.importing.support`, а service-слой разделён на focused `services.importing.*` helpers
 - `v1.10.1` усиливает раннюю валидацию import payload: битые ссылочные связи, дубликаты `wallet.id`, несколько `system` wallets и невалидные/дублированные `distribution_snapshots` теперь отсекаются раньше
 
 ### Backup

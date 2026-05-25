@@ -5,7 +5,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from app.repository import RecordRepository
+from app.data.repository import RecordRepository
 from app_paths import get_schema_sql_path, resolve_resource_path
 from backup import create_backup, export_to_json
 from config import JSON_BACKUP_KEEP_LAST, JSON_PATH, LAZY_EXPORT_SIZE_THRESHOLD, SQLITE_PATH
@@ -91,7 +91,7 @@ def _ensure_system_wallet(sqlite_repo: SQLiteRecordRepository) -> None:
 
 
 def _freeze_closed_distribution_months(sqlite_repo: SQLiteRecordRepository) -> None:
-    from services.distribution_service import DistributionService
+    from services.planning.distribution import DistributionService
 
     DistributionService(sqlite_repo).freeze_closed_months()
 

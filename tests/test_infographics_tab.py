@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import cast
 
 from domain.records import ExpenseRecord
-from gui.tabs.infographics_tab import (
+from gui.tabs.infographics import (
     _legend_category_max_width,
     draw_expense_pie,
     update_pie_month_options,

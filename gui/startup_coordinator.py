@@ -93,9 +93,7 @@ class DeferredStartupCoordinator:
             return created_auto_payments, records
 
         def on_success(result: tuple[list[Any], list[Any]]) -> None:
-            self._running = False
-            self._set_busy(False, "")
-            self._restore_keyboard_focus()
+            self._finish_startup_ui()
             created_auto_payments, records = result
 
             def _schedule_next_step(key: str, callback: Callable[[], None]) -> None:
@@ -151,19 +149,9 @@ class DeferredStartupCoordinator:
             self._schedule_after_idle("startup:refresh_list", _refresh_list_step)
 
         def on_error(exc: BaseException) -> None:
-            self._running = False
-            self._set_busy(False, "")
-            self._restore_keyboard_focus()
+            self._finish_startup_ui()
             self._logger.exception("Deferred startup sync failed", exc_info=exc)
-            try:
-                records = self._repository.load_all()
-            except (RuntimeError, ValueError, TypeError, OSError) as load_error:
-                log_ui_error(self._logger, "UI_APP_STARTUP_LOAD_FAILED", load_error)
-                records = None
-            if records is not None:
-                self._refresh_list(records=records)
-                self._refresh_charts(records=records)
-            self._apply_saved_online_mode()
+            self._recover_from_staged_failure()
 
         self._run_background(
             task,
@@ -179,17 +167,38 @@ class DeferredStartupCoordinator:
             step_name,
             exc_info=exc,
         )
+        self._recover_from_staged_failure()
+
+    def _finish_startup_ui(self) -> None:
+        self._running = False
+        self._set_busy(False, "")
+        self._restore_keyboard_focus()
+
+    def _load_records_for_recovery(self) -> list[Any] | None:
         try:
-            records = self._repository.load_all()
+            return self._repository.load_all()
         except (RuntimeError, ValueError, TypeError, OSError) as load_error:
             log_ui_error(self._logger, "UI_APP_STARTUP_LOAD_FAILED", load_error)
-            records = None
+            return None
+
+    def _run_recovery_step(self, step_name: str, callback: Callable[[], None]) -> None:
+        try:
+            callback()
+        except Exception as recovery_error:
+            log_ui_error(
+                self._logger,
+                "UI_APP_STARTUP_REFRESH_FAILED",
+                recovery_error,
+                step=step_name,
+            )
+
+    def _recover_from_staged_failure(self) -> None:
+        records = self._load_records_for_recovery()
         if records is not None:
-            try:
-                self._refresh_list(records=records)
-                self._refresh_charts(records=records)
-            except Exception as refresh_error:
-                log_ui_error(self._logger, "UI_APP_STARTUP_REFRESH_FAILED", refresh_error)
+            self._run_recovery_step("refresh_list", lambda: self._refresh_list(records=records))
+            self._run_recovery_step("refresh_charts", lambda: self._refresh_charts(records=records))
+            self._run_recovery_step("refresh_budgets", self._refresh_budgets)
+            self._run_recovery_step("refresh_all", self._refresh_all)
         try:
             self._apply_saved_online_mode()
         except Exception as online_mode_error:

@@ -80,7 +80,7 @@ def _operations_inline_editor_active(app: Any) -> bool:
         return False
     try:
         return bool(checker())
-    except Exception:
+    except (tk.TclError, RuntimeError, ValueError, TypeError):
         return False
 
 
@@ -88,13 +88,13 @@ def _focus_in_shell(app: Any) -> bool:
     """Return True when shortcuts should target the main application shell."""
     try:
         grab_widget = app.grab_current()
-    except Exception:
+    except (tk.TclError, RuntimeError, AttributeError):
         grab_widget = None
     if grab_widget is not None:
         try:
             if grab_widget.winfo_toplevel() != app.winfo_toplevel():
                 return False
-        except Exception:
+        except (tk.TclError, RuntimeError, AttributeError):
             return False
 
     widget = _focus_widget(app)
@@ -106,7 +106,7 @@ def _focus_in_shell(app: Any) -> bool:
         return True
     try:
         return toplevel() == app.winfo_toplevel()
-    except Exception:
+    except (tk.TclError, RuntimeError, AttributeError):
         return False
 
 

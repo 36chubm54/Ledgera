@@ -5,13 +5,13 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import cast
 
-from gui.tabs.infographics.bar_section import draw_bar_chart
-from gui.tabs.infographics.contracts import (
+from gui.tabs.infographics.core.contracts import (
     InfographicsRefreshOwner,
     MouseWheelEventLike,
     ScrollOwner,
 )
-from gui.tabs.infographics.refresh import (
+from gui.tabs.infographics.support.bar_section import draw_bar_chart
+from gui.tabs.infographics.support.refresh import (
     derive_month_options,
     derive_year_options,
     handle_chart_filter_change,
@@ -138,7 +138,7 @@ def test_refresh_owner_infographics_uses_repository_and_controller(monkeypatch) 
     calls: list[tuple[object, dict[str, object]]] = []
 
     monkeypatch.setattr(
-        "gui.tabs.infographics.refresh.refresh_infographics_charts",
+        "gui.tabs.infographics.support.refresh.refresh_infographics_charts",
         lambda owner_arg, **kwargs: calls.append((owner_arg, kwargs)),
     )
 
@@ -183,7 +183,7 @@ def test_handle_chart_filter_change_and_scroll_owner_legend_canvas(monkeypatch) 
     )
 
     monkeypatch.setattr(
-        "gui.tabs.infographics.refresh.refresh_owner_infographics",
+        "gui.tabs.infographics.support.refresh.refresh_owner_infographics",
         lambda _owner, records=None, **_kwargs: calls.append("refresh"),
     )
     assert handle_chart_filter_change(cast(InfographicsRefreshOwner, owner)) is True
@@ -226,7 +226,7 @@ def test_handle_chart_filter_change_reuses_cached_records_without_repository_rel
     calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(
-        "gui.tabs.infographics.refresh.refresh_infographics_charts",
+        "gui.tabs.infographics.support.refresh.refresh_infographics_charts",
         lambda _owner, **kwargs: calls.append(kwargs),
     )
 

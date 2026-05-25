@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import date as dt_date
 
-from utils.money import to_money_float, to_rate_float
+from utils.finance.money import to_money_float, to_rate_float
 
 from .validation import parse_ymd
 

@@ -9,13 +9,13 @@ from unittest.mock import patch
 
 import pytest
 
-from app.record_service import RecordService
+from app.data.records import RecordService
 from app.services import CurrencyService
-from app.use_cases import ApplyMandatoryAutoPayments, CreateMandatoryExpense
+from app.use_cases_pkg.mandatory import ApplyMandatoryAutoPayments, CreateMandatoryExpense
 from domain.records import MandatoryExpenseRecord
 from gui.controllers import FinancialController
-from gui.tabs.mandatory_tab import MandatoryTabContext, build_mandatory_tab
-from gui.tabs.settings_tab import SettingsTabContext, build_settings_tab
+from gui.tabs.mandatory import MandatoryTabContext, build_mandatory_tab
+from gui.tabs.settings import SettingsTabContext, build_settings_tab
 from gui.tabs.wallet_manager import create_wallet_manager_dialog
 from infrastructure.sqlite_repository import SQLiteRecordRepository
 
@@ -536,8 +536,8 @@ def test_settings_tab_currency_section_saves_runtime_config(tmp_path: Path) -> N
             root.update()
 
             with (
-                patch("gui.tabs.settings_tab.messagebox.showerror"),
-                patch("gui.tabs.settings_tab.messagebox.showinfo"),
+                patch("gui.tabs.settings.messagebox.showerror"),
+                patch("gui.tabs.settings.messagebox.showinfo"),
             ):
                 save_buttons = _find_buttons(parent, "Сохранить")
                 assert save_buttons
@@ -651,7 +651,7 @@ def test_settings_tab_wallet_opener_invokes_wallet_manager(tmp_path: Path) -> No
         build_settings_tab(parent, context)
         root.update()
 
-        with patch("gui.tabs.settings_tab.show_wallet_manager_dialog") as open_dialog:
+        with patch("gui.tabs.settings.show_wallet_manager_dialog") as open_dialog:
             manage_buttons = _find_buttons(parent, "Управление кошельками...")
             assert manage_buttons
             manage_buttons[0].invoke()
@@ -820,8 +820,8 @@ def test_mandatory_tab_edit_accepts_grouped_amount_input(tmp_path: Path) -> None
         mand_tree.selection_set("0")
 
         with (
-            patch("gui.tabs.mandatory_tab.messagebox.showerror"),
-            patch("gui.tabs.mandatory_tab.messagebox.showinfo"),
+            patch("gui.tabs.mandatory.messagebox.showerror"),
+            patch("gui.tabs.mandatory.messagebox.showinfo"),
         ):
             edit_buttons = _find_buttons(parent, "Редактировать")
             assert edit_buttons
@@ -886,8 +886,8 @@ def test_mandatory_tab_create_form_adds_expense(tmp_path: Path) -> None:
         description_entry.insert(0, "Internet")
 
         with (
-            patch("gui.tabs.mandatory_tab.messagebox.showerror"),
-            patch("gui.tabs.mandatory_tab.messagebox.showinfo"),
+            patch("gui.tabs.mandatory.messagebox.showerror"),
+            patch("gui.tabs.mandatory.messagebox.showinfo"),
         ):
             create_buttons = _find_buttons(parent, "Создать обязательный расход")
             assert create_buttons

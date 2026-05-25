@@ -299,7 +299,7 @@ def test_import_controller_dry_run_enforces_parser_row_limit(
             },
         ],
     )
-    monkeypatch.setattr("services.import_parser.MAX_IMPORT_ROWS", 1)
+    monkeypatch.setattr("services.importing.parser.MAX_IMPORT_ROWS", 1)
 
     try:
         with pytest.raises(ValueError, match="row limit"):

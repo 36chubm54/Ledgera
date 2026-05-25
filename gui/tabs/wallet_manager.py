@@ -6,8 +6,9 @@ from tkinter import ttk
 from typing import Protocol
 
 from gui.i18n import tr
-from gui.tabs.settings.contracts import SettingsController
-from gui.tabs.settings.wallets_section import MessageBoxLike, build_wallets_section
+from gui.tabs.settings.core.contracts import SettingsController
+from gui.tabs.settings.support.wallets_support import MessageBoxLike
+from gui.tabs.settings.wallets_section import build_wallets_section
 from gui.ui_dialogs import messagebox_compat as messagebox
 from gui.ui_helpers import center_dialog
 from gui.ui_theme import PAD_LG

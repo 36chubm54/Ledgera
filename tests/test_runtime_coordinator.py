@@ -161,7 +161,7 @@ def test_refresh_charts_always_releases_suspension_flag_on_failure():
     app = _FakeChartApp()
 
     with patch(
-        "gui.tkinter_gui.refresh_owner_infographics",
+        "gui.shell.owner.ops.refresh_owner_infographics",
         side_effect=RuntimeError("chart refresh failed"),
     ):
         with pytest.raises(RuntimeError, match="chart refresh failed"):

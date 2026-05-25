@@ -4,13 +4,8 @@ import tempfile
 import pytest
 
 from app.services import CurrencyService
-from app.use_cases import (
-    CalculateNetWorth,
-    CalculateWalletBalance,
-    CreateExpense,
-    CreateIncome,
-    SoftDeleteWallet,
-)
+from app.use_cases_pkg.operations import CreateExpense, CreateIncome
+from app.use_cases_pkg.wallets import CalculateNetWorth, CalculateWalletBalance, SoftDeleteWallet
 from domain.import_policy import ImportPolicy
 from infrastructure.repositories import JsonFileRecordRepository
 from tests.type_helpers import typed_repo

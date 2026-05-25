@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-import os
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import filedialog, ttk
 from typing import Any
 
 from app_paths import get_backups_dir
-from domain.import_policy import ImportPolicy
-from domain.import_result import ImportResult
-from gui.helpers import open_in_file_manager
 from gui.i18n import tr
 from gui.ui_dialogs import messagebox_compat as messagebox
 from gui.ui_theme import PAD_SM, PAD_XS, create_card_section
 
-from .wallets_section import MessageBoxLike
+from .support.backup_support import start_backup_export, start_backup_import
+from .support.wallets_support import MessageBoxLike
 
 
 def build_backup_section(
@@ -34,11 +31,6 @@ def build_backup_section(
     backup_frame = backup_card.winfo_children()[-1]
     backup_frame.grid_columnconfigure(0, weight=1)
     backup_frame.grid_columnconfigure(1, weight=1)
-
-    def _refresh_mandatory_if_available() -> None:
-        refresh_mandatory = getattr(context, "refresh_mandatory", None)
-        if callable(refresh_mandatory):
-            refresh_mandatory()
 
     def import_backup() -> None:
         backup_dir = get_backups_dir()
@@ -62,75 +54,12 @@ def build_backup_section(
             ),
         ):
             return
-
-        def task(force: bool) -> ImportResult:
-            return context.controller.import_records(
-                "JSON",
-                filepath,
-                ImportPolicy.FULL_BACKUP,
-                force=force,
-            )
-
-        def on_success(result: ImportResult) -> None:
-            details = ""
-            if result.skipped:
-                details = f"\nSkipped: {result.skipped}\n- " + "\n- ".join(result.errors[:5])
-            messagebox_module.showinfo(
-                tr("common.done", "Готово"),
-                tr(
-                    "settings.backup.import.success",
-                    "Резервная копия импортирована. Импортировано сущностей: {count}.{details}",
-                    count=result.imported,
-                    details=details,
-                ),
-            )
-            _refresh_mandatory_if_available()
-            refresh_wallets()
-            context._refresh_list()
-            context._refresh_charts()
-            context._refresh_budgets()
-            context._refresh_all()
-
-        def run_import(force: bool) -> None:
-            def current_task() -> ImportResult:
-                return task(force)
-
-            def on_error(exc: BaseException) -> None:
-                try:
-                    from utils.backup_utils import BackupReadonlyError
-
-                    is_readonly = isinstance(exc, BackupReadonlyError)
-                except ImportError:
-                    is_readonly = False
-
-                if is_readonly and not force:
-                    if messagebox_module.askyesno(
-                        tr("settings.backup.readonly.title", "Снимок только для чтения"),
-                        tr(
-                            "settings.backup.readonly.confirm",
-                            "Резервная копия доступна только для чтения. "
-                            "Импортировать с принудительным режимом?",
-                        ),
-                    ):
-                        run_import(True)
-                    return
-                messagebox_module.showerror(
-                    tr("common.error", "Ошибка"),
-                    tr(
-                        "settings.backup.import.error",
-                        "Не удалось импортировать резервную копию: {error}",
-                        error=exc,
-                    ),
-                )
-
-            context._run_background(
-                current_task,
-                on_success=on_success,
-                on_error=on_error,
-                busy_message=tr("settings.backup.import.busy", "Импортируем полную копию..."),
-            )
-
-        run_import(False)
+        start_backup_import(
+            context=context,
+            filepath=filepath,
+            messagebox_module=messagebox_module,
+            refresh_wallets=refresh_wallets,
+        )
 
     def export_backup() -> None:
         if not messagebox_module.askyesno(
@@ -153,67 +82,10 @@ def build_backup_section(
         )
         if not filepath:
             return
-
-        def task() -> None:
-            from gui.exporters import export_full_backup
-
-            wallets = context.repository.load_wallets()
-            records = context.repository.load_all()
-            mandatory_expenses = context.repository.load_mandatory_expenses()
-            budgets = context.controller.get_budgets()
-            debts = context.controller.get_debts()
-            debt_payments = []
-            for debt in debts:
-                debt_payments.extend(context.controller.get_debt_history(debt.id))
-            assets = context.controller.get_assets(active_only=False)
-            asset_snapshots = []
-            for asset in assets:
-                asset_snapshots.extend(context.controller.get_asset_history(asset.id))
-            goals = context.controller.get_goals()
-            distribution_items, distribution_subitems_by_item = (
-                context.controller.export_distribution_structure()
-            )
-            distribution_subitems = [
-                subitem
-                for item_id in sorted(distribution_subitems_by_item)
-                for subitem in distribution_subitems_by_item[item_id]
-            ]
-            distribution_snapshots = context.controller.get_frozen_distribution_rows()
-            transfers = context.repository.load_transfers()
-
-            export_full_backup(
-                filepath,
-                wallets=wallets,
-                records=records,
-                mandatory_expenses=mandatory_expenses,
-                budgets=budgets,
-                debts=debts,
-                debt_payments=debt_payments,
-                assets=assets,
-                asset_snapshots=asset_snapshots,
-                goals=goals,
-                distribution_items=distribution_items,
-                distribution_subitems=distribution_subitems,
-                distribution_snapshots=distribution_snapshots,
-                transfers=transfers,
-                storage_mode="sqlite",
-            )
-
-        def on_success(_: Any) -> None:
-            messagebox_module.showinfo(
-                tr("common.done", "Готово"),
-                tr(
-                    "settings.backup.export.success",
-                    "Полная копия экспортирована в {filepath}",
-                    filepath=filepath,
-                ),
-            )
-            open_in_file_manager(os.path.dirname(filepath))
-
-        context._run_background(
-            task,
-            on_success=on_success,
-            busy_message=tr("settings.backup.export.busy", "Экспортируем полную копию..."),
+        start_backup_export(
+            context=context,
+            filepath=filepath,
+            messagebox_module=messagebox_module,
         )
 
     ttk.Button(

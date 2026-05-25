@@ -13,7 +13,7 @@ def _parse_date(date_str: str | dt_date) -> datetime | None:
         return datetime.combine(date_str, datetime.min.time())
     try:
         return datetime.strptime(date_str, "%Y-%m-%d")
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 

@@ -1,6 +1,5 @@
 import csv
 import logging
-import os
 from collections.abc import Iterable
 from datetime import date as dt_date
 
@@ -8,44 +7,41 @@ from domain.import_policy import ImportPolicy
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord, Record
 from domain.reports import Report
 from domain.transfers import Transfer
-from services.import_parser import parse_transfer_row
-from utils.import_core import (
-    ImportSummary,
-    norm_key,
-    parse_import_row,
-    safe_type,
+from services.importing.parser import parse_transfer_row
+from utils.export.i18n import (
+    balance_label as localized_balance_label,
 )
-from utils.money import (
+from utils.export.i18n import (
+    final_balance_label,
+    fixed_amounts_note,
+    grouped_category_totals_note,
+    grouped_report_csv_headers,
+    report_csv_headers,
+    subtotal_label,
+    total_label,
+)
+from utils.export.i18n import (
+    statement_title as localized_statement_title,
+)
+from utils.finance.money import (
     money_diff,
     rate_diff,
     to_money_float,
     to_rate_float,
 )
-from utils.report_export_i18n import (
-    balance_label as localized_balance_label,
+from utils.import_core import (
+    ImportSummary,
+    parse_import_row,
 )
-from utils.report_export_i18n import (
-    canonical_report_header,
-    canonical_report_row_type,
-    final_balance_label,
-    fixed_amounts_note,
-    grouped_category_totals_note,
-    grouped_report_csv_headers,
-    is_report_total_row_label,
-    is_statement_title,
-    report_csv_headers,
-    subtotal_label,
-    total_label,
-)
-from utils.report_export_i18n import (
-    statement_title as localized_statement_title,
-)
-from utils.tabular_utils import (
+from utils.records.tabular import (
     mandatory_expense_export_rows,
     record_export_rows,
     report_record_type_label,
-    resolve_get_rate,
 )
+from utils.spreadsheets.csv_imports import (
+    import_mandatory_expenses_from_csv as _import_mandatory_expenses_from_csv,
+)
+from utils.spreadsheets.csv_imports import import_records_from_csv as _import_records_from_csv
 
 logger = logging.getLogger(__name__)
 MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -283,155 +279,21 @@ def import_records_from_csv(
     wallet_ids: set[int] | None = None,
     existing_initial_balance: float = 0.0,
 ) -> tuple[list[Record], float, ImportSummary]:
-    """Import operation dataset from CSV with per-row validation."""
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"CSV file not found: {filepath}")
-    if os.path.getsize(filepath) > MAX_IMPORT_FILE_SIZE:
-        raise ValueError(f"CSV file is too large: {os.path.getsize(filepath)} bytes")
-
-    records: list[Record] = []
-    initial_balance = to_money_float(existing_initial_balance)
-    errors: list[str] = []
-    skipped = 0
-    imported = 0
-
-    transfers: dict[int, Transfer] = {}
-    next_transfer_id = 1
-
-    get_rate = None
-    if policy == ImportPolicy.CURRENT_RATE:
-        get_rate = resolve_get_rate(currency_service)
-    csv.field_size_limit(MAX_CSV_FIELD_SIZE)
-    seen_rows = 0
-    seen_initial_balance = False
-
-    with open(filepath, newline="", encoding="utf-8") as csvfile:
-        first_data_pos = csvfile.tell()
-        first_data_line = ""
-        while True:
-            pos = csvfile.tell()
-            line = csvfile.readline()
-            if line == "":
-                break
-            if line.strip():
-                first_data_pos = pos
-                first_data_line = line
-                break
-
-        normalized_first_line = first_data_line.lstrip("\ufeff").strip()
-        first_line_cells = (
-            next(csv.reader([normalized_first_line]), [""]) if normalized_first_line else [""]
-        )
-        title_candidate = str(first_line_cells[0] or "").strip()
-        if not is_statement_title(title_candidate):
-            csvfile.seek(first_data_pos)
-        reader = csv.DictReader(csvfile)
-        if not reader.fieldnames:
-            return records, initial_balance, (0, 0, [])
-
-        normalized_headers = {canonical_report_header(h) for h in reader.fieldnames if h}
-        is_report_csv = {"date", "type", "category", "amount"}.issubset(
-            normalized_headers
-        ) and "amount_original" not in normalized_headers
-
-        for idx, row in enumerate(reader, start=2):
-            seen_rows += 1
-            if seen_rows > MAX_IMPORT_ROWS:
-                raise ValueError(f"CSV import exceeded row limit ({MAX_IMPORT_ROWS})")
-            if is_report_csv:
-                row_lc = {
-                    canonical_report_header(str(k)): v for k, v in row.items() if k is not None
-                }
-            else:
-                row_lc = {norm_key(str(k)): v for k, v in row.items()}
-            if not any(str(v or "").strip() for v in row_lc.values()):
-                continue
-
-            if is_report_csv:
-                date_value = str(row_lc.get("date", "") or "").strip()
-                if is_report_total_row_label(date_value):
-                    continue
-                row_type_value = canonical_report_row_type(str(row_lc.get("type", "") or ""))
-                if date_value == "" and row_type_value in {"initial_balance", "opening_balance"}:
-                    row_lc["type"] = "initial_balance"
-                    row_lc["amount_original"] = row_lc.get("amount")
-                else:
-                    row_lc["type"] = row_type_value or row_lc.get("type", "")
-                    row_lc["amount"] = row_lc.get("amount")
-
-            row_type = safe_type(str(row_lc.get("type", "") or "").lower())
-            if row_type == "transfer":
-                parsed_records, transfer, next_transfer_id, error = parse_transfer_row(
-                    row_lc,
-                    row_label=f"row {idx}",
-                    policy=policy,
-                    get_rate=get_rate,
-                    next_transfer_id=next_transfer_id,
-                    wallet_ids=wallet_ids,
-                )
-                if error:
-                    skipped += 1
-                    errors.append(error)
-                    logger.warning("CSV import skipped %s", error)
-                    continue
-                if transfer is not None and parsed_records is not None:
-                    if transfer.id in transfers:
-                        skipped += 1
-                        errors.append(f"row {idx}: duplicate transfer_id #{transfer.id}")
-                        continue
-                    transfers[transfer.id] = transfer
-                    records.extend(parsed_records)
-                    imported += 1
-                continue
-
-            record, parsed_balance, error = parse_import_row(
-                row_lc,
-                row_label=f"row {idx}",
-                policy=policy,
-                get_rate=get_rate,
-                mandatory_only=False,
-            )
-            if error:
-                skipped += 1
-                errors.append(error)
-                logger.warning("CSV import skipped %s", error)
-                continue
-            if parsed_balance is not None:
-                if seen_initial_balance:
-                    skipped += 1
-                    errors.append(f"row {idx}: duplicate initial_balance row")
-                    logger.warning("CSV import skipped row %s: duplicate initial_balance row", idx)
-                    continue
-                seen_initial_balance = True
-                initial_balance = parsed_balance
-                continue
-            if record is None:
-                continue
-            if wallet_ids is not None and record.wallet_id not in wallet_ids:
-                skipped += 1
-                errors.append(f"row {idx}: wallet not found ({record.wallet_id})")
-                logger.warning(
-                    "CSV import skipped row %s due to missing wallet %s", idx, record.wallet_id
-                )
-                continue
-            imported += 1
-            records.append(record)
-            if record.transfer_id is not None:
-                next_transfer_id = max(next_transfer_id, int(record.transfer_id) + 1)
-
-    _restore_missing_transfers(records, transfers)
-    integrity_errors = _validate_transfer_integrity(records, transfers, wallet_ids)
-    if integrity_errors:
-        skipped += len(integrity_errors)
-        errors.extend(integrity_errors)
-
-    logger.info(
-        "CSV import completed: imported=%s skipped=%s file=%s",
-        imported,
-        skipped,
+    return _import_records_from_csv(
         filepath,
+        policy=policy,
+        currency_service=currency_service,
+        wallet_ids=wallet_ids,
+        existing_initial_balance=existing_initial_balance,
+        max_import_file_size=MAX_IMPORT_FILE_SIZE,
+        max_import_rows=MAX_IMPORT_ROWS,
+        max_csv_field_size=MAX_CSV_FIELD_SIZE,
+        logger=logger,
+        parse_transfer_row=parse_transfer_row,
+        parse_import_row=parse_import_row,
+        restore_missing_transfers=_restore_missing_transfers,
+        validate_transfer_integrity=_validate_transfer_integrity,
     )
-    return records, initial_balance, (imported, skipped, errors)
 
 
 def export_mandatory_expenses_to_csv(expenses: list[MandatoryExpenseRecord], filepath: str) -> None:
@@ -447,56 +309,10 @@ def import_mandatory_expenses_from_csv(
     policy: ImportPolicy = ImportPolicy.FULL_BACKUP,
     currency_service=None,
 ) -> tuple[list[MandatoryExpenseRecord], ImportSummary]:
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"CSV file not found: {filepath}")
-
-    expenses: list[MandatoryExpenseRecord] = []
-    errors: list[str] = []
-    skipped = 0
-    imported = 0
-
-    get_rate = None
-    if policy == ImportPolicy.CURRENT_RATE:
-        get_rate = resolve_get_rate(currency_service)
-
-    with open(filepath, newline="", encoding="utf-8") as csvfile:
-        while True:
-            pos = csvfile.tell()
-            line = csvfile.readline()
-            if line == "":
-                break
-            if line.strip():
-                csvfile.seek(pos)
-                break
-        reader = csv.DictReader(csvfile)
-        if not reader.fieldnames:
-            return expenses, (0, 0, [])
-
-        for idx, row in enumerate(reader, start=2):
-            row_lc = {norm_key(str(k)): v for k, v in row.items()}
-            if not any(str(v or "").strip() for v in row_lc.values()):
-                continue
-
-            record, _, error = parse_import_row(
-                row_lc,
-                row_label=f"row {idx}",
-                policy=policy,
-                get_rate=get_rate,
-                mandatory_only=True,
-            )
-            if error:
-                skipped += 1
-                errors.append(error)
-                logger.warning("Mandatory CSV import skipped %s", error)
-                continue
-            if isinstance(record, MandatoryExpenseRecord):
-                imported += 1
-                expenses.append(record)
-
-    logger.info(
-        "Mandatory CSV import completed: imported=%s skipped=%s file=%s",
-        imported,
-        skipped,
+    return _import_mandatory_expenses_from_csv(
         filepath,
+        policy=policy,
+        currency_service=currency_service,
+        logger=logger,
+        parse_import_row=parse_import_row,
     )
-    return expenses, (imported, skipped, errors)

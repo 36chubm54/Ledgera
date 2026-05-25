@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from app.use_cases import AddMandatoryExpenseToReport
+from app.use_cases_pkg.mandatory import AddMandatoryExpenseToReport
 from domain.budget import BudgetStatus, PaceStatus
 from domain.records import MandatoryExpenseRecord
 from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.budget_service import BudgetService
-from services.metrics_service import MetricsService
-from utils.money import to_minor_units
+from services.analytics.metrics import MetricsService
+from services.planning.budget import BudgetService
+from utils.finance.money import to_minor_units
 
 
 def _schema_path() -> str:

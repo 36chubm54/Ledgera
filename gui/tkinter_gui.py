@@ -18,75 +18,83 @@ from gui.controllers import FinancialController
 from gui.hotkeys import register_hotkeys
 from gui.i18n import set_language, tr
 from gui.runtime_coordinator import AfterOwner, UiRuntimeCoordinator
-from gui.shell.shell_lifecycle import ensure_tab_built, handle_tab_changed, schedule_deferred_action
-from gui.shell.shell_notebook import render_notebook_underline
-from gui.shell.shell_notebook import (
-    schedule_notebook_underline as schedule_notebook_underline_render,
+from gui.shell.core.app_init import (
+    build_owner_startup_coordinator,
+    initialize_owner_busy_overlay,
+    initialize_owner_shell_layout,
 )
-from gui.shell.shell_preferences import (
-    handle_owner_display_currency_change,
-    handle_owner_language_change,
-    handle_owner_theme_change,
-    reload_ui_strings,
-)
-from gui.shell.shell_records import (
-    hide_owner_records_tooltip,
-    refresh_owner_record_views,
-    show_owner_records_tooltip,
-)
-from gui.shell.shell_refresh import (
-    refresh_owner_all,
-    refresh_owner_budgets,
-    refresh_owner_display_currency_views,
-    refresh_owner_theme_surfaces,
-    refresh_owner_wallet_views,
-)
-from gui.shell.shell_runtime import run_background_task, set_busy_state
-from gui.shell.shell_setup import attach_tab_aliases, initialize_shell_state
-from gui.shell.shell_startup import report_startup_auto_payments
-from gui.shell.shell_state import (
+from gui.shell.core.refresh import refresh_owner_theme_surfaces
+from gui.shell.core.runtime import set_busy_state
+from gui.shell.core.setup import initialize_shell_state
+from gui.shell.core.state import (
     apply_saved_ui_preferences,
-    assign_status_bar_state,
     rebuild_status_bar,
     reset_tab_bindings_state,
 )
-from gui.shell.shell_support import resolve_import_policy
-from gui.shell.shell_tabs import apply_tab_titles, rebuild_built_tabs
-from gui.shell.shell_window import (
+from gui.shell.core.ui import (
+    finalize_owner_reload_state,
+    on_owner_language_changed,
+    on_owner_theme_changed,
+    rebuild_owner_status_bar,
+    reload_owner_strings,
+    render_owner_notebook_underline,
+    schedule_owner_notebook_underline,
+    schedule_owner_reload_strings,
+)
+from gui.shell.owner.ops import (
+    apply_owner_saved_online_mode,
+    ensure_owner_tab_built,
+    hide_owner_tooltip,
+    on_owner_chart_filter_change,
+    on_owner_display_currency_changed,
+    on_owner_legend_mousewheel,
+    on_owner_online_toggle,
+    on_owner_tab_changed,
+    owner_import_policy_from_ui,
+    refresh_owner_all_shell,
+    refresh_owner_budget_shell,
+    refresh_owner_charts,
+    refresh_owner_display_currency_shell,
+    refresh_owner_list,
+    refresh_owner_status_bar,
+    refresh_owner_wallet_shell,
+    show_owner_tooltip,
+    start_owner_status_refresh_timer,
+)
+from gui.shell.owner.runtime import (
+    destroy_owner_runtime,
+    rebuild_owner_tabs,
+    run_owner_background_task,
+    set_owner_busy,
+)
+from gui.shell.windowing.updates import (
+    launch_owner_downloaded_update_and_exit,
+    launch_owner_installer_and_exit,
+)
+from gui.shell.windowing.window import (
     APP_LINUX_WM_CLASS,
     activate_main_window,
     apply_window_icon,
     configure_main_window,
-    launch_downloaded_update_and_exit,
-    launch_installer_and_exit,
 )
-from gui.startup_coordinator import DeferredStartupCoordinator
 from gui.status_bar_builder import build_status_bar
 from gui.status_bar_coordinator import StatusBarCoordinator, StatusBarOwner
-from gui.tab_lifecycle import TAB_ORDER, attach_tabs, build_tab, create_tab_frames
-from gui.tabs.analytics_tab import AnalyticsTabBindings
-from gui.tabs.budget_tab import BudgetTabBindings
-from gui.tabs.dashboard_tab import DashboardTabBindings
-from gui.tabs.debts_tab import DebtsTabBindings
-from gui.tabs.distribution_tab import DistributionTabBindings
-from gui.tabs.infographics.refresh import (
-    handle_chart_filter_change,
-    refresh_owner_infographics,
-    scroll_owner_legend_canvas,
-)
-from gui.tabs.mandatory_tab import MandatoryTabBindings
-from gui.tabs.operations_tab import OperationsTabBindings
-from gui.tabs.reports_tab import ReportsFrame
-from gui.tabs.settings_tab import SettingsTabBindings
-from gui.ui_helpers import show_error, show_info
-from gui.ui_text import app_title, get_import_formats, get_tab_titles
+from gui.tab_lifecycle import build_tab
+from gui.tabs.analytics import AnalyticsTabBindings
+from gui.tabs.budget import BudgetTabBindings
+from gui.tabs.dashboard import DashboardTabBindings
+from gui.tabs.debts import DebtsTabBindings
+from gui.tabs.distribution import DistributionTabBindings
+from gui.tabs.mandatory import MandatoryTabBindings
+from gui.tabs.operations import OperationsTabBindings
+from gui.tabs.reports import ReportsFrame
+from gui.tabs.settings import SettingsTabBindings
+from gui.ui_helpers import show_info
+from gui.ui_text import app_title, get_import_formats
 from gui.ui_theme import (
     DEFAULT_THEME,
     PAD_SM,
-    PAD_XL,
-    PAD_XS,
     bootstrap_ui,
-    get_palette,
     get_theme,
     refresh_treeview_zebra,
 )
@@ -95,6 +103,11 @@ logger = logging.getLogger(__name__)
 
 
 class FinancialApp(tk.Tk):
+    _notebook: ttk.Notebook
+    _notebook_underline: tk.Canvas
+    _tab_order: list[str]
+    _tab_widgets: dict[str, ttk.Frame]
+    _tab_keys_by_widget: dict[str, str]
     _record_id_to_repo_index: dict[str, int]
     _record_id_to_domain_id: dict[str, int]
     _record_id_to_description: dict[str, str]
@@ -181,108 +194,17 @@ class FinancialApp(tk.Tk):
         self._runtime = UiRuntimeCoordinator(cast(AfterOwner, self))
         self._status = StatusBarCoordinator(cast(StatusBarOwner, self), logger=logger)
         self._busy = False
-
-        def _refresh_charts_deferred(records: list[Any] | None = None) -> None:
-            schedule_deferred_action(
-                self._schedule_after_idle,
-                "startup_refresh_charts",
-                lambda: self._refresh_charts(records=records),
-            )
-
-        def _refresh_budgets_deferred() -> None:
-            schedule_deferred_action(
-                self._schedule_after_idle,
-                "startup_refresh_budgets",
-                self._refresh_budgets,
-            )
-
-        def _refresh_all_deferred() -> None:
-            schedule_deferred_action(
-                self._schedule_after_idle,
-                "startup_refresh_all",
-                self._refresh_all,
-            )
-
-        self._startup = DeferredStartupCoordinator(
-            controller=self.controller,
-            repository=self.repository,
-            run_background=self._run_background,
-            schedule_after_idle=self._schedule_after_idle,
-            schedule_after=self._schedule_after,
-            refresh_list=self._refresh_list,
-            refresh_charts=_refresh_charts_deferred,
-            refresh_budgets=_refresh_budgets_deferred,
-            refresh_all=_refresh_all_deferred,
-            apply_saved_online_mode=self._apply_saved_online_mode,
-            show_auto_payment_message=lambda created_auto_payments: report_startup_auto_payments(
-                created_auto_payments,
-                logger=logger,
-                format_money=lambda amount: self.controller.format_display_money(amount),
-                show_info_message=lambda message: show_info(
-                    message,
-                    title=tr("app.autopay.title", "Автоплатежи применены"),
-                ),
-            ),
-            restore_keyboard_focus=lambda: activate_main_window(self),
-            set_busy=self._set_busy,
-            logger=logger,
-        )
+        self._startup = build_owner_startup_coordinator(self, logger=logger)
         initialize_shell_state(self, after_jobs=self._runtime.after_jobs)
-
-        self._status_bar = assign_status_bar_state(self, build_status_bar(self))
-        self._status_bar.grid(row=2, column=0, sticky="ew")
-
-        notebook = ttk.Notebook(self)
-        notebook.grid(row=0, column=0, sticky="nsew")
-        self._notebook = notebook
-        self._notebook_underline = tk.Canvas(
-            self,
-            height=3,
-            highlightthickness=0,
-            bd=0,
-            bg=get_palette().background,
-        )
-
-        self._tab_order = list(TAB_ORDER)
-        self._tab_widgets = create_tab_frames(notebook)
-        attach_tab_aliases(self, self._tab_widgets)
-        self._tab_keys_by_widget = attach_tabs(notebook, self._tab_widgets)
-        notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed, add="+")
-        notebook.bind("<Configure>", lambda _event: self._schedule_notebook_underline(), add="+")
-        self.bind("<Configure>", lambda _event: self._schedule_notebook_underline(), add="+")
-        self.bind_all("<MouseWheel>", self._on_legend_mousewheel, add="+")
-
-        self._ensure_tab_built("infographics")
-        self._ensure_tab_built("operations")
-        register_hotkeys(self)
-
-        self._busy_frame = ttk.Frame(self, style="Card.TFrame", padding=(PAD_XL, PAD_SM))
-        self._busy_frame.grid(row=1, column=0, sticky="ew", padx=PAD_XL, pady=(0, PAD_SM))
-        self._busy_frame.grid_columnconfigure(0, weight=1)
-        self._busy_message_var = tk.StringVar(
-            value=tr("app.busy.startup", "Подготавливаем рабочее пространство...")
-        )
-        self._busy_label = ttk.Label(
-            self._busy_frame,
-            textvariable=self._busy_message_var,
-            style="Hint.TLabel",
-            justify="left",
-        )
-        self._busy_label.grid(row=0, column=0, sticky="w", pady=(0, PAD_XS))
-        self.progress = ttk.Progressbar(self._busy_frame, mode="indeterminate")
-        self.progress.grid(row=1, column=0, sticky="ew")
-        self._busy_frame.grid_remove()
+        initialize_owner_shell_layout(self, register_hotkeys_func=register_hotkeys)
+        initialize_owner_busy_overlay(self)
         self._schedule_notebook_underline()
         self._set_busy(True, tr("app.busy.startup", "Подготавливаем рабочее пространство..."))
         self._schedule_after_idle("activate_main_window", lambda: activate_main_window(self))
         self._schedule_after_idle("deferred_startup", self._startup.start)
 
     def destroy(self) -> None:
-        self._runtime.shutdown()
-        close_method = getattr(self.repository, "close", None)
-        if callable(close_method):
-            close_method()
-        super().destroy()
+        destroy_owner_runtime(self, destroy_base=super().destroy)
 
     def _cancel_all_after_jobs(self) -> None:
         self._runtime.cancel_all_after_jobs()
@@ -297,89 +219,49 @@ class FinancialApp(tk.Tk):
         return self._runtime.schedule_after_idle(key, callback)
 
     def _rebuild_status_bar(self) -> None:
-        self._status_bar = rebuild_status_bar(
+        rebuild_owner_status_bar(
             self,
+            rebuild_status_bar=rebuild_status_bar,
             build_status_bar_result=build_status_bar,
-            refresh_status_bar=self._refresh_status_bar,
         )
 
     def _rebuild_built_tabs(self) -> None:
-        if not hasattr(self, "_notebook"):
-            return
-        rebuild_built_tabs(
-            notebook=self._notebook,
-            tab_keys_by_widget=self._tab_keys_by_widget,
-            tab_order=self._tab_order,
-            built_tabs=self._built_tabs,
-            tab_widgets=self._tab_widgets,
+        rebuild_owner_tabs(
+            self,
             reset_tab_bindings=lambda: reset_tab_bindings_state(
                 self,
                 hide_records_tooltip=self._hide_records_tooltip,
             ),
-            ensure_tab_built=self._ensure_tab_built,
-            refresh_operations=self._refresh_list,
-            refresh_infographics=self._refresh_charts,
-            refresh_budgets=self._refresh_budgets,
-            refresh_distribution=self._refresh_all,
         )
 
     def reload_strings(self, *, rebuild_tabs: bool = False) -> None:
-        reload_ui_strings(
-            set_import_formats=lambda: setattr(self, "_import_formats", get_import_formats()),
-            set_title=self.title,
-            title_text=app_title(),
-            apply_tab_titles=lambda: (
-                apply_tab_titles(
-                    self._notebook,
-                    self._tab_widgets,
-                    tab_titles=get_tab_titles(),
-                )
-                if hasattr(self, "_notebook")
-                else None
-            ),
-            rebuild_status_bar=self._rebuild_status_bar,
-            rebuild_tabs=rebuild_tabs,
+        self._reload_tabs_pending = rebuild_tabs
+        reload_owner_strings(
+            self,
             rebuild_built_tabs=self._rebuild_built_tabs,
+            rebuild_status_bar=self._rebuild_status_bar,
         )
 
     def _schedule_reload_strings(self, *, rebuild_tabs: bool = False) -> None:
-        self._reload_tabs_pending = self._reload_tabs_pending or rebuild_tabs
-        if "reload_strings" in self._after_jobs:
-            return
-
-        def _run() -> None:
-            pending_tabs = self._reload_tabs_pending
-            self._reload_tabs_pending = False
-            self.reload_strings(rebuild_tabs=pending_tabs)
-
-        self._schedule_after_idle("reload_strings", _run)
-
-    def _on_language_changed(self, _event: tk.Event | None = None) -> None:
-        handle_owner_language_change(self, set_language=set_language, logger=logger)
-
-    def _on_theme_changed(self, _event: tk.Event | None = None) -> None:
-        handle_owner_theme_change(self, bootstrap_ui=lambda theme: bootstrap_ui(self, theme))
-
-    def _schedule_notebook_underline(self) -> None:
-        schedule_notebook_underline_render(
-            schedule_after_idle=self._schedule_after_idle,
-            render_callback=self._render_notebook_underline,
+        schedule_owner_reload_strings(
+            self,
+            rebuild_tabs=rebuild_tabs,
+            reload_strings=lambda: self.reload_strings(
+                rebuild_tabs=finalize_owner_reload_state(self)
+            ),
         )
 
+    def _on_language_changed(self, _event: tk.Event | None = None) -> None:
+        on_owner_language_changed(self, logger=logger)
+
+    def _on_theme_changed(self, _event: tk.Event | None = None) -> None:
+        on_owner_theme_changed(self, bootstrap_ui=lambda theme: bootstrap_ui(self, theme))
+
+    def _schedule_notebook_underline(self) -> None:
+        schedule_owner_notebook_underline(self)
+
     def _render_notebook_underline(self) -> None:
-        if not hasattr(self, "_notebook") or not hasattr(self, "_notebook_underline"):
-            return
-        palette = get_palette()
-        try:
-            render_notebook_underline(
-                notebook=self._notebook,
-                canvas=self._notebook_underline,
-                background=palette.background,
-                line_color=palette.tab_underline,
-                horizontal_padding=PAD_SM,
-            )
-        except tk.TclError:
-            self._notebook_underline.place_forget()
+        render_owner_notebook_underline(self, horizontal_padding=PAD_SM)
 
     def _refresh_theme_surfaces(self) -> None:
         refresh_owner_theme_surfaces(
@@ -390,10 +272,10 @@ class FinancialApp(tk.Tk):
         )
 
     def _refresh_display_currency_views(self) -> None:
-        refresh_owner_display_currency_views(self)
+        refresh_owner_display_currency_shell(self)
 
     def _set_busy(self, busy: bool, message: str = "") -> None:
-        set_busy_state(self, busy=busy, message=message, base_title=app_title())
+        set_owner_busy(self, busy, message=message, set_busy_state=set_busy_state)
 
     def _run_background(
         self,
@@ -404,88 +286,66 @@ class FinancialApp(tk.Tk):
         busy_message: str = tr("app.busy.default", "Выполняется операция..."),
         block_ui: bool = True,
     ) -> None:
-        run_background_task(
-            self._runtime,
+        run_owner_background_task(
+            self,
             task,
             on_success=on_success,
             on_error=on_error,
             busy_message=busy_message,
             block_ui=block_ui,
-            is_busy=lambda: self._busy,
-            set_busy=self._set_busy,
-            show_wait_info=lambda _token: show_info(
-                tr("app.wait_running", "Дождитесь завершения текущей операции."),
-                title=tr("app.wait", "Подождите"),
-            ),
-            show_error=show_error,
             logger=logger,
         )
 
     def _on_online_toggle(self) -> None:
-        self._status.on_online_toggle()
+        on_owner_online_toggle(self._status)
 
     def _refresh_status_bar(self) -> None:
-        self._status.refresh_status_bar()
+        refresh_owner_status_bar(self._status)
 
     def _on_display_currency_changed(self, _event: tk.Event | None = None) -> None:
-        handle_owner_display_currency_change(self)
+        on_owner_display_currency_changed(self)
 
     def _start_status_refresh_timer(self) -> None:
-        self._status.start_status_refresh_timer()
+        start_owner_status_refresh_timer(self._status)
 
     def _apply_saved_online_mode(self) -> None:
-        self._status.apply_saved_online_mode()
+        apply_owner_saved_online_mode(self._status)
 
     def _import_policy_from_ui(self, mode_label: str) -> ImportPolicy:
-        return resolve_import_policy(mode_label)
+        return owner_import_policy_from_ui(mode_label)
 
     def _refresh_list(self, records: list[Any] | None = None) -> None:
-        refresh_owner_record_views(self, records=records)
+        refresh_owner_list(self, records=records)
 
     def _hide_records_tooltip(self, _event: object | None = None) -> None:
-        hide_owner_records_tooltip(self, _event)
+        hide_owner_tooltip(self, _event)
 
     def _show_records_tooltip(self, event: tk.Event) -> None:
-        show_owner_records_tooltip(self, event)
+        show_owner_tooltip(self, event)
 
     def _refresh_charts(self, records: list[Any] | None = None) -> None:
-        refresh_owner_infographics(
-            self,
-            records=records,
-            load_fresh=records is None,
-        )
+        refresh_owner_charts(self, records=records)
 
     def _ensure_tab_built(self, tab_key: str) -> None:
-        ensure_tab_built(
-            self._built_tabs,
-            tab_key,
-            build_tab_for_key=lambda key: build_tab(self, key),
-        )
+        ensure_owner_tab_built(self, tab_key, build_tab_for_key=lambda key: build_tab(self, key))
 
     def _on_tab_changed(self, _event: tk.Event) -> None:
-        if not hasattr(self, "_notebook"):
-            return
-        handle_tab_changed(
-            self._notebook,
-            self._tab_keys_by_widget,
-            ensure_tab_built_for_key=self._ensure_tab_built,
-            schedule_notebook_underline=self._schedule_notebook_underline,
-        )
+        on_owner_tab_changed(self)
 
     def _refresh_wallets(self) -> None:
-        refresh_owner_wallet_views(self)
+        refresh_owner_wallet_shell(self)
 
     def _refresh_budgets(self) -> None:
-        refresh_owner_budgets(self)
+        refresh_owner_budget_shell(self)
 
     def _refresh_all(self) -> None:
-        refresh_owner_all(self)
+        refresh_owner_all_shell(self)
 
     def _on_chart_filter_change(self, *_args: Any) -> None:
-        handle_chart_filter_change(self)
+        on_owner_chart_filter_change(self)
 
     def _on_legend_mousewheel(self, event: tk.Event) -> None:
-        scroll_owner_legend_canvas(self, event)
+        on_owner_legend_mousewheel(self, event)
 
     def _launch_downloaded_update_and_exit(
         self,
@@ -493,9 +353,9 @@ class FinancialApp(tk.Tk):
         *,
         target_version: str | None = None,
     ) -> None:
-        launch_downloaded_update_and_exit(
+        launch_owner_downloaded_update_and_exit(
             self,
-            artifact_path,
+            artifact_path=artifact_path,
             load_saved_terminal=self.controller.load_linux_terminal_preference,
             save_terminal=self.controller.save_linux_terminal_preference,
             mark_pending_cleanup=lambda path, version: self.controller.mark_pending_update_cleanup(
@@ -506,7 +366,7 @@ class FinancialApp(tk.Tk):
         )
 
     def _launch_installer_and_exit(self, installer_path: str) -> None:
-        launch_installer_and_exit(self, installer_path)
+        launch_owner_installer_and_exit(self, installer_path)
 
 
 def main(*, initial_base_currency: str | None = None) -> None:

@@ -7,7 +7,7 @@ import pytest
 
 from domain.debt import DebtKind, DebtOperationType, DebtStatus
 from infrastructure.sqlite_repository import SQLiteRecordRepository
-from services.debt_service import DebtService
+from services.planning.debts import DebtService
 
 
 def _schema_path() -> str:

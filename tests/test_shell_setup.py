@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from gui.shell.shell_setup import attach_tab_aliases, initialize_shell_state
+from gui.shell.core.setup import attach_tab_aliases, initialize_shell_state
 
 
 def test_initialize_shell_state_sets_expected_defaults() -> None:

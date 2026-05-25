@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from datetime import date as dt_date
 
-from utils.tag_utils import normalize_tag_name, normalize_tag_names
+from utils.records.tags import normalize_tag_name, normalize_tag_names
 
 from .records import IncomeRecord, Record
 from .validation import parse_report_period_end, parse_report_period_start, parse_ymd
