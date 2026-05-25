@@ -6,13 +6,26 @@ import os
 import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Protocol
 
 
-def cleanup_temp_file(temp_path: str | None, *, context: str, logger: logging.Logger) -> None:
+class OsLike(Protocol):
+    def unlink(self, path: str) -> None: ...
+
+    def replace(self, src: str, dst: str | Path) -> None: ...
+
+
+def cleanup_temp_file(
+    temp_path: str | None,
+    *,
+    context: str,
+    logger: logging.Logger,
+    os_module: OsLike = os,
+) -> None:
     if not temp_path:
         return
     try:
-        os.unlink(temp_path)
+        os_module.unlink(temp_path)
     except FileNotFoundError:
         return
     except OSError:
@@ -40,6 +53,7 @@ def write_config_file(
     api_key_persisted_field: str,
     persist_plaintext_api_key: bool,
     logger: logging.Logger,
+    os_module: OsLike = os,
 ) -> None:
     normalized = dict(default_config)
     normalized.update(dict(payload))
@@ -66,9 +80,9 @@ def write_config_file(
             json.dump(normalized, fh, ensure_ascii=False, indent=2)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(temp_path, target)
+        os_module.replace(temp_path, target)
     except OSError:
-        cleanup_temp_file(temp_path, context="currency config", logger=logger)
+        cleanup_temp_file(temp_path, context="currency config", logger=logger, os_module=os_module)
         raise
 
 
@@ -84,6 +98,7 @@ def save_cache_file(
     rates: dict[str, float],
     *,
     logger: logging.Logger,
+    os_module: OsLike = os,
 ) -> None:
     temp_path: str | None = None
     try:
@@ -97,7 +112,7 @@ def save_cache_file(
             json.dump(rates, f, ensure_ascii=False, indent=2)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(temp_path, cache_file)
+        os_module.replace(temp_path, cache_file)
     except (OSError, TypeError, ValueError):
-        cleanup_temp_file(temp_path, context="currency cache", logger=logger)
+        cleanup_temp_file(temp_path, context="currency cache", logger=logger, os_module=os_module)
         logger.exception("Failed to save currency cache")

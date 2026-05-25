@@ -1,5 +1,5 @@
 import logging
-import os
+import os as _os
 import threading
 from collections.abc import Mapping
 from datetime import datetime
@@ -83,6 +83,15 @@ from infrastructure.currency_providers import (
 logger = logging.getLogger(__name__)
 
 
+class _OsCompat:
+    environ = _os.environ
+    replace = staticmethod(_os.replace)
+    unlink = staticmethod(_os.unlink)
+
+
+os = _OsCompat()
+
+
 class RateAggregator(Protocol):
     @property
     def last_provider_name(self) -> str | None: ...
@@ -123,7 +132,7 @@ class CurrencyService:
 
     @staticmethod
     def _cleanup_temp_file(temp_path: str | None, *, context: str) -> None:
-        cleanup_temp_file(temp_path, context=context, logger=logger)
+        cleanup_temp_file(temp_path, context=context, logger=logger, os_module=os)
 
     @staticmethod
     def _load_json_object_file(path: Path, *, context: str) -> dict[str, object]:
@@ -229,6 +238,7 @@ class CurrencyService:
             api_key_persisted_field=cls.API_KEY_PERSISTED_FIELD,
             persist_plaintext_api_key=persist_plaintext_api_key,
             logger=logger,
+            os_module=os,
         )
 
     @classmethod
@@ -530,4 +540,4 @@ class CurrencyService:
         return None
 
     def _save_cache(self, rates: dict[str, float]) -> None:
-        save_cache_file(self.CACHE_FILE, rates, logger=logger)
+        save_cache_file(self.CACHE_FILE, rates, logger=logger, os_module=os)
