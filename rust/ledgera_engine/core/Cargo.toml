@@ -1,0 +1,6 @@
+[package]
+name = "ledgera_engine_core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

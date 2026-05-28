@@ -1,0 +1,16 @@
+[package]
+name = "ledgera_core"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "ledgera_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+ledgera_engine_core.workspace = true
+ledgera_engine_storage.workspace = true
+pyo3.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true

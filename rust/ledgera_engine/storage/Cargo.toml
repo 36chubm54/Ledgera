@@ -1,0 +1,8 @@
+[package]
+name = "ledgera_engine_storage"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ledgera_engine_core.workspace = true
+rusqlite.workspace = true

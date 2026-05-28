@@ -8,7 +8,10 @@ The Rust engine is available through `bridge.ledgera_bridge`, but app runtime do
 
 ## Completed
 
-- `rust/ledgera_engine` hosts the current PyO3/maturin extension.
+- `rust/ledgera_engine` is a Cargo workspace with `core`, `storage`, and `ffi` crates.
+- `rust/ledgera_engine/core` owns pure deterministic money/math helpers without Python dependencies.
+- `rust/ledgera_engine/storage` owns read-only SQLite helpers and typed row extraction.
+- `rust/ledgera_engine/ffi` owns the PyO3 `ledgera_core` extension boundary.
 - `bridge.ledgera_bridge` is the only app-level loader for the Rust extension.
 - Money helpers have Rust/Python parity coverage.
 - Balance read paths have Rust/Python parity coverage.
@@ -24,8 +27,9 @@ The Rust engine is available through `bridge.ledgera_bridge`, but app runtime do
 
 ## Deferred
 
-- Split the current PyO3 extension into a pure Rust core crate plus a separate FFI/bridge crate.
 - Move mutation/write paths such as `RecordEngine::add` into Rust.
+- Add the future `sync` crate when alpha.3 local synchronization work starts.
+- Add SQLite WAL bootstrap and Rust-owned migrations when write paths move into `storage`.
 - Add Kotlin/Native FFI, mobile UI, and sync work.
 
 ## Acceptance
