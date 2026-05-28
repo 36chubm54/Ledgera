@@ -240,9 +240,16 @@ class SQLiteRecordsWalletsMixin:
             auto_pay=bool(row["auto_pay"]),
         )
 
-    def load_active_wallets(self) -> list[Wallet]:
+    def _can_use_rust_record_core(self, name: str) -> bool:
         db_path = getattr(self, "db_path", None)
-        if isinstance(db_path, str) and db_path and _record_core_has("wallet_list_rows"):
+        if not isinstance(db_path, str) or not db_path:
+            return False
+        if getattr(self._conn, "in_transaction", False):
+            return False
+        return _record_core_has(name)
+
+    def load_active_wallets(self) -> list[Wallet]:
+        if self._can_use_rust_record_core("wallet_list_rows"):
             return [wallet for wallet in self.load_wallets() if wallet.is_active]
         rows = self._conn.execute(
             """
@@ -331,8 +338,8 @@ class SQLiteRecordsWalletsMixin:
             return True
 
     def load_wallets(self) -> list[Wallet]:
-        db_path = getattr(self, "db_path", None)
-        if isinstance(db_path, str) and db_path and _record_core_has("wallet_list_rows"):
+        db_path = str(getattr(self, "db_path", ""))
+        if self._can_use_rust_record_core("wallet_list_rows"):
             return [
                 self._wallet_from_rust_row(cast(_RustWalletRow, raw_row))
                 for raw_row in cast(RustRepositoryReadCore, _RUST_RECORD_CORE).wallet_list_rows(
@@ -367,8 +374,8 @@ class SQLiteRecordsWalletsMixin:
                 self._insert_transfer_row(transfer)
 
     def load_transfers(self) -> list[Transfer]:
-        db_path = getattr(self, "db_path", None)
-        if isinstance(db_path, str) and db_path and _record_core_has("transfer_list_rows"):
+        db_path = str(getattr(self, "db_path", ""))
+        if self._can_use_rust_record_core("transfer_list_rows"):
             return [
                 self._transfer_from_rust_row(cast(_RustTransferRow, raw_row))
                 for raw_row in cast(RustRepositoryReadCore, _RUST_RECORD_CORE).transfer_list_rows(
@@ -420,10 +427,12 @@ class SQLiteRecordsWalletsMixin:
 
     def load_all(self) -> list[Record]:
         db_path = str(getattr(self, "db_path", ""))
-        if _RUST_RECORD_CORE is not None and db_path:
+        if self._can_use_rust_record_core("record_list_rows"):
             return [
                 self._record_from_rust_row(cast(_RustRecordRow, raw_row))
-                for raw_row in _RUST_RECORD_CORE.record_list_rows(db_path)
+                for raw_row in cast(RustRepositoryReadCore, _RUST_RECORD_CORE).record_list_rows(
+                    db_path
+                )
             ]
         rows = self._records_base_rows()
         tags_map = self._record_tags_map([int(row["id"]) for row in rows])
@@ -435,8 +444,8 @@ class SQLiteRecordsWalletsMixin:
     def get_by_id(self, record_id: int) -> Record:
         record_id = int(record_id)
         db_path = str(getattr(self, "db_path", ""))
-        if _RUST_RECORD_CORE is not None and db_path:
-            row = _RUST_RECORD_CORE.record_get_row(db_path, record_id)
+        if self._can_use_rust_record_core("record_get_row"):
+            row = cast(RustRepositoryReadCore, _RUST_RECORD_CORE).record_get_row(db_path, record_id)
             if row is not None:
                 return self._record_from_rust_row(cast(_RustRecordRow, row))
             raise ValueError(f"Record not found: {record_id}")
@@ -474,10 +483,12 @@ class SQLiteRecordsWalletsMixin:
         if not tag_name:
             return []
         db_path = str(getattr(self, "db_path", ""))
-        if _RUST_RECORD_CORE is not None and db_path:
+        if self._can_use_rust_record_core("record_rows_by_tag"):
             return [
                 self._record_from_rust_row(cast(_RustRecordRow, raw_row))
-                for raw_row in _RUST_RECORD_CORE.record_rows_by_tag(db_path, tag_name)
+                for raw_row in cast(RustRepositoryReadCore, _RUST_RECORD_CORE).record_rows_by_tag(
+                    db_path, tag_name
+                )
             ]
         rows = self._conn.execute(
             f"""
@@ -502,9 +513,9 @@ class SQLiteRecordsWalletsMixin:
         if int(index) < 0:
             return None
         db_path = getattr(self, "db_path", None)
-        if isinstance(db_path, str) and db_path and _record_core_has("transfer_id_by_record_index"):
+        if self._can_use_rust_record_core("transfer_id_by_record_index"):
             return cast(RustRepositoryReadCore, _RUST_RECORD_CORE).transfer_id_by_record_index(
-                db_path, int(index)
+                str(db_path), int(index)
             )
         row = self._conn.execute(
             """
@@ -585,20 +596,20 @@ class SQLiteRecordsWalletsMixin:
 
     def load_mandatory_expenses(self) -> list[MandatoryExpenseRecord]:
         db_path = getattr(self, "db_path", None)
-        if isinstance(db_path, str) and db_path and _record_core_has("mandatory_expense_rows"):
+        if self._can_use_rust_record_core("mandatory_expense_rows"):
             return [
                 self._mandatory_from_rust_row(cast(_RustMandatoryExpenseRow, raw_row))
                 for raw_row in cast(
                     RustRepositoryReadCore, _RUST_RECORD_CORE
-                ).mandatory_expense_rows(db_path)
+                ).mandatory_expense_rows(str(db_path))
             ]
         return self._storage.get_mandatory_expenses()
 
     def get_mandatory_expense_by_id(self, expense_id: int) -> MandatoryExpenseRecord:
         db_path = getattr(self, "db_path", None)
-        if isinstance(db_path, str) and db_path and _record_core_has("mandatory_expense_row"):
+        if self._can_use_rust_record_core("mandatory_expense_row"):
             row = cast(RustRepositoryReadCore, _RUST_RECORD_CORE).mandatory_expense_row(
-                db_path, int(expense_id)
+                str(db_path), int(expense_id)
             )
             if row is not None:
                 return self._mandatory_from_rust_row(cast(_RustMandatoryExpenseRow, row))
