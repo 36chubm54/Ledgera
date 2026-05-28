@@ -517,11 +517,6 @@ class SQLiteRecordsWalletsMixin:
     def get_transfer_id_by_record_index(self, index: int) -> int | None:
         if int(index) < 0:
             return None
-        db_path = getattr(self, "db_path", None)
-        if self._can_use_rust_record_core("transfer_id_by_record_index"):
-            return cast(RustRepositoryReadCore, _RUST_RECORD_CORE).transfer_id_by_record_index(
-                str(db_path), int(index)
-            )
         row = self._conn.execute(
             """
             SELECT transfer_id
