@@ -36,6 +36,7 @@ def test_bridge_returns_none_when_rust_core_is_not_enabled(monkeypatch) -> None:
     assert ledgera_bridge.get_metrics_core() is None
     assert ledgera_bridge.get_timeline_core() is None
     assert ledgera_bridge.get_currency_core() is None
+    assert ledgera_bridge.get_storage_control_core() is None
 
 
 def test_bridge_returns_none_when_extension_import_fails(monkeypatch) -> None:
@@ -53,6 +54,7 @@ def test_bridge_returns_none_when_extension_import_fails(monkeypatch) -> None:
     assert ledgera_bridge.get_metrics_core() is None
     assert ledgera_bridge.get_timeline_core() is None
     assert ledgera_bridge.get_currency_core() is None
+    assert ledgera_bridge.get_storage_control_core() is None
 
 
 def test_bridge_force_python_fallback_skips_extension_import(monkeypatch) -> None:
@@ -71,6 +73,7 @@ def test_bridge_force_python_fallback_skips_extension_import(monkeypatch) -> Non
     assert ledgera_bridge.get_metrics_core() is None
     assert ledgera_bridge.get_timeline_core() is None
     assert ledgera_bridge.get_currency_core() is None
+    assert ledgera_bridge.get_storage_control_core() is None
 
 
 def test_bridge_capability_gating_requires_full_symbol_set(monkeypatch) -> None:
@@ -85,6 +88,7 @@ def test_bridge_capability_gating_requires_full_symbol_set(monkeypatch) -> None:
     assert ledgera_bridge.get_metrics_core() is None
     assert ledgera_bridge.get_timeline_core() is None
     assert ledgera_bridge.get_currency_core() is None
+    assert ledgera_bridge.get_storage_control_core() is None
 
 
 def test_bridge_returns_typed_cores_when_symbols_are_complete(monkeypatch) -> None:
@@ -114,6 +118,8 @@ def test_bridge_returns_typed_cores_when_symbols_are_complete(monkeypatch) -> No
         "metrics_burn_rate",
         "metrics_income_by_category",
         "metrics_monthly_summary",
+        "metrics_period_snapshot",
+        "metrics_period_snapshot_compact",
         "metrics_savings_rate",
         "metrics_spending_by_category",
         "metrics_spending_by_tag",
@@ -124,6 +130,7 @@ def test_bridge_returns_typed_cores_when_symbols_are_complete(monkeypatch) -> No
         "currency_default_rates_for_base",
         "currency_rate_for",
         "currency_resolve_provider_order",
+        "storage_clear_read_cache",
     )
     monkeypatch.setenv("LEDGERA_ENABLE_RUST_CORE", "1")
     monkeypatch.delenv("LEDGERA_FORCE_PYTHON_FALLBACK", raising=False)
@@ -135,3 +142,4 @@ def test_bridge_returns_typed_cores_when_symbols_are_complete(monkeypatch) -> No
     assert ledgera_bridge.get_metrics_core() is module
     assert ledgera_bridge.get_timeline_core() is module
     assert ledgera_bridge.get_currency_core() is module
+    assert ledgera_bridge.get_storage_control_core() is module

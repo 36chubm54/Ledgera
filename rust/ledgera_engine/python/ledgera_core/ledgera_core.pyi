@@ -20,6 +20,31 @@ def metrics_income_by_category(
 def metrics_monthly_summary(
     db_path: str, start_date: str | None = None, end_date: str | None = None
 ) -> list[dict[str, object]]: ...
+def metrics_period_snapshot(
+    db_path: str,
+    start_date: str,
+    end_date: str,
+    days: int,
+    category_limit: int | None = None,
+    tag_limit: int | None = None,
+) -> dict[str, object]: ...
+def metrics_period_snapshot_compact(
+    db_path: str,
+    start_date: str,
+    end_date: str,
+    days: int,
+    category_limit: int | None = None,
+    tag_limit: int | None = None,
+) -> tuple[
+    float,
+    float,
+    list[tuple[str, float, int]],
+    list[tuple[str, float, int]],
+    list[tuple[str, str, float, int]],
+    tuple[int, int, float],
+    list[tuple[str, float, float, float, float]],
+    list[tuple[str, float, float, float]],
+]: ...
 def metrics_savings_rate(db_path: str, start_date: str, end_date: str) -> float: ...
 def metrics_spending_by_category(
     db_path: str, start_date: str, end_date: str, limit: int | None = None
@@ -61,3 +86,4 @@ def wallet_balance_rows(
     db_path: str, up_to_date: str | None = None
 ) -> list[tuple[int, str, str, float, float]]: ...
 def wallet_list_rows(db_path: str) -> list[dict[str, object]]: ...
+def storage_clear_read_cache() -> None: ...

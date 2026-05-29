@@ -14,6 +14,15 @@ class AnalyticsController(Protocol):
 
     def get_burn_rate(self, start_date: str, end_date: str) -> float: ...
 
+    def get_period_snapshot(
+        self,
+        start_date: str,
+        end_date: str,
+        *,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> Any: ...
+
     def get_average_monthly_income(self, year: int, *, up_to_date: str | None = None) -> float: ...
 
     def get_year_income(self, year: int, *, up_to_date: str | None = None) -> float: ...

@@ -4,6 +4,7 @@ use ledgera_engine_storage::{
     WalletBalanceRow, WalletRow, cashflow_sum as storage_cashflow_sum,
     mandatory_expense_row as storage_mandatory_expense_row,
     mandatory_expense_rows as storage_mandatory_expense_rows,
+    metrics_period_snapshot as storage_metrics_period_snapshot,
     metrics_burn_rate as storage_metrics_burn_rate,
     metrics_income_by_category as storage_metrics_income_by_category,
     metrics_monthly_summary as storage_metrics_monthly_summary,
@@ -17,6 +18,7 @@ use ledgera_engine_storage::{
     timeline_net_worth_monthly_deltas as storage_timeline_net_worth_monthly_deltas,
     transfer_id_by_record_index as storage_transfer_id_by_record_index,
     transfer_list_rows as storage_transfer_list_rows,
+    storage_clear_read_connection_cache,
     wallet_balance_parts as storage_wallet_balance_parts,
     wallet_balance_rows as storage_wallet_balance_rows,
     wallet_list_rows as storage_wallet_list_rows,
@@ -24,6 +26,21 @@ use ledgera_engine_storage::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+
+type CompactCategoryRows = Vec<(String, f64, i64)>;
+type CompactTagRows = Vec<(String, String, f64, i64)>;
+type CompactMonthlySummaryRows = Vec<(String, f64, f64, f64, f64)>;
+type CompactMonthlyCashflowRows = Vec<(String, f64, f64, f64)>;
+type CompactMetricsPeriodSnapshot = (
+    f64,
+    f64,
+    CompactCategoryRows,
+    CompactCategoryRows,
+    CompactTagRows,
+    (i64, i64, f64),
+    CompactMonthlySummaryRows,
+    CompactMonthlyCashflowRows,
+);
 
 fn core_err(err: String) -> PyErr {
     PyValueError::new_err(err)
@@ -265,6 +282,39 @@ fn net_worth_delta_to_dict(py: Python<'_>, row: NetWorthDeltaRow) -> PyResult<Py
     Ok(payload.into_any().unbind())
 }
 
+fn category_metrics_to_py(
+    py: Python<'_>,
+    rows: Vec<CategoryMetricRow>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    rows.into_iter()
+        .map(|row| category_metric_to_dict(py, row))
+        .collect()
+}
+
+fn tag_metrics_to_py(py: Python<'_>, rows: Vec<TagMetricRow>) -> PyResult<Vec<Py<PyAny>>> {
+    rows.into_iter()
+        .map(|row| tag_metric_to_dict(py, row))
+        .collect()
+}
+
+fn monthly_summary_to_py(
+    py: Python<'_>,
+    rows: Vec<MonthlySummaryRow>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    rows.into_iter()
+        .map(|row| monthly_summary_to_dict(py, row))
+        .collect()
+}
+
+fn monthly_cashflow_to_py(
+    py: Python<'_>,
+    rows: Vec<MonthlyCashflowRow>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    rows.into_iter()
+        .map(|row| monthly_cashflow_to_dict(py, row))
+        .collect()
+}
+
 #[pyfunction]
 fn wallet_list_rows(py: Python<'_>, db_path: &str) -> PyResult<Vec<Py<PyAny>>> {
     storage_wallet_list_rows(db_path)
@@ -403,6 +453,114 @@ fn metrics_tag_coverage(
 }
 
 #[pyfunction]
+fn metrics_period_snapshot(
+    py: Python<'_>,
+    db_path: &str,
+    start_date: &str,
+    end_date: &str,
+    days: i64,
+    category_limit: Option<i64>,
+    tag_limit: Option<i64>,
+) -> PyResult<Py<PyAny>> {
+    let snapshot = storage_metrics_period_snapshot(
+        db_path,
+        start_date,
+        end_date,
+        days,
+        category_limit,
+        tag_limit,
+    )
+    .map_err(core_err)?;
+    let payload = PyDict::new(py);
+    payload.set_item("savings_rate", snapshot.savings_rate)?;
+    payload.set_item("burn_rate", snapshot.burn_rate)?;
+    payload.set_item(
+        "spending_by_category",
+        category_metrics_to_py(py, snapshot.spending_by_category)?,
+    )?;
+    payload.set_item(
+        "income_by_category",
+        category_metrics_to_py(py, snapshot.income_by_category)?,
+    )?;
+    payload.set_item(
+        "spending_by_tag",
+        tag_metrics_to_py(py, snapshot.spending_by_tag)?,
+    )?;
+    payload.set_item("tag_coverage", tag_coverage_to_dict(py, snapshot.tag_coverage)?)?;
+    payload.set_item(
+        "monthly_summary",
+        monthly_summary_to_py(py, snapshot.monthly_summary)?,
+    )?;
+    payload.set_item(
+        "monthly_cashflow",
+        monthly_cashflow_to_py(py, snapshot.monthly_cashflow)?,
+    )?;
+    Ok(payload.into_any().unbind())
+}
+
+#[pyfunction]
+fn metrics_period_snapshot_compact(
+    db_path: &str,
+    start_date: &str,
+    end_date: &str,
+    days: i64,
+    category_limit: Option<i64>,
+    tag_limit: Option<i64>,
+) -> PyResult<CompactMetricsPeriodSnapshot> {
+    let snapshot = storage_metrics_period_snapshot(
+        db_path,
+        start_date,
+        end_date,
+        days,
+        category_limit,
+        tag_limit,
+    )
+    .map_err(core_err)?;
+    Ok((
+        snapshot.savings_rate,
+        snapshot.burn_rate,
+        snapshot
+            .spending_by_category
+            .into_iter()
+            .map(|row| (row.category, row.total_base, row.record_count))
+            .collect(),
+        snapshot
+            .income_by_category
+            .into_iter()
+            .map(|row| (row.category, row.total_base, row.record_count))
+            .collect(),
+        snapshot
+            .spending_by_tag
+            .into_iter()
+            .map(|row| (row.tag, row.color, row.total_base, row.record_count))
+            .collect(),
+        (
+            snapshot.tag_coverage.tagged_count,
+            snapshot.tag_coverage.total_count,
+            snapshot.tag_coverage.coverage_pct,
+        ),
+        snapshot
+            .monthly_summary
+            .into_iter()
+            .map(|row| {
+                (
+                    row.month,
+                    row.income,
+                    row.expenses,
+                    row.cashflow,
+                    row.savings_rate,
+                )
+            })
+            .collect(),
+        snapshot
+            .monthly_cashflow
+            .into_iter()
+            .map(|row| (row.month, row.income, row.expenses, row.cashflow))
+            .collect(),
+    ))
+}
+
+#[pyfunction]
 fn metrics_monthly_summary(
     py: Python<'_>,
     db_path: &str,
@@ -414,6 +572,12 @@ fn metrics_monthly_summary(
         .into_iter()
         .map(|row| monthly_summary_to_dict(py, row))
         .collect()
+}
+
+#[pyfunction]
+fn storage_clear_read_cache() -> PyResult<()> {
+    storage_clear_read_connection_cache();
+    Ok(())
 }
 
 #[pyfunction]
@@ -528,6 +692,8 @@ fn ledgera_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(metrics_income_by_category, m)?)?;
     m.add_function(wrap_pyfunction!(metrics_spending_by_tag, m)?)?;
     m.add_function(wrap_pyfunction!(metrics_tag_coverage, m)?)?;
+    m.add_function(wrap_pyfunction!(metrics_period_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(metrics_period_snapshot_compact, m)?)?;
     m.add_function(wrap_pyfunction!(metrics_monthly_summary, m)?)?;
     m.add_function(wrap_pyfunction!(timeline_monthly_cashflow, m)?)?;
     m.add_function(wrap_pyfunction!(timeline_cumulative_income_expense, m)?)?;
@@ -535,5 +701,6 @@ fn ledgera_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(currency_rate_for, m)?)?;
     m.add_function(wrap_pyfunction!(currency_default_rates_for_base, m)?)?;
     m.add_function(wrap_pyfunction!(currency_resolve_provider_order, m)?)?;
+    m.add_function(wrap_pyfunction!(storage_clear_read_cache, m)?)?;
     Ok(())
 }

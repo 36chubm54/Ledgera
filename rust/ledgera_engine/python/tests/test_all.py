@@ -34,6 +34,26 @@ class _LedgeraCoreModule(Protocol):
         self, db_path: str, start_date: str, end_date: str
     ) -> dict[str, object]: ...
 
+    def metrics_period_snapshot(
+        self,
+        db_path: str,
+        start_date: str,
+        end_date: str,
+        days: int,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> dict[str, object]: ...
+
+    def metrics_period_snapshot_compact(
+        self,
+        db_path: str,
+        start_date: str,
+        end_date: str,
+        days: int,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> tuple[object, ...]: ...
+
     def minor_to_money(self, value: object) -> float: ...
 
     def money_diff_text(self, left: object, right: object) -> str: ...
@@ -53,6 +73,8 @@ class _LedgeraCoreModule(Protocol):
     def to_money_float(self, value: object) -> float: ...
 
     def to_rate_float(self, value: object) -> float: ...
+
+    def storage_clear_read_cache(self) -> None: ...
 
 
 ledgera_core = cast(_LedgeraCoreModule, _ledgera_core)
@@ -99,6 +121,7 @@ def test_currency_parity_helpers():
     _assert_callable_export("currency_rate_for")
     _assert_callable_export("currency_default_rates_for_base")
     _assert_callable_export("currency_resolve_provider_order")
+    _assert_callable_export("storage_clear_read_cache")
 
     default_rates = {"USD": 500.0, "EUR": 590.0, "RUB": 6.5}
     assert ledgera_core.currency_rate_for("KZT", "KZT", default_rates) == pytest.approx(1.0)

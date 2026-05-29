@@ -127,3 +127,24 @@ def test_timeline_service_rust_path_matches_fallback_for_multi_currency_initial_
         assert rust_values == fallback_values
     finally:
         repo.close()
+
+
+def test_timeline_service_rust_path_reads_live_data_after_writes(tmp_path: Path) -> None:
+    repo = _build_timeline_repo(tmp_path)
+    try:
+        service = TimelineService(repo)
+        assert service.get_monthly_cashflow("2026-01-01", "2026-02-28")[0].cashflow == 800.0
+
+        repo.execute(
+            """
+            INSERT INTO records (
+                type, date, wallet_id, amount_original, currency,
+                rate_at_operation, amount_base, category
+            ) VALUES ('expense', '2026-01-20', 1, 25.0, 'KZT', 1.0, 25.0, 'Food')
+            """
+        )
+        repo.commit()
+
+        assert service.get_monthly_cashflow("2026-01-01", "2026-02-28")[0].cashflow == 775.0
+    finally:
+        repo.close()

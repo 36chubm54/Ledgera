@@ -12,10 +12,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from infrastructure.sqlite_repository import SQLiteRecordRepository  # noqa: E402
-from services.analytics import metrics as metrics_module  # noqa: E402
-from services.analytics import timeline as timeline_module  # noqa: E402
-from services.analytics.metrics import MetricsService  # noqa: E402
-from services.analytics.timeline import TimelineService  # noqa: E402
 
 SCHEMA_PATH = ROOT / "db" / "schema.sql"
 TMP_ROOT = ROOT / "tests" / "_tmp"
@@ -62,19 +58,79 @@ def _time_call(label: str, iterations: int, callback) -> float:
     return elapsed
 
 
-def _backend_label() -> str:
+def _load_analytics_modules():
+    from bridge import ledgera_bridge
+    from services.analytics import metrics as metrics_module
+    from services.analytics import period_snapshot as period_snapshot_module
+    from services.analytics import timeline as timeline_module
+    from services.analytics.metrics import MetricsService
+    from services.analytics.period_snapshot import PeriodAnalyticsSnapshotService
+    from services.analytics.timeline import TimelineService
+
+    return (
+        ledgera_bridge,
+        metrics_module,
+        period_snapshot_module,
+        timeline_module,
+        MetricsService,
+        PeriodAnalyticsSnapshotService,
+        TimelineService,
+    )
+
+
+def _backend_label(metrics_module, timeline_module) -> str:
     metrics_backend = "rust" if metrics_module._RUST_METRICS_CORE is not None else "python"
     timeline_backend = "rust" if timeline_module._RUST_TIMELINE_CORE is not None else "python"
     return f"metrics={metrics_backend}, timeline={timeline_backend}"
+
+
+def _clear_rust_storage_cache(ledgera_bridge) -> None:
+    storage_control = ledgera_bridge.get_storage_control_core()
+    if storage_control is not None:
+        storage_control.storage_clear_read_cache()
+
+
+def _analytics_load(snapshot_service) -> tuple[object, ...]:
+    snapshot = snapshot_service.get_period_snapshot(
+        "2026-01-01",
+        "2026-12-31",
+        category_limit=10,
+        tag_limit=10,
+    )
+    return (
+        snapshot.spending_by_category,
+        snapshot.income_by_category,
+        snapshot.spending_by_tag,
+        snapshot.tag_coverage,
+        snapshot.savings_rate,
+        snapshot.burn_rate,
+        snapshot.monthly_summary,
+        snapshot.monthly_cashflow,
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Alpha.2 analytics bridge benchmark")
     parser.add_argument("--rows", type=int, default=10_000)
     parser.add_argument("--iterations", type=int, default=25)
+    parser.add_argument("--backend", choices=("rust", "python", "both"), default="both")
     args = parser.parse_args()
 
-    os.environ.setdefault("LEDGERA_ENABLE_RUST_CORE", "1")
+    if args.backend == "python":
+        os.environ["LEDGERA_FORCE_PYTHON_FALLBACK"] = "1"
+    else:
+        os.environ.setdefault("LEDGERA_ENABLE_RUST_CORE", "1")
+        os.environ.pop("LEDGERA_FORCE_PYTHON_FALLBACK", None)
+    (
+        ledgera_bridge,
+        metrics_module,
+        period_snapshot_module,
+        timeline_module,
+        MetricsService,
+        PeriodAnalyticsSnapshotService,
+        TimelineService,
+    ) = _load_analytics_modules()
+    del MetricsService, TimelineService
     TMP_ROOT.mkdir(exist_ok=True)
     db_path = TMP_ROOT / f"alpha2_bench_{os.getpid()}.db"
     try:
@@ -82,51 +138,50 @@ def main() -> None:
         _seed_db(db_path, args.rows)
         repo = SQLiteRecordRepository(str(db_path), schema_path=str(SCHEMA_PATH))
         try:
-            if metrics_module._RUST_METRICS_CORE is None:
+            extension = ledgera_bridge.load_extension_module()
+            extension_path = getattr(extension, "__file__", None) if extension is not None else None
+            if args.backend in {"rust", "both"} and metrics_module._RUST_METRICS_CORE is None:
                 raise RuntimeError(
                     "Rust metrics core is unavailable; build/install ledgera_core before benchmarking"  # noqa: E501
                 )
-            print(f"backend: {_backend_label()}")
+            print(f"backend: {_backend_label(metrics_module, timeline_module)}")
+            print(f"extension: {extension_path or 'unavailable'}")
             print(f"fixture: rows={args.rows}, iterations={args.iterations}")
-            metrics = MetricsService(repo)
-            timeline = TimelineService(repo)
-            rust_elapsed = _time_call(
-                "rust-or-current metrics",
+            current_elapsed = _time_call(
+                "current analytics path (cold services)",
                 args.iterations,
-                lambda: (
-                    metrics.get_savings_rate("2026-01-01", "2026-12-31"),
-                    metrics.get_spending_by_category("2026-01-01", "2026-12-31", limit=10),
-                    metrics.get_monthly_summary(),
-                    timeline.get_monthly_cashflow(),
-                ),
+                lambda: _analytics_load(PeriodAnalyticsSnapshotService(repo)),
+            )
+            warm_snapshot = PeriodAnalyticsSnapshotService(repo)
+            _time_call(
+                "current analytics path (same service instance)",
+                args.iterations,
+                lambda: _analytics_load(warm_snapshot),
             )
 
+            if args.backend != "both":
+                return
             rust_core = metrics_module._RUST_METRICS_CORE
+            rust_snapshot_core = period_snapshot_module._RUST_METRICS_CORE
             rust_timeline_core = timeline_module._RUST_TIMELINE_CORE
-            metrics_module._RUST_METRICS_CORE = None
-            timeline_module._RUST_TIMELINE_CORE = None
+            setattr(metrics_module, "_RUST_METRICS_CORE", None)  # noqa: B010
+            setattr(period_snapshot_module, "_RUST_METRICS_CORE", None)  # noqa: B010
+            setattr(timeline_module, "_RUST_TIMELINE_CORE", None)  # noqa: B010
             try:
-                print(f"fallback backend: {_backend_label()}")
-                fallback_metrics = MetricsService(repo)
-                fallback_timeline = TimelineService(repo)
+                print(f"fallback backend: {_backend_label(metrics_module, timeline_module)}")
                 fallback_elapsed = _time_call(
-                    "python-fallback metrics",
+                    "python-fallback analytics path (cold services)",
                     args.iterations,
-                    lambda: (
-                        fallback_metrics.get_savings_rate("2026-01-01", "2026-12-31"),
-                        fallback_metrics.get_spending_by_category(
-                            "2026-01-01", "2026-12-31", limit=10
-                        ),
-                        fallback_metrics.get_monthly_summary(),
-                        fallback_timeline.get_monthly_cashflow(),
-                    ),
+                    lambda: _analytics_load(PeriodAnalyticsSnapshotService(repo)),
                 )
             finally:
-                metrics_module._RUST_METRICS_CORE = rust_core
-                timeline_module._RUST_TIMELINE_CORE = rust_timeline_core
-            if rust_elapsed > 0:
-                print(f"speedup_vs_python: {fallback_elapsed / rust_elapsed:.2f}x")
+                setattr(metrics_module, "_RUST_METRICS_CORE", rust_core)  # noqa: B010
+                setattr(period_snapshot_module, "_RUST_METRICS_CORE", rust_snapshot_core)  # noqa: B010
+                setattr(timeline_module, "_RUST_TIMELINE_CORE", rust_timeline_core)  # noqa: B010
+            if current_elapsed > 0:
+                print(f"speedup_vs_python: {fallback_elapsed / current_elapsed:.2f}x")
         finally:
+            _clear_rust_storage_cache(ledgera_bridge)
             repo.close()
     finally:
         _remove_if_unlocked(db_path)

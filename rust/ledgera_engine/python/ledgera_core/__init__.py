@@ -22,6 +22,8 @@ currency_resolve_provider_order = getattr(_ledgera_core, "currency_resolve_provi
 metrics_burn_rate = getattr(_ledgera_core, "metrics_burn_rate", None)
 metrics_income_by_category = getattr(_ledgera_core, "metrics_income_by_category", None)
 metrics_monthly_summary = getattr(_ledgera_core, "metrics_monthly_summary", None)
+metrics_period_snapshot = getattr(_ledgera_core, "metrics_period_snapshot", None)
+metrics_period_snapshot_compact = getattr(_ledgera_core, "metrics_period_snapshot_compact", None)
 metrics_savings_rate = getattr(_ledgera_core, "metrics_savings_rate", None)
 metrics_spending_by_category = getattr(_ledgera_core, "metrics_spending_by_category", None)
 metrics_spending_by_tag = getattr(_ledgera_core, "metrics_spending_by_tag", None)
@@ -43,6 +45,7 @@ mandatory_expense_rows = getattr(_ledgera_core, "mandatory_expense_rows", None)
 transfer_list_rows = getattr(_ledgera_core, "transfer_list_rows", None)
 transfer_id_by_record_index = getattr(_ledgera_core, "transfer_id_by_record_index", None)
 wallet_list_rows = getattr(_ledgera_core, "wallet_list_rows", None)
+storage_clear_read_cache = getattr(_ledgera_core, "storage_clear_read_cache", None)
 
 __all__ = [
     "build_rate",
@@ -73,6 +76,10 @@ if metrics_income_by_category is not None:
     __all__.append("metrics_income_by_category")
 if metrics_monthly_summary is not None:
     __all__.append("metrics_monthly_summary")
+if metrics_period_snapshot is not None:
+    __all__.append("metrics_period_snapshot")
+if metrics_period_snapshot_compact is not None:
+    __all__.append("metrics_period_snapshot_compact")
 if metrics_savings_rate is not None:
     __all__.append("metrics_savings_rate")
 if metrics_spending_by_category is not None:
@@ -107,4 +114,6 @@ if transfer_id_by_record_index is not None:
     __all__.append("transfer_id_by_record_index")
 if wallet_list_rows is not None:
     __all__.append("wallet_list_rows")
+if storage_clear_read_cache is not None:
+    __all__.append("storage_clear_read_cache")
 __doc__ = _ledgera_core.__doc__

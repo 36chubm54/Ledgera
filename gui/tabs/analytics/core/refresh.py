@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import tkinter as tk
+from typing import Any, cast
 
 from domain.validation import ensure_not_future, parse_ymd
 from gui.i18n import tr
@@ -60,9 +61,21 @@ def refresh_analytics(
         start = parsed_start.isoformat()
         end = parsed_end.isoformat()
 
+        get_period_snapshot = getattr(context.controller, "get_period_snapshot", None)
+        period_snapshot = (
+            cast(Any, get_period_snapshot(start, end)) if callable(get_period_snapshot) else None
+        )
         net_worth = float(context.controller.get_total_balance(date=end))
-        savings_rate = float(context.controller.get_savings_rate(start, end))
-        burn_rate = float(context.controller.get_burn_rate(start, end))
+        savings_rate = float(
+            period_snapshot.savings_rate
+            if period_snapshot is not None
+            else context.controller.get_savings_rate(start, end)
+        )
+        burn_rate = float(
+            period_snapshot.burn_rate
+            if period_snapshot is not None
+            else context.controller.get_burn_rate(start, end)
+        )
         year = int(parsed_end.year)
         avg_monthly_income = float(
             context.controller.get_average_monthly_income(year, up_to_date=end)
@@ -101,9 +114,21 @@ def refresh_analytics(
         )
 
         is_tags_mode = bool(breakdown_by_tags_var.get())
-        spending_data = context.controller.get_spending_by_category(start, end)
-        income_data = context.controller.get_income_by_category(start, end)
-        tag_data = context.controller.get_spending_by_tag(start, end)
+        spending_data = (
+            period_snapshot.spending_by_category
+            if period_snapshot is not None
+            else context.controller.get_spending_by_category(start, end)
+        )
+        income_data = (
+            period_snapshot.income_by_category
+            if period_snapshot is not None
+            else context.controller.get_income_by_category(start, end)
+        )
+        tag_data = (
+            period_snapshot.spending_by_tag
+            if period_snapshot is not None
+            else context.controller.get_spending_by_tag(start, end)
+        )
         update_breakdown_views(
             breakdown=breakdown,
             formatters=formatters,
@@ -120,7 +145,11 @@ def refresh_analytics(
             format_amount=lambda value: formatters.format_display_amount(value, 0),
         )
 
-        monthly_data = context.controller.get_monthly_summary(start_date=start, end_date=end)
+        monthly_data = (
+            period_snapshot.monthly_summary
+            if period_snapshot is not None
+            else context.controller.get_monthly_summary(start_date=start, end_date=end)
+        )
         update_monthly_tree(
             monthly=monthly,
             formatters=formatters,

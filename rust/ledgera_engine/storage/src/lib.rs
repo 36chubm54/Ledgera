@@ -115,10 +115,23 @@ pub struct NetWorthDeltaRow {
     pub running_delta: f64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct MetricsPeriodSnapshot {
+    pub savings_rate: f64,
+    pub burn_rate: f64,
+    pub spending_by_category: Vec<CategoryMetricRow>,
+    pub income_by_category: Vec<CategoryMetricRow>,
+    pub spending_by_tag: Vec<TagMetricRow>,
+    pub tag_coverage: TagCoverageRow,
+    pub monthly_summary: Vec<MonthlySummaryRow>,
+    pub monthly_cashflow: Vec<MonthlyCashflowRow>,
+}
+
 mod metrics;
 mod timeline;
 
 pub use metrics::{
+    metrics_period_snapshot,
     metrics_burn_rate, metrics_income_by_category, metrics_monthly_summary, metrics_savings_rate,
     metrics_spending_by_category, metrics_spending_by_tag, metrics_tag_coverage,
 };
@@ -153,6 +166,12 @@ pub(crate) fn with_cached_read_connection<T>(
             .ok_or_else(|| "sqlite connection cache miss".to_owned())?;
         callback(conn)
     })
+}
+
+pub fn storage_clear_read_connection_cache() {
+    READ_CONNECTIONS.with(|connections| {
+        connections.borrow_mut().clear();
+    });
 }
 
 pub(crate) fn minor_amount_expr(column: &str) -> String {
@@ -948,6 +967,17 @@ mod tests {
                 savings_rate: 62.5,
             }
         );
+        let snapshot =
+            metrics_period_snapshot(&db_path, "2026-01-01", "2026-01-31", 31, Some(1), Some(1))
+                .unwrap();
+        assert_eq!(snapshot.savings_rate, 62.5);
+        assert_eq!(snapshot.burn_rate, 2.42);
+        assert_eq!(snapshot.spending_by_category.len(), 1);
+        assert_eq!(snapshot.income_by_category[0].category, "Salary");
+        assert_eq!(snapshot.spending_by_tag[0].tag, "food");
+        assert_eq!(snapshot.tag_coverage.coverage_pct, 50.0);
+        assert_eq!(snapshot.monthly_summary[0].cashflow, 125.0);
+        assert_eq!(snapshot.monthly_cashflow[0].cashflow, 125.0);
         remove_test_db(&db_path);
     }
 

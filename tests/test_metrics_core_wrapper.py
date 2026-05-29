@@ -8,7 +8,9 @@ os.environ.setdefault("LEDGERA_ENABLE_RUST_CORE", "1")
 
 from infrastructure.sqlite_repository import SQLiteRecordRepository
 from services.analytics import metrics as metrics_module
+from services.analytics import period_snapshot as period_snapshot_module
 from services.analytics.metrics import MetricsService
+from services.analytics.period_snapshot import PeriodAnalyticsSnapshotService
 from tests.test_metrics_service import (
     _init_db,
     _insert_record,
@@ -73,6 +75,25 @@ def test_metrics_service_rust_path_matches_python_fallback(tmp_path: Path) -> No
             rust_service.get_tag_coverage("2026-01-01", "2026-02-28"),
             rust_service.get_monthly_summary("2026-01-01", "2026-02-28"),
         )
+        if metrics_module._RUST_METRICS_CORE is not None:
+            snapshot = metrics_module._RUST_METRICS_CORE.metrics_period_snapshot(
+                repo.db_path,
+                "2026-01-01",
+                "2026-02-28",
+                59,
+                None,
+                None,
+            )
+            assert snapshot["savings_rate"] == rust_values[0]
+            assert snapshot["spending_by_category"] == [
+                {
+                    "category": item.category,
+                    "total_base": item.total_base,
+                    "record_count": item.record_count,
+                }
+                for item in rust_values[2]
+            ]
+            assert snapshot["monthly_cashflow"]
 
         rust_core = metrics_module._RUST_METRICS_CORE
         metrics_module._RUST_METRICS_CORE = None
@@ -91,6 +112,33 @@ def test_metrics_service_rust_path_matches_python_fallback(tmp_path: Path) -> No
             metrics_module._RUST_METRICS_CORE = rust_core
 
         assert rust_values == fallback_values
+    finally:
+        repo.close()
+
+
+def test_period_snapshot_service_rust_path_matches_python_fallback(tmp_path: Path) -> None:
+    repo = _build_metrics_repo(tmp_path)
+    try:
+        rust_snapshot = PeriodAnalyticsSnapshotService(repo).get_period_snapshot(
+            "2026-01-01",
+            "2026-02-28",
+            category_limit=10,
+            tag_limit=10,
+        )
+
+        rust_core = period_snapshot_module._RUST_METRICS_CORE
+        period_snapshot_module._RUST_METRICS_CORE = None
+        try:
+            fallback_snapshot = PeriodAnalyticsSnapshotService(repo).get_period_snapshot(
+                "2026-01-01",
+                "2026-02-28",
+                category_limit=10,
+                tag_limit=10,
+            )
+        finally:
+            period_snapshot_module._RUST_METRICS_CORE = rust_core
+
+        assert rust_snapshot == fallback_snapshot
     finally:
         repo.close()
 
@@ -147,5 +195,26 @@ def test_metrics_service_rust_path_matches_fallback_for_edge_cases(tmp_path: Pat
             metrics_module._RUST_METRICS_CORE = rust_core
 
         assert rust_values == fallback_values
+    finally:
+        repo.close()
+
+
+def test_metrics_service_rust_snapshot_cache_invalidates_after_writes(tmp_path: Path) -> None:
+    repo = _build_metrics_repo(tmp_path)
+    try:
+        service = MetricsService(repo)
+        assert service.get_spending_by_category("2026-01-01", "2026-02-28")[0].total_base == 250.0
+
+        repo.execute(
+            """
+            INSERT INTO records (
+                type, date, wallet_id, amount_original, currency,
+                rate_at_operation, amount_base, category
+            ) VALUES ('expense', '2026-01-20', 1, 25.0, 'KZT', 1.0, 25.0, 'Food')
+            """
+        )
+        repo.commit()
+
+        assert service.get_spending_by_category("2026-01-01", "2026-02-28")[0].total_base == 275.0
     finally:
         repo.close()
