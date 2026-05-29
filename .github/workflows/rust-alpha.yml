@@ -1,4 +1,4 @@
-name: Rust Alpha1
+name: Rust Alpha
 
 on:
   workflow_dispatch:
@@ -7,14 +7,15 @@ on:
       - main
       - v3.0.0-alpha
       - v3.0.0-alpha.1
+      - v3.0.0-alpha.2
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  alpha1-seam:
-    name: alpha1-seam-${{ matrix.os }}
+  alpha-seam:
+    name: alpha-seam-${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -59,6 +60,10 @@ jobs:
         working-directory: rust/ledgera_engine
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Cargo bench compile
+        working-directory: rust/ledgera_engine
+        run: cargo bench --no-run
+
       - name: Build Rust extension
         working-directory: rust/ledgera_engine
         run: |
@@ -75,6 +80,13 @@ jobs:
           tests/test_money_core_wrapper.py
           tests/test_balance_core_wrapper.py
           tests/test_record_core_wrapper.py
+          tests/test_metrics_core_wrapper.py
+          tests/test_timeline_core_wrapper.py
+          tests/test_currency_core_wrapper.py
+          tests/test_metrics_service.py
+          tests/test_timeline_service.py
+          tests/test_online_mode.py
+          tests/test_currency.py
           rust/ledgera_engine/python/tests/test_all.py
 
       - name: Run forced Python fallback pytest slice
@@ -87,6 +99,9 @@ jobs:
           tests/test_money_core_wrapper.py
           tests/test_balance_core_wrapper.py
           tests/test_record_core_wrapper.py
+          tests/test_metrics_core_wrapper.py
+          tests/test_timeline_core_wrapper.py
+          tests/test_currency_core_wrapper.py
 
       - name: Run pyright
         run: >
@@ -94,6 +109,13 @@ jobs:
           ./bridge
           ./utils/finance/money.py
           ./services/analytics/balance.py
+          ./services/analytics/metrics.py
+          ./services/analytics/timeline.py
+          ./app/services.py
           ./infrastructure/sqlite/records_wallets.py
           ./tests/test_ledgera_bridge.py
+          ./tests/test_metrics_core_wrapper.py
+          ./tests/test_timeline_core_wrapper.py
+          ./tests/test_currency_core_wrapper.py
+          ./tools/bench_alpha2_analytics.py
           ./rust/ledgera_engine

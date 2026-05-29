@@ -1,5 +1,6 @@
 use ledgera_engine_core::{minor_to_money_value, rate_float_from_text};
 use rusqlite::{Connection, OptionalExtension};
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 pub type StorageResult<T> = Result<T, String>;
@@ -62,7 +63,94 @@ pub struct RecordRow {
     pub tags: Vec<String>,
 }
 
-fn sqlite_err(err: rusqlite::Error) -> String {
+#[derive(Debug, Clone, PartialEq)]
+pub struct CategoryMetricRow {
+    pub category: String,
+    pub total_base: f64,
+    pub record_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TagMetricRow {
+    pub tag: String,
+    pub color: String,
+    pub total_base: f64,
+    pub record_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TagCoverageRow {
+    pub tagged_count: i64,
+    pub total_count: i64,
+    pub coverage_pct: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MonthlySummaryRow {
+    pub month: String,
+    pub income: f64,
+    pub expenses: f64,
+    pub cashflow: f64,
+    pub savings_rate: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MonthlyCashflowRow {
+    pub month: String,
+    pub income: f64,
+    pub expenses: f64,
+    pub cashflow: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MonthlyCumulativeRow {
+    pub month: String,
+    pub cumulative_income: f64,
+    pub cumulative_expenses: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NetWorthDeltaRow {
+    pub month: String,
+    pub running_delta: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MetricsPeriodSnapshot {
+    pub savings_rate: f64,
+    pub burn_rate: f64,
+    pub spending_by_category: Vec<CategoryMetricRow>,
+    pub income_by_category: Vec<CategoryMetricRow>,
+    pub spending_by_tag: Vec<TagMetricRow>,
+    pub tag_coverage: TagCoverageRow,
+    pub monthly_summary: Vec<MonthlySummaryRow>,
+    pub monthly_cashflow: Vec<MonthlyCashflowRow>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MetricsRefreshSnapshot {
+    pub savings_rate: f64,
+    pub burn_rate: f64,
+    pub spending_by_category: Vec<CategoryMetricRow>,
+    pub income_by_category: Vec<CategoryMetricRow>,
+    pub spending_by_tag: Vec<TagMetricRow>,
+    pub monthly_summary: Vec<MonthlySummaryRow>,
+}
+
+mod metrics;
+mod timeline;
+
+pub use metrics::{
+    metrics_period_snapshot, metrics_refresh_snapshot,
+    metrics_burn_rate, metrics_income_by_category, metrics_monthly_summary, metrics_savings_rate,
+    metrics_spending_by_category, metrics_spending_by_tag, metrics_tag_coverage,
+};
+pub use timeline::{
+    timeline_cumulative_income_expense, timeline_monthly_cashflow,
+    timeline_net_worth_monthly_deltas,
+};
+
+pub(crate) fn sqlite_err(err: rusqlite::Error) -> String {
     format!("sqlite error: {err}")
 }
 
@@ -70,7 +158,33 @@ fn open_sqlite_connection(db_path: &str) -> StorageResult<Connection> {
     Connection::open(db_path).map_err(sqlite_err)
 }
 
-fn minor_amount_expr(column: &str) -> String {
+thread_local! {
+    static READ_CONNECTIONS: RefCell<HashMap<String, Connection>> = RefCell::new(HashMap::new());
+}
+
+pub(crate) fn with_cached_read_connection<T>(
+    db_path: &str,
+    callback: impl FnOnce(&Connection) -> StorageResult<T>,
+) -> StorageResult<T> {
+    READ_CONNECTIONS.with(|connections| {
+        let mut connections = connections.borrow_mut();
+        if !connections.contains_key(db_path) {
+            connections.insert(db_path.to_owned(), open_sqlite_connection(db_path)?);
+        }
+        let conn = connections
+            .get(db_path)
+            .ok_or_else(|| "sqlite connection cache miss".to_owned())?;
+        callback(conn)
+    })
+}
+
+pub fn storage_clear_read_connection_cache() {
+    READ_CONNECTIONS.with(|connections| {
+        connections.borrow_mut().clear();
+    });
+}
+
+pub(crate) fn minor_amount_expr(column: &str) -> String {
     format!(
         "CASE \
          WHEN {column}_minor IS NOT NULL \
@@ -81,9 +195,39 @@ fn minor_amount_expr(column: &str) -> String {
     )
 }
 
-fn signed_minor_amount_expr(column: &str, type_column: &str) -> String {
+pub(crate) fn signed_minor_amount_expr(column: &str, type_column: &str) -> String {
     let amount_expr = minor_amount_expr(column);
     format!("CASE WHEN {type_column} = 'income' THEN {amount_expr} ELSE -{amount_expr} END")
+}
+
+pub(crate) fn round_money(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
+}
+
+pub(crate) fn limit_clause(limit: Option<i64>) -> String {
+    match limit {
+        Some(value) if value >= 0 => format!(" LIMIT {value}"),
+        _ => String::new(),
+    }
+}
+
+pub(crate) fn table_has_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+) -> StorageResult<bool> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(sqlite_err)?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(sqlite_err)?;
+    for row in rows {
+        if row.map_err(sqlite_err)? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn money_value_from_sql_row(
@@ -526,7 +670,11 @@ pub fn record_list_rows(db_path: &str) -> StorageResult<Vec<RecordRow>> {
 
 pub fn record_get_row(db_path: &str, record_id: i64) -> StorageResult<Option<RecordRow>> {
     let conn = open_sqlite_connection(db_path)?;
-    let mut rows = record_row_dicts(&conn, &format!("{RECORD_SELECT} WHERE id = ?1"), &[&record_id])?;
+    let mut rows = record_row_dicts(
+        &conn,
+        &format!("{RECORD_SELECT} WHERE id = ?1"),
+        &[&record_id],
+    )?;
     Ok(rows.pop())
 }
 
@@ -712,8 +860,11 @@ mod tests {
         .unwrap();
         conn.execute("INSERT INTO tags (id, name) VALUES (1, 'food')", [])
             .unwrap();
-        conn.execute("INSERT INTO record_tags (record_id, tag_id) VALUES (2, 1)", [])
-            .unwrap();
+        conn.execute(
+            "INSERT INTO record_tags (record_id, tag_id) VALUES (2, 1)",
+            [],
+        )
+        .unwrap();
         path.to_string_lossy().into_owned()
     }
 
@@ -754,12 +905,119 @@ mod tests {
     #[test]
     fn read_rows_preserve_contract() {
         let db_path = create_balance_test_db();
-        assert_eq!(wallet_list_rows(&db_path).unwrap()[0].initial_balance, 1000.0);
-        assert_eq!(transfer_list_rows(&db_path).unwrap()[0].amount_original, 300.0);
+        assert_eq!(
+            wallet_list_rows(&db_path).unwrap()[0].initial_balance,
+            1000.0
+        );
+        assert_eq!(
+            transfer_list_rows(&db_path).unwrap()[0].amount_original,
+            300.0
+        );
         assert_eq!(transfer_id_by_record_index(&db_path, 3).unwrap(), Some(1));
-        assert_eq!(mandatory_expense_rows(&db_path).unwrap()[0].category, "Rent");
+        assert_eq!(
+            mandatory_expense_rows(&db_path).unwrap()[0].category,
+            "Rent"
+        );
         assert_eq!(record_rows_by_tag(&db_path, "food").unwrap()[0].id, 2);
-        assert_eq!(record_get_row(&db_path, 1).unwrap().unwrap().category, "Salary");
+        assert_eq!(
+            record_get_row(&db_path, 1).unwrap().unwrap().category,
+            "Salary"
+        );
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn metrics_helpers_match_python_semantics() {
+        let db_path = create_balance_test_db();
+        assert_eq!(
+            metrics_savings_rate(&db_path, "2026-01-01", "2026-01-31").unwrap(),
+            62.5
+        );
+        assert_eq!(
+            metrics_burn_rate(&db_path, "2026-01-01", "2026-01-31", 31).unwrap(),
+            2.42
+        );
+        assert_eq!(
+            metrics_spending_by_category(&db_path, "2026-01-01", "2026-01-31", Some(1)).unwrap()[0],
+            CategoryMetricRow {
+                category: "Food".to_owned(),
+                total_base: 50.0,
+                record_count: 1,
+            }
+        );
+        assert_eq!(
+            metrics_income_by_category(&db_path, "2026-01-01", "2026-01-31", None).unwrap()[0]
+                .category,
+            "Salary"
+        );
+        assert_eq!(
+            metrics_spending_by_tag(&db_path, "2026-01-01", "2026-01-31", None).unwrap()[0],
+            TagMetricRow {
+                tag: "food".to_owned(),
+                color: "".to_owned(),
+                total_base: 50.0,
+                record_count: 1,
+            }
+        );
+        assert_eq!(
+            metrics_tag_coverage(&db_path, "2026-01-01", "2026-01-31").unwrap(),
+            TagCoverageRow {
+                tagged_count: 1,
+                total_count: 2,
+                coverage_pct: 50.0,
+            }
+        );
+        assert_eq!(
+            metrics_monthly_summary(&db_path, None, None).unwrap()[0],
+            MonthlySummaryRow {
+                month: "2026-01".to_owned(),
+                income: 200.0,
+                expenses: 75.0,
+                cashflow: 125.0,
+                savings_rate: 62.5,
+            }
+        );
+        let snapshot =
+            metrics_period_snapshot(&db_path, "2026-01-01", "2026-01-31", 31, Some(1), Some(1))
+                .unwrap();
+        assert_eq!(snapshot.savings_rate, 62.5);
+        assert_eq!(snapshot.burn_rate, 2.42);
+        assert_eq!(snapshot.spending_by_category.len(), 1);
+        assert_eq!(snapshot.income_by_category[0].category, "Salary");
+        assert_eq!(snapshot.spending_by_tag[0].tag, "food");
+        assert_eq!(snapshot.tag_coverage.coverage_pct, 50.0);
+        assert_eq!(snapshot.monthly_summary[0].cashflow, 125.0);
+        assert_eq!(snapshot.monthly_cashflow[0].cashflow, 125.0);
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn timeline_helpers_match_python_semantics() {
+        let db_path = create_balance_test_db();
+        assert_eq!(
+            timeline_monthly_cashflow(&db_path, None, None).unwrap()[0],
+            MonthlyCashflowRow {
+                month: "2026-01".to_owned(),
+                income: 200.0,
+                expenses: 75.0,
+                cashflow: 125.0,
+            }
+        );
+        assert_eq!(
+            timeline_cumulative_income_expense(&db_path).unwrap()[0],
+            MonthlyCumulativeRow {
+                month: "2026-01".to_owned(),
+                cumulative_income: 200.0,
+                cumulative_expenses: 75.0,
+            }
+        );
+        assert_eq!(
+            timeline_net_worth_monthly_deltas(&db_path).unwrap()[0],
+            NetWorthDeltaRow {
+                month: "2026-01".to_owned(),
+                running_delta: 125.0,
+            }
+        );
         remove_test_db(&db_path);
     }
 }

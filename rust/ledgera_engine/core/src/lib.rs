@@ -220,6 +220,135 @@ pub fn rate_float_from_text(value: &str) -> CoreResult<f64> {
     scaled_to_float(parse_scaled_decimal(value, RATE_SCALE)?, RATE_SCALE)
 }
 
+pub fn normalize_currency_code(value: &str, default: &str) -> String {
+    let normalized = value.trim().to_uppercase();
+    if normalized.is_empty() {
+        default.trim().to_uppercase()
+    } else {
+        normalized
+    }
+}
+
+pub fn currency_rate_for(
+    currency: &str,
+    base_currency: &str,
+    rates: &std::collections::HashMap<String, f64>,
+) -> CoreResult<f64> {
+    let code = currency.to_uppercase();
+    if code.is_empty() {
+        return Err("Currency is required".to_owned());
+    }
+    let base = base_currency.to_uppercase();
+    if code == base {
+        return Ok(1.0);
+    }
+    rates
+        .get(&code)
+        .copied()
+        .ok_or_else(|| format!("unsupported currency: {code}"))
+}
+
+pub fn currency_default_rates_for_base(
+    base_currency: &str,
+    default_rates: &std::collections::HashMap<String, f64>,
+) -> CoreResult<std::collections::HashMap<String, f64>> {
+    let base = normalize_currency_code(base_currency, "KZT");
+    if base == "KZT" {
+        return Ok(default_rates
+            .iter()
+            .map(|(code, rate)| (normalize_currency_code(code, ""), *rate))
+            .collect());
+    }
+
+    let mut reference_rates = std::collections::HashMap::from([("KZT".to_owned(), 1.0)]);
+    for (code, rate) in default_rates {
+        reference_rates.insert(normalize_currency_code(code, ""), *rate);
+    }
+
+    let Some(base_rate) = reference_rates.get(&base).copied() else {
+        return Ok(default_rates
+            .iter()
+            .map(|(code, rate)| (normalize_currency_code(code, ""), *rate))
+            .collect());
+    };
+    if base_rate == 0.0 {
+        return Ok(default_rates
+            .iter()
+            .map(|(code, rate)| (normalize_currency_code(code, ""), *rate))
+            .collect());
+    }
+
+    Ok(reference_rates
+        .into_iter()
+        .filter_map(|(code, rate)| {
+            if code == base {
+                None
+            } else {
+                Some((code, rate / base_rate))
+            }
+        })
+        .collect())
+}
+
+pub fn currency_resolve_provider_order(
+    base_currency: &str,
+    provider_mode: &str,
+    primary_provider: &str,
+    fallback_provider: &str,
+    commercial_fallback_provider: &str,
+    enable_cbr: bool,
+    provider_order: Option<Vec<String>>,
+) -> Vec<String> {
+    if let Some(configured_order) = provider_order {
+        let mut ordered = Vec::new();
+        for name in configured_order {
+            let normalized = name.trim().to_lowercase();
+            if !normalized.is_empty() && !ordered.contains(&normalized) {
+                ordered.push(normalized);
+            }
+        }
+        if !ordered.contains(&"static".to_owned()) {
+            ordered.push("static".to_owned());
+        }
+        return ordered;
+    }
+
+    let base = normalize_currency_code(base_currency, "KZT");
+    let provider_mode = provider_mode.trim().to_lowercase();
+    let configured_primary = primary_provider.trim().to_lowercase();
+    let fallback = if provider_mode == "commercial" {
+        commercial_fallback_provider.trim().to_lowercase()
+    } else {
+        fallback_provider.trim().to_lowercase()
+    };
+    let fallback = if fallback.is_empty() {
+        "exchange_rate".to_owned()
+    } else {
+        fallback
+    };
+    let computed_primary = if base == "KZT" {
+        "nbk".to_owned()
+    } else if base == "RUB" && enable_cbr {
+        "cbr".to_owned()
+    } else {
+        "exchange_rate".to_owned()
+    };
+    let primary =
+        if !configured_primary.is_empty() && (base == "KZT" || configured_primary != "nbk") {
+            configured_primary
+        } else {
+            computed_primary
+        };
+
+    let mut ordered = Vec::new();
+    for name in [primary, fallback, "static".to_owned()] {
+        if !ordered.contains(&name) {
+            ordered.push(name);
+        }
+    }
+    ordered
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,6 +384,51 @@ mod tests {
         assert_eq!(quantize_rate_text("1.2345675").unwrap(), "1.234568");
         assert_eq!(rate_to_text("1.2").unwrap(), "1.200000");
         assert_eq!(money_diff_text("10.005", "1.00").unwrap(), "9.01");
-        assert_eq!(rate_diff_text("1.2345675", "0.2345674").unwrap(), "1.000001");
+        assert_eq!(
+            rate_diff_text("1.2345675", "0.2345674").unwrap(),
+            "1.000001"
+        );
+    }
+
+    #[test]
+    fn currency_helpers_preserve_python_contract() {
+        let rates = std::collections::HashMap::from([
+            ("USD".to_owned(), 500.0),
+            ("EUR".to_owned(), 590.0),
+            ("RUB".to_owned(), 6.5),
+        ]);
+        assert_eq!(currency_rate_for("KZT", "KZT", &rates).unwrap(), 1.0);
+        assert_eq!(currency_rate_for("usd", "KZT", &rates).unwrap(), 500.0);
+        assert_eq!(
+            currency_rate_for("", "KZT", &rates).unwrap_err(),
+            "Currency is required"
+        );
+        assert_eq!(
+            currency_rate_for(" usd ", "KZT", &rates).unwrap_err(),
+            "unsupported currency:  USD "
+        );
+        assert_eq!(
+            currency_default_rates_for_base("USD", &rates)
+                .unwrap()
+                .get("KZT")
+                .copied(),
+            Some(0.002)
+        );
+        assert_eq!(
+            currency_resolve_provider_order(
+                "KZT",
+                "personal",
+                "nbk",
+                "exchange_rate",
+                "exchange_rate",
+                false,
+                None,
+            ),
+            vec![
+                "nbk".to_owned(),
+                "exchange_rate".to_owned(),
+                "static".to_owned()
+            ]
+        );
     }
 }

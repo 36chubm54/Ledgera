@@ -32,16 +32,16 @@ Supported business areas include:
 
 ## 2. Layer Map
 
-| Layer            | Purpose                                                  | Main modules                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ---------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `domain`         | Immutable entities, enums, validation rules, report DTOs | `records.py`, `tags.py`, `wallets.py`, `budget.py`, `debt.py`, `asset.py`, `goal.py`, `reports.py`, `audit.py`, `validation.py`                                                                                                                                                                                                                                                                               |
-| `app`            | Use cases, application contracts, and orchestration      | `use_cases_pkg/*`, `data/*`, `importing/*`, `runtime/*`, `currency/*`, `services.py`                                                                                                                                                                                                                                                                                                                  |
-| `services`       | Focused business subsystems and read-only engines        | `import_service.py`, `importing/*`, `analytics/*`, `planning/*`, `portfolio/*`, `support/*` |
-| `infrastructure` | Runtime repository implementation                        | `sqlite_repository.py`, `repositories.py`                                                                                                                                                                                                                                                                                                                                                                     |
-| `storage`        | Low-level persistence adapters and schema bootstrap      | `sqlite_storage.py`, `json_storage.py`, `base.py`                                                                                                                                                                                                                                                                                                                                                             |
-| `gui`            | Tkinter presentation layer                               | `tkinter_gui.py`, `controllers.py`, `runtime_coordinator.py`, `startup_coordinator.py`, `status_bar_coordinator.py`, `tab_lifecycle.py`, `tabs/*`, `exporters.py`, `importers.py`, `tooltip.py`, `logging_utils.py`, `ui_theme.py`, `i18n.py`, `ui_dialogs.py`                                                                                                                                                |
-| `utils`          | Format-specific helpers and shared technical helpers     | `backup_utils.py`, `import_core.py`, `csv_utils.py`, `excel_utils.py`, `pdf_utils.py`, `charting.py`, `backup/*`, `export/*`, `spreadsheets/*`, `finance/*`, `records/*`                                                                                                                                                                                                                                      |
-| `tests`          | Regression, contract, and integration-like coverage      | `test_*` modules across all subsystems                                                                                                                                                                                                                                                                                                                                                                        |
+| Layer | Purpose | Main modules |
+| --- | --- | --- |
+| `domain` | Immutable entities, enums, validation rules, report DTOs | `records.py`, `tags.py`, `wallets.py`, `budget.py`, `debt.py`, `asset.py`, `goal.py`, `reports.py`, `audit.py`, `validation.py` |
+| `app` | Use cases, application contracts, and orchestration | `use_cases_pkg/*`, `data/*`, `importing/*`, `runtime/*`, `currency/*`, `services.py` |
+| `services` | Focused business subsystems and read-only engines | `import_service.py`, `importing/*`, `analytics/*`, `planning/*`, `portfolio/*`, `support/*` |
+| `infrastructure` | Runtime repository implementation | `sqlite_repository.py`, `repositories.py` |
+| `storage` | Low-level persistence adapters and schema bootstrap | `sqlite_storage.py`, `json_storage.py`, `base.py` |
+| `gui` | Tkinter presentation layer | `tkinter_gui.py`, `controllers.py`, `runtime_coordinator.py`, `startup_coordinator.py`, `status_bar_coordinator.py`, `tab_lifecycle.py`, `tabs/*`, `exporters.py`, `importers.py`, `tooltip.py`, `logging_utils.py`, `ui_theme.py`, `i18n.py`, `ui_dialogs.py` |
+| `utils` | Format-specific helpers and shared technical helpers | `backup_utils.py`, `import_core.py`, `csv_utils.py`, `excel_utils.py`, `pdf_utils.py`, `charting.py`, `backup/*`, `export/*`, `spreadsheets/*`, `finance/*`, `records/*` |
+| `tests` | Regression, contract, and integration-like coverage | `test_*` modules across all subsystems |
 
 Current implementation note:
 
@@ -171,6 +171,36 @@ There are three main read-only analytics layers:
 - `BalanceService` — balances and net worth
 - `MetricsService` — rates, category summaries, tag coverage, month summaries
 - `TimelineService` — month-by-month historical aggregates
+
+`v3.0.0-alpha.2` adds an optional Rust-backed analytics path beneath those Python
+services. Runtime ownership remains Python-first: callers keep using
+`MetricsService`, `TimelineService`, and the analytics controller facade, while
+`bridge.ledgera_bridge` loads the PyO3 `ledgera_core` extension only when the
+Rust feature gate is enabled and the required symbols are available.
+
+Current Rust analytics contract:
+
+- `MetricsService` can delegate savings rate, burn rate, category aggregates,
+  tag aggregates, tag coverage, monthly summaries, and period snapshots to
+  `rust/ledgera_engine/storage`
+- `TimelineService` can delegate monthly cashflow, cumulative totals, and
+  net-worth monthly deltas to Rust while Python still reconstructs public
+  dataclasses and keeps currency conversion ownership
+- the analytics tab can use a compact `AnalyticsRefreshSnapshot` for the GUI
+  refresh path, but it falls back to existing per-method calls when a controller
+  does not expose the snapshot method
+- `LEDGERA_FORCE_PYTHON_FALLBACK=1` must keep the Python path fully usable for
+  tests, local development, and safe rollout
+- Rust analytics reads are read-only; schema changes, migrations, and writes
+  remain outside the Rust path in this alpha
+
+Benchmarking note:
+
+- `tools/bench_alpha2_analytics.py` measures the GUI-like analytics refresh
+  path and prints the installed extension timestamp before timing so stale
+  `ledgera_core` wheels are visible before interpreting results
+- alpha.2 speedup evidence depends on running against a freshly built and
+  installed wheel, not just modified Rust sources in the checkout
 
 Report UI uses:
 
@@ -510,6 +540,12 @@ This subsystem is responsible for:
 - optionally enabling `CBRProvider` for `RUB`-base or explicit provider-order configurations
 - keeping offline defaults and cached rates available when online providers fail
 - exposing a whitelist-aware `display_currency` selector instead of blindly surfacing every cached currency code
+
+`v3.0.0-alpha.2` adds an optional Rust-backed currency core below
+`CurrencyService`. Rust currently handles safe deterministic helper behavior:
+currency-code normalization, rate selection, provider-order decisions, and
+default-rate derivation. Python still owns provider HTTP requests, API keys,
+runtime config persistence, cache files, and user-facing service contracts.
 
 Provider hierarchy:
 

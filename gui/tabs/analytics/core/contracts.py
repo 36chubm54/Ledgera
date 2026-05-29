@@ -4,7 +4,28 @@ import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
 from tkinter import ttk
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class AnalyticsSnapshotController(Protocol):
+    def get_period_snapshot(
+        self,
+        start_date: str,
+        end_date: str,
+        *,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> Any: ...
+
+    def get_refresh_snapshot(
+        self,
+        start_date: str,
+        end_date: str,
+        *,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> Any: ...
 
 
 class AnalyticsController(Protocol):

@@ -62,6 +62,115 @@ class RustRepositoryReadCore(Protocol):
     def wallet_list_rows(self, db_path: str) -> list[dict[str, object]]: ...
 
 
+class RustMetricsCore(Protocol):
+    def metrics_burn_rate(
+        self, db_path: str, start_date: str, end_date: str, days: int
+    ) -> float: ...
+
+    def metrics_income_by_category(
+        self, db_path: str, start_date: str, end_date: str, limit: int | None = None
+    ) -> list[dict[str, object]]: ...
+
+    def metrics_monthly_summary(
+        self, db_path: str, start_date: str | None = None, end_date: str | None = None
+    ) -> list[dict[str, object]]: ...
+
+    def metrics_period_snapshot(
+        self,
+        db_path: str,
+        start_date: str,
+        end_date: str,
+        days: int,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> dict[str, object]: ...
+
+    def metrics_period_snapshot_compact(
+        self,
+        db_path: str,
+        start_date: str,
+        end_date: str,
+        days: int,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> tuple[
+        float,
+        float,
+        list[tuple[str, float, int]],
+        list[tuple[str, float, int]],
+        list[tuple[str, str, float, int]],
+        tuple[int, int, float],
+        list[tuple[str, float, float, float, float]],
+        list[tuple[str, float, float, float]],
+    ]: ...
+
+    def metrics_refresh_snapshot_compact(
+        self,
+        db_path: str,
+        start_date: str,
+        end_date: str,
+        days: int,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> tuple[
+        float,
+        float,
+        list[tuple[str, float, int]],
+        list[tuple[str, float, int]],
+        list[tuple[str, str, float, int]],
+        list[tuple[str, float, float, float, float]],
+    ]: ...
+
+    def metrics_savings_rate(self, db_path: str, start_date: str, end_date: str) -> float: ...
+
+    def metrics_spending_by_category(
+        self, db_path: str, start_date: str, end_date: str, limit: int | None = None
+    ) -> list[dict[str, object]]: ...
+
+    def metrics_spending_by_tag(
+        self, db_path: str, start_date: str, end_date: str, limit: int | None = None
+    ) -> list[dict[str, object]]: ...
+
+    def metrics_tag_coverage(
+        self, db_path: str, start_date: str, end_date: str
+    ) -> dict[str, object]: ...
+
+
+class RustTimelineCore(Protocol):
+    def timeline_cumulative_income_expense(self, db_path: str) -> list[dict[str, object]]: ...
+
+    def timeline_monthly_cashflow(
+        self, db_path: str, start_date: str | None = None, end_date: str | None = None
+    ) -> list[dict[str, object]]: ...
+
+    def timeline_net_worth_monthly_deltas(self, db_path: str) -> list[dict[str, object]]: ...
+
+
+class RustCurrencyCore(Protocol):
+    def currency_default_rates_for_base(
+        self, base_currency: str, rates: dict[str, float]
+    ) -> dict[str, float]: ...
+
+    def currency_rate_for(
+        self, currency: str, base_currency: str, rates: dict[str, float]
+    ) -> float: ...
+
+    def currency_resolve_provider_order(
+        self,
+        base_currency: str,
+        provider_mode: str,
+        primary_provider: str,
+        fallback_provider: str,
+        commercial_fallback_provider: str,
+        enable_cbr: bool,
+        provider_order: list[str] | None = None,
+    ) -> list[str]: ...
+
+
+class RustStorageControlCore(Protocol):
+    def storage_clear_read_cache(self) -> None: ...
+
+
 _EXTENSION_IMPORT = "ledgera_core.ledgera_core"
 _ENABLE_RUST_CORE_ENV = "LEDGERA_ENABLE_RUST_CORE"
 _FORCE_PYTHON_FALLBACK_ENV = "LEDGERA_FORCE_PYTHON_FALLBACK"
@@ -89,6 +198,29 @@ _REPOSITORY_SYMBOLS = (
     "transfer_id_by_record_index",
     "transfer_list_rows",
     "wallet_list_rows",
+)
+_METRICS_SYMBOLS = (
+    "metrics_burn_rate",
+    "metrics_income_by_category",
+    "metrics_monthly_summary",
+    "metrics_period_snapshot",
+    "metrics_period_snapshot_compact",
+    "metrics_refresh_snapshot_compact",
+    "metrics_savings_rate",
+    "metrics_spending_by_category",
+    "metrics_spending_by_tag",
+    "metrics_tag_coverage",
+)
+_STORAGE_CONTROL_SYMBOLS = ("storage_clear_read_cache",)
+_TIMELINE_SYMBOLS = (
+    "timeline_cumulative_income_expense",
+    "timeline_monthly_cashflow",
+    "timeline_net_worth_monthly_deltas",
+)
+_CURRENCY_SYMBOLS = (
+    "currency_default_rates_for_base",
+    "currency_rate_for",
+    "currency_resolve_provider_order",
 )
 
 
@@ -136,13 +268,49 @@ def get_repository_read_core() -> RustRepositoryReadCore | None:
     return cast(RustRepositoryReadCore, module)
 
 
+def get_metrics_core() -> RustMetricsCore | None:
+    module = load_extension_module()
+    if not _has_symbols(module, _METRICS_SYMBOLS):
+        return None
+    return cast(RustMetricsCore, module)
+
+
+def get_timeline_core() -> RustTimelineCore | None:
+    module = load_extension_module()
+    if not _has_symbols(module, _TIMELINE_SYMBOLS):
+        return None
+    return cast(RustTimelineCore, module)
+
+
+def get_currency_core() -> RustCurrencyCore | None:
+    module = load_extension_module()
+    if not _has_symbols(module, _CURRENCY_SYMBOLS):
+        return None
+    return cast(RustCurrencyCore, module)
+
+
+def get_storage_control_core() -> RustStorageControlCore | None:
+    module = load_extension_module()
+    if not _has_symbols(module, _STORAGE_CONTROL_SYMBOLS):
+        return None
+    return cast(RustStorageControlCore, module)
+
+
 __all__ = [
     "RustBalanceCore",
+    "RustCurrencyCore",
+    "RustMetricsCore",
     "RustMoneyCore",
     "RustRepositoryReadCore",
+    "RustTimelineCore",
+    "RustStorageControlCore",
     "get_balance_core",
+    "get_currency_core",
+    "get_metrics_core",
     "get_money_core",
     "get_repository_read_core",
+    "get_storage_control_core",
+    "get_timeline_core",
     "is_python_fallback_forced",
     "is_rust_core_enabled",
     "load_extension_module",

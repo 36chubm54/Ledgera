@@ -7,6 +7,40 @@ This project adheres to Semantic Versioning.
 
 ---
 
+## [3.0.0-alpha.2] - 2026-05-30
+
+### Added
+
+- Added Rust-backed analytics hot paths for `MetricsService` and `TimelineService`, including savings rate, burn rate, category and tag aggregates, tag coverage, monthly summaries, monthly cashflow, cumulative totals, and net-worth delta reads.
+- Added Rust-backed currency helper paths for provider-order resolution, rate normalization, default-rate derivation, and `CurrencyService.get_rate()` parity while keeping HTTP providers, secrets, and runtime config ownership in Python.
+- Added a GUI-oriented analytics refresh snapshot that batches the dashboard refresh path through one compact Rust/Python bridge payload.
+- Added alpha.2 benchmark tooling for the analytics refresh path, including backend selection, stale-extension preflight output, and explicit `gui` versus `top10` limit modes.
+- Added criterion benchmark coverage for the Rust metrics engine and expanded alpha CI gates for analytics, currency, bridge parity, forced Python fallback, and benchmark compile checks.
+
+### Changed
+
+- Extended `bridge.ledgera_bridge` with typed metrics, timeline, currency, and storage-control accessors while preserving centralized capability detection and fallback policy.
+- Updated the analytics tab controller seam so the GUI can use the Rust-backed refresh snapshot without changing the public Tkinter-facing behavior.
+- Optimized the Rust analytics refresh path with compact tuple payloads, one-pass period aggregation, deterministic category ordering, and no-tag fast-path handling.
+- Kept Python as the owner of dataclass reconstruction, currency provider I/O, secrets, config persistence, and all DB write paths.
+
+### Fixed
+
+- Prevented limited Rust metrics snapshots from satisfying later unbounded metrics queries by requiring exact cache-limit matches.
+- Kept analytics snapshot methods optional in the GUI controller protocol so older/fake controllers continue to type-check and use the fallback method calls.
+- Fixed Rust/Python parity gaps for empty and whitespace-padded currency codes and strengthened parity coverage for equal category totals and no-tag analytics fixtures.
+
+### Testing
+
+- Added Rust/Python parity coverage for metrics, timeline, currency, analytics snapshots, compact refresh payloads, no-tag fast paths, and forced Python fallback behavior.
+- Verified the GUI-like analytics refresh benchmark reaches the alpha.2 speed target when run against a freshly built and installed `ledgera_core` wheel.
+- Validated the alpha.2 slice with `cargo test`, `cargo clippy --all-targets -- -D warnings`, `maturin build`, targeted `pytest`, and `npx -y pyright`.
+
+### Deferred
+
+- Rust-owned currency HTTP parsing, provider secrets, SQLite cache persistence, DB write paths, sync, Kotlin/Native FFI, and planning-domain migration remain out of alpha.2 scope.
+- Timeline-specific `>=5x` criterion reporting remains a follow-up; the measured speedup target is currently demonstrated on the GUI-like analytics refresh path.
+
 ## [3.0.0-alpha.1] - 2026-05-28
 
 ### Added

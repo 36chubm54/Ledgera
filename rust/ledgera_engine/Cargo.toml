@@ -9,5 +9,6 @@ edition = "2024"
 [workspace.dependencies]
 pyo3 = { version = "0.28.3", features = ["extension-module"] }
 rusqlite = { version = "0.37.0", features = ["bundled"] }
+criterion = "0.7.0"
 ledgera_engine_core = { path = "core" }
 ledgera_engine_storage = { path = "storage" }

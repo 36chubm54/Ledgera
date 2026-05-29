@@ -6,3 +6,10 @@ edition.workspace = true
 [dependencies]
 ledgera_engine_core.workspace = true
 rusqlite.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "metrics_engine"
+harness = false

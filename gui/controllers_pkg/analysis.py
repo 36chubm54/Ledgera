@@ -9,6 +9,11 @@ from domain.validation import parse_ymd
 from services.analytics.balance import BalanceService, CashflowResult, WalletBalance
 from services.analytics.dashboard import DashboardService
 from services.analytics.metrics import MetricsService
+from services.analytics.period_snapshot import (
+    AnalyticsRefreshSnapshot,
+    PeriodAnalyticsSnapshot,
+    PeriodAnalyticsSnapshotService,
+)
 from services.analytics.timeline import TimelineService
 
 
@@ -60,6 +65,16 @@ class ControllerAnalysisFacade:
         )
         return MetricsService(repo)
 
+    def _period_snapshot_service(self) -> PeriodAnalyticsSnapshotService:
+        repo = cast(
+            SqlQueryRepository,
+            self._require_repository_capability(
+                SqlQueryRepository,
+                "Analytics Snapshot Engine is supported only for repositories with SQL query capabilities",  # noqa: E501
+            ),
+        )
+        return PeriodAnalyticsSnapshotService(repo)
+
     def get_wallet_balance(self, wallet_id: int, date: str | None = None) -> float:
         return self._balance_service().get_wallet_balance(wallet_id, date=date)
 
@@ -109,6 +124,36 @@ class ControllerAnalysisFacade:
 
     def get_burn_rate(self, start_date: str, end_date: str) -> float:
         return self._metrics_service().get_burn_rate(start_date, end_date)
+
+    def get_period_snapshot(
+        self,
+        start_date: str,
+        end_date: str,
+        *,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> PeriodAnalyticsSnapshot:
+        return self._period_snapshot_service().get_period_snapshot(
+            start_date,
+            end_date,
+            category_limit=category_limit,
+            tag_limit=tag_limit,
+        )
+
+    def get_refresh_snapshot(
+        self,
+        start_date: str,
+        end_date: str,
+        *,
+        category_limit: int | None = None,
+        tag_limit: int | None = None,
+    ) -> AnalyticsRefreshSnapshot:
+        return self._period_snapshot_service().get_refresh_snapshot(
+            start_date,
+            end_date,
+            category_limit=category_limit,
+            tag_limit=tag_limit,
+        )
 
     def get_spending_by_category(
         self,

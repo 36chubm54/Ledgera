@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, cast
 
 from app.data.protocols import SqlQueryRepository
+from bridge.ledgera_bridge import RustTimelineCore, get_timeline_core
 from services.support.currency import convert_money_to_base
 from services.support.sql_money import minor_amount_expr, money_expr, signed_minor_amount_expr
 
@@ -36,6 +38,13 @@ class MonthlyCumulative:
     cumulative_expenses: float
 
 
+_RUST_TIMELINE_CORE = get_timeline_core()
+
+
+def _as_float(value: object) -> float:
+    return float(cast(Any, value))
+
+
 class TimelineService:
     """
     TimelineService builds historical net worth timeline from financial records.
@@ -63,6 +72,16 @@ class TimelineService:
         Returns list sorted by month ascending. Empty list if no records.
         """
         base = self._get_total_initial_balance()
+
+        if self._can_use_rust():
+            rust_core = cast(RustTimelineCore, _RUST_TIMELINE_CORE)
+            return [
+                MonthlyNetWorth(
+                    month=str(row["month"]),
+                    balance=round(base + _as_float(row["running_delta"]), 2),
+                )
+                for row in rust_core.timeline_net_worth_monthly_deltas(self._db_path())
+            ]
 
         rows = self._repo.query_all(
             f"""
@@ -104,6 +123,21 @@ class TimelineService:
         Optional date range filter: start_date / end_date in "YYYY-MM-DD" format.
         Returns list sorted by month ascending.
         """
+        if self._can_use_rust():
+            rust_core = cast(RustTimelineCore, _RUST_TIMELINE_CORE)
+            return [
+                MonthlyCashflow(
+                    month=str(row["month"]),
+                    income=_as_float(row["income"]),
+                    expenses=_as_float(row["expenses"]),
+                    cashflow=_as_float(row["cashflow"]),
+                )
+                for row in rust_core.timeline_monthly_cashflow(
+                    self._db_path(),
+                    str(start_date) if start_date is not None else None,
+                    str(end_date) if end_date is not None else None,
+                )
+            ]
         params: list[str] = []
         date_filter = "transfer_id IS NULL"
 
@@ -149,6 +183,16 @@ class TimelineService:
         Useful for charts showing where total income/expense lines cross.
         Returns list sorted by month ascending.
         """
+        if self._can_use_rust():
+            rust_core = cast(RustTimelineCore, _RUST_TIMELINE_CORE)
+            return [
+                MonthlyCumulative(
+                    month=str(row["month"]),
+                    cumulative_income=_as_float(row["cumulative_income"]),
+                    cumulative_expenses=_as_float(row["cumulative_expenses"]),
+                )
+                for row in rust_core.timeline_cumulative_income_expense(self._db_path())
+            ]
         rows = self._repo.query_all(
             f"""
             SELECT
@@ -196,3 +240,9 @@ class TimelineService:
         for row in rows:
             total += convert_money_to_base(float(row[0]), str(row[1]), self._currency)
         return round(total, 2)
+
+    def _db_path(self) -> str:
+        return str(getattr(self._repo, "db_path", ""))
+
+    def _can_use_rust(self) -> bool:
+        return _RUST_TIMELINE_CORE is not None and bool(self._db_path())

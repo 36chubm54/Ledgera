@@ -72,6 +72,7 @@ from app_paths import (
     is_appimage_mode,
     is_frozen_mode,
 )
+from bridge.ledgera_bridge import get_currency_core
 from domain.currency import CurrencyService as DomainCurrencyService
 from infrastructure.currency_aggregator import CurrencyAggregator
 from infrastructure.currency_providers import (
@@ -81,6 +82,8 @@ from infrastructure.currency_providers import (
 )
 
 logger = logging.getLogger(__name__)
+
+_RUST_CURRENCY_CORE = get_currency_core()
 
 
 class _OsCompat:
@@ -194,6 +197,11 @@ class CurrencyService:
 
     @classmethod
     def default_rates_for_base(cls, base: str) -> dict[str, float]:
+        if _RUST_CURRENCY_CORE is not None:
+            try:
+                return _RUST_CURRENCY_CORE.currency_default_rates_for_base(base, cls.DEFAULT_RATES)
+            except Exception:
+                logger.debug("CurrencyService: Rust default-rate helper failed", exc_info=True)
         return default_rates_for_base(base, default_rates=cls.DEFAULT_RATES)
 
     @classmethod
@@ -278,6 +286,13 @@ class CurrencyService:
             raise ValueError(f"Unsupported currency: {currency}") from err
 
     def get_rate(self, currency: str) -> float:
+        if _RUST_CURRENCY_CORE is not None:
+            try:
+                return _RUST_CURRENCY_CORE.currency_rate_for(
+                    currency, self._service.base_currency, self._service.get_all_rates()
+                )
+            except Exception:
+                logger.debug("CurrencyService: Rust rate helper failed", exc_info=True)
         return get_currency_rate(self._service, currency)
 
     @property
@@ -529,6 +544,28 @@ class CurrencyService:
         return "exchange_rate"
 
     def _resolve_provider_order(self) -> list[str]:
+        if _RUST_CURRENCY_CORE is not None:
+            configured_order = self._config.get("provider_order")
+            provider_order = (
+                [str(item) for item in configured_order]
+                if isinstance(configured_order, list)
+                else None
+            )
+            try:
+                return _RUST_CURRENCY_CORE.currency_resolve_provider_order(
+                    self._base,
+                    str(self._config.get("provider_mode", "personal") or "personal"),
+                    str(self._config.get("primary_provider", "") or ""),
+                    str(self._config.get("fallback_provider", "exchange_rate") or "exchange_rate"),
+                    str(
+                        self._config.get("commercial_fallback_provider", "exchange_rate")
+                        or "exchange_rate"
+                    ),
+                    bool(self._config.get("enable_cbr", False)),
+                    provider_order,
+                )
+            except Exception:
+                logger.debug("CurrencyService: Rust provider-order helper failed", exc_info=True)
         return resolve_provider_order(self._config, base_currency=self._base)
 
     def _load_cached(self) -> dict[str, float] | None:
