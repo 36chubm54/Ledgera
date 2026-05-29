@@ -628,8 +628,8 @@ class MetricsService:
         ), snapshot in self._period_snapshot_cache.items():
             if cached_start != start or cached_end != end:
                 continue
-            category_matches = category_limit is None or cached_category_limit == category_limit
-            tag_matches = tag_limit is None or cached_tag_limit == tag_limit
+            category_matches = cached_category_limit == category_limit
+            tag_matches = cached_tag_limit == tag_limit
             if category_matches and tag_matches:
                 return snapshot
         return None

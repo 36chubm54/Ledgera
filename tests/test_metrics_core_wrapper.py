@@ -363,3 +363,36 @@ def test_metrics_service_rust_snapshot_cache_invalidates_after_writes(tmp_path: 
         assert service.get_spending_by_category("2026-01-01", "2026-02-28")[0].total_base == 275.0
     finally:
         repo.close()
+
+
+def test_metrics_service_limited_snapshot_does_not_satisfy_unbounded_query(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "metrics_cache_limits.db"
+    _init_db(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        _insert_wallet(conn, 1)
+        for index, category in enumerate(("A", "B", "C"), start=1):
+            _insert_record(
+                conn,
+                record_type="expense",
+                date=f"2026-01-0{index}",
+                wallet_id=1,
+                amount_base=float(100 - index),
+                category=category,
+            )
+    finally:
+        conn.close()
+
+    repo = SQLiteRecordRepository(str(db_path), schema_path=_schema_path())
+    try:
+        service = MetricsService(repo)
+
+        limited = service.get_spending_by_category("2026-01-01", "2026-01-31", limit=1)
+        unbounded = service.get_spending_by_category("2026-01-01", "2026-01-31")
+
+        assert [row.category for row in limited] == ["A"]
+        assert [row.category for row in unbounded] == ["A", "B", "C"]
+    finally:
+        repo.close()
