@@ -329,6 +329,8 @@ interface LedgeraEngine {
     sequence<TagColorDto> list_tag_colors();
     sequence<string> tag_color_palette();
     [Throws=LedgeraEngineError]
+    void normalize_tag_colors();
+    [Throws=LedgeraEngineError]
     sequence<WalletDto> list_wallets();
     [Throws=LedgeraEngineError]
     WalletDto create_wallet(CreateWalletRequest request);

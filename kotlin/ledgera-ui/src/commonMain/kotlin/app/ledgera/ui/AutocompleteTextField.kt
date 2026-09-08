@@ -159,7 +159,7 @@ fun TagAutocompleteField(
             Box(
                 Modifier
                     .size(22.dp)
-                    .background(currentColor.toComposeColor(), CircleShape)
+                    .background(currentColor.toComposeTagColor() ?: Color.Transparent, CircleShape)
                     .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
             )
         }
@@ -216,7 +216,8 @@ private fun TagColorPickerDialog(
                         modifier = Modifier
                             .size(58.dp)
                             .background(
-                                if (color.isEmpty()) MaterialTheme.colorScheme.surfaceVariant else color.toComposeColor(),
+                                if (color.isEmpty()) MaterialTheme.colorScheme.surfaceVariant
+                                else color.toComposeTagColor() ?: MaterialTheme.colorScheme.surfaceVariant,
                                 CircleShape,
                             )
                             .border(
@@ -289,17 +290,6 @@ private fun currentTagToken(value: String): String =
 
 private fun String.normalizedTagForColor(): String =
     trim().removePrefix("#").lowercase()
-
-private fun String.toComposeColor(): Color {
-    if (isEmpty()) return Color.Transparent
-    val value = removePrefix("#")
-    if (value.length != 6) return Color.Transparent
-    return Color(
-        red = value.substring(0, 2).toIntOrNull(16)?.div(255f) ?: 0f,
-        green = value.substring(2, 4).toIntOrNull(16)?.div(255f) ?: 0f,
-        blue = value.substring(4, 6).toIntOrNull(16)?.div(255f) ?: 0f,
-    )
-}
 
 internal fun replaceCurrentTagTokenForAutocomplete(value: String, suggestion: String): String {
     val separatorIndex = value.lastIndexOf(',')

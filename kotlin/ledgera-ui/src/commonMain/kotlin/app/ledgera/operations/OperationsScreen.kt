@@ -53,6 +53,7 @@ import app.ledgera.model.WalletOption
 import app.ledgera.ui.AutocompleteTextField
 import app.ledgera.ui.LedgerDateField
 import app.ledgera.ui.TagAutocompleteField
+import app.ledgera.ui.toComposeTagColor
 import app.ledgera.validation.currentLedgerDate
 
 interface OperationsFileActions {
@@ -1332,7 +1333,7 @@ private fun OperationRow(
                                     .clip(RoundedCornerShape(percent = 50))
                                     .background(
                                         item.tagColors[tag.lowercase()]
-                                            ?.toTagChipColor()
+                                            ?.toComposeTagColor()
                                             ?: MaterialTheme.colorScheme.outline,
                                     )
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -1349,15 +1350,4 @@ private fun OperationRow(
             }
         }
     }
-}
-
-private fun String.toTagChipColor(): Color? {
-    if (length != 7 || first() != '#') return null
-    return runCatching {
-        Color(
-            red = substring(1, 3).toInt(16) / 255f,
-            green = substring(3, 5).toInt(16) / 255f,
-            blue = substring(5, 7).toInt(16) / 255f,
-        )
-    }.getOrNull()
 }

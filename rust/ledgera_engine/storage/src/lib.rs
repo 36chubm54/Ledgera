@@ -4027,7 +4027,6 @@ pub fn tag_names(db_path: &str) -> StorageResult<Vec<String>> {
 }
 
 pub fn tag_color_rows(db_path: &str) -> StorageResult<Vec<TagColorRow>> {
-    normalize_tag_colors(db_path)?;
     let conn = open_sqlite_connection(db_path)?;
     let mut stmt = conn
         .prepare(

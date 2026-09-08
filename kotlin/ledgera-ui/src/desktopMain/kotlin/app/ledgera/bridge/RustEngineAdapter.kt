@@ -58,6 +58,10 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
 
     private val engine = LedgeraEngine(dbPath)
 
+    init {
+        engine.normalizeTagColors()
+    }
+
     override suspend fun status(): EngineStatus = withContext(Dispatchers.IO) {
         engine.engineStatus().let { EngineStatus(it.ok, it.dbPath, it.message) }
     }
