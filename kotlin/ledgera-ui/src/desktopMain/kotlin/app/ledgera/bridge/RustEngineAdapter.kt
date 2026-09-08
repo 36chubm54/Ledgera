@@ -12,6 +12,8 @@ import app.ledgera.engine.MandatoryImportResultDto
 import app.ledgera.engine.OperationExportResultDto
 import app.ledgera.engine.OperationImportResultDto
 import app.ledgera.engine.RecordFilterDto
+import app.ledgera.engine.ReportFiltersDto as NativeReportFiltersDto
+import app.ledgera.engine.ReportExportResultDto
 import app.ledgera.engine.RegisterDebtPaymentRequest as NativeRegisterDebtPaymentRequest
 import app.ledgera.engine.UpdateMandatoryTemplateRequest as NativeUpdateMandatoryTemplateRequest
 import app.ledgera.engine.UpdateRecordRequest as NativeUpdateRecordRequest
@@ -48,6 +50,15 @@ import app.ledgera.model.UpdateTransferResult
 import app.ledgera.model.WalletDeleteResult
 import app.ledgera.model.WalletOption
 import app.ledgera.model.WalletSettingsItem
+import app.ledgera.model.ReportCategoryRow
+import app.ledgera.model.ReportDebtRow
+import app.ledgera.model.ReportMonthlyRow
+import app.ledgera.model.ReportOperationRow
+import app.ledgera.model.ReportResult
+import app.ledgera.model.ReportExportResult
+import app.ledgera.model.ReportSummary
+import app.ledgera.model.ReportTagRow
+import app.ledgera.model.ReportFilters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -65,6 +76,58 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     override suspend fun status(): EngineStatus = withContext(Dispatchers.IO) {
         engine.engineStatus().let { EngineStatus(it.ok, it.dbPath, it.message) }
     }
+
+    override suspend fun generateReport(filters: ReportFilters): ReportResult = withContext(Dispatchers.IO) {
+        engine.generateReport(
+            NativeReportFiltersDto(
+                walletId = filters.walletId,
+                periodStart = filters.periodStart,
+                periodEnd = filters.periodEnd,
+                category = filters.category,
+                tag = filters.tag,
+                tagMode = filters.tagMode,
+                totalsMode = filters.totalsMode,
+                groupByCategory = filters.groupByCategory,
+            )
+        ).let { dto ->
+            ReportResult(
+                title = dto.title,
+                baseCurrency = dto.baseCurrency,
+                displayCurrency = dto.displayCurrency,
+                summary = dto.summary.let { value ->
+                    ReportSummary(
+                        netWorthFixed = value.netWorthFixed,
+                        netWorthCurrent = value.netWorthCurrent,
+                        initialBalance = value.initialBalance,
+                        recordsTotalFixed = value.recordsTotalFixed,
+                        finalBalanceFixed = value.finalBalanceFixed,
+                        finalBalanceCurrent = value.finalBalanceCurrent,
+                        fxDifference = value.fxDifference,
+                        recordsCount = value.recordsCount,
+                        balanceLabel = value.balanceLabel,
+                        activeTag = value.activeTag,
+                    )
+                },
+                operations = dto.operations.map { value -> ReportOperationRow(value.date, value.typeLabel, value.kind, value.category, value.tagsText, value.amountBase, value.description) },
+                monthly = dto.monthly.map { value -> ReportMonthlyRow(value.month, value.income, value.expenses) },
+                categories = dto.categories.map { value -> ReportCategoryRow(value.category, value.operationsCount, value.totalBase) },
+                tags = dto.tags.map { value -> ReportTagRow(value.tag, value.operationsCount, value.totalBase) },
+                debts = dto.debts.map { value -> ReportDebtRow(value.contactName, value.kind, value.status, value.createdAt, value.closedAt, value.currency, value.totalAmount, value.remainingAmount, value.settledAmount, value.progressPercent) },
+            )
+        }
+    }
+
+    override suspend fun reportWallets(): List<WalletOption> = listWallets()
+    override suspend fun reportCategories(): List<String> =
+        (listCategories("income") + listCategories("expense") + listCategories("mandatory_expense")).distinct().sorted()
+    override suspend fun reportTags(): List<String> = listTags()
+
+    override suspend fun exportReportCsv(filters: ReportFilters, path: String): ReportExportResult =
+        withContext(Dispatchers.IO) { engine.exportReportCsv(filters.toNative(), path).toModel() }
+    override suspend fun exportReportXlsx(filters: ReportFilters, path: String): ReportExportResult =
+        withContext(Dispatchers.IO) { engine.exportReportXlsx(filters.toNative(), path).toModel() }
+    override suspend fun exportReportPdf(filters: ReportFilters, path: String): ReportExportResult =
+        withContext(Dispatchers.IO) { engine.exportReportPdf(filters.toNative(), path).toModel() }
 
     override suspend fun baseCurrency(): String = withContext(Dispatchers.IO) {
         engine.baseCurrency()
@@ -633,3 +696,16 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     private fun MandatoryExportResultDto.toModel(): MandatoryExportResult =
         MandatoryExportResult(exportedRows = exportedRows, path = path)
 }
+
+private fun ReportFilters.toNative() = NativeReportFiltersDto(
+    walletId = walletId,
+    periodStart = periodStart,
+    periodEnd = periodEnd,
+    category = category,
+    tag = tag,
+    tagMode = tagMode,
+    totalsMode = totalsMode,
+    groupByCategory = groupByCategory,
+)
+
+private fun ReportExportResultDto.toModel() = ReportExportResult(exportedRows, path)

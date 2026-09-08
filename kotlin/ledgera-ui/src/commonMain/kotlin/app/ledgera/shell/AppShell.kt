@@ -41,6 +41,10 @@ import app.ledgera.operations.OperationsScreen
 import app.ledgera.operations.OperationsFileActions
 import app.ledgera.operations.NoOperationsFileActions
 import app.ledgera.operations.OperationsViewModel
+import app.ledgera.reports.ReportsScreen
+import app.ledgera.reports.ReportsViewModel
+import app.ledgera.reports.ReportsFileActions
+import app.ledgera.reports.NoReportsFileActions
 import app.ledgera.settings.SettingsScreen
 import app.ledgera.settings.SettingsViewModel
 import app.ledgera.ui.ToastHost
@@ -73,15 +77,18 @@ fun AppShell(
     debtsViewModel: DebtsViewModel,
     mandatoryViewModel: MandatoryViewModel,
     settingsViewModel: SettingsViewModel,
+    reportsViewModel: ReportsViewModel,
     modifier: Modifier = Modifier,
     operationsFileActions: OperationsFileActions = NoOperationsFileActions,
     mandatoryFileActions: MandatoryFileActions = NoMandatoryFileActions,
+    reportsFileActions: ReportsFileActions = NoReportsFileActions,
 ) {
     val state by viewModel.state.collectAsState()
     val operationsState by operationsViewModel.state.collectAsState()
     val debtsState by debtsViewModel.state.collectAsState()
     val mandatoryState by mandatoryViewModel.state.collectAsState()
     val settingsState by settingsViewModel.state.collectAsState()
+    val reportsState by reportsViewModel.state.collectAsState()
     LaunchedEffect(Unit) {
         viewModel.refreshStatus()
         mandatoryViewModel.applyAutoPaymentsOnStartup()
@@ -93,6 +100,7 @@ fun AppShell(
             DesktopSection.Debts -> debtsState.notice ?: debtsState.error
             DesktopSection.Mandatory -> mandatoryState.notice ?: mandatoryState.error
             DesktopSection.Settings -> settingsState.notice ?: settingsState.error
+            DesktopSection.Reports -> reportsState.notice ?: reportsState.error
             else -> null
         },
         modifier = modifier.fillMaxSize(),
@@ -102,6 +110,7 @@ fun AppShell(
                 DesktopSection.Debts -> debtsViewModel.clearFeedback()
                 DesktopSection.Mandatory -> mandatoryViewModel.clearFeedback()
                 DesktopSection.Settings -> settingsViewModel.clearFeedback()
+                DesktopSection.Reports -> reportsViewModel.clearFeedback()
                 else -> Unit
             }
         },
@@ -143,7 +152,7 @@ fun AppShell(
                             operationsViewModel,
                             fileActions = operationsFileActions,
                         )
-                        DesktopSection.Reports -> PendingSection(state.selectedSection)
+                        DesktopSection.Reports -> ReportsScreen(reportsViewModel, reportsFileActions)
                         DesktopSection.Analytics -> PendingSection(state.selectedSection)
                         DesktopSection.Dashboard -> PendingSection(state.selectedSection)
                         DesktopSection.Budget -> PendingSection(state.selectedSection)

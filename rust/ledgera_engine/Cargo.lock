@@ -658,6 +658,7 @@ dependencies = [
  "libc",
  "rusqlite",
  "rust_xlsxwriter",
+ "serde_json",
  "windows-sys",
  "zip 4.6.1",
 ]

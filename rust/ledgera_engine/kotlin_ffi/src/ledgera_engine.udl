@@ -273,10 +273,100 @@ dictionary EngineStatusDto {
     string message;
 };
 
+dictionary ReportFiltersDto {
+    i64? wallet_id;
+    string? period_start;
+    string? period_end;
+    string category;
+    string tag;
+    string tag_mode;
+    string totals_mode;
+    boolean group_by_category;
+};
+
+dictionary ReportSummaryDto {
+    double net_worth_fixed;
+    double net_worth_current;
+    double initial_balance;
+    double records_total_fixed;
+    double final_balance_fixed;
+    double final_balance_current;
+    double fx_difference;
+    i64 records_count;
+    string balance_label;
+    string active_tag;
+};
+
+dictionary ReportOperationRowDto {
+    string date;
+    string type_label;
+    string kind;
+    string category;
+    string tags_text;
+    double amount_base;
+    string description;
+};
+
+dictionary ReportMonthlyRowDto {
+    string month;
+    double income;
+    double expenses;
+};
+
+dictionary ReportCategoryRowDto {
+    string category;
+    i64 operations_count;
+    double total_base;
+};
+
+dictionary ReportTagRowDto {
+    string tag;
+    i64 operations_count;
+    double total_base;
+};
+
+dictionary ReportDebtRowDto {
+    string contact_name;
+    string kind;
+    string status;
+    string created_at;
+    string? closed_at;
+    string currency;
+    double total_amount;
+    double remaining_amount;
+    double settled_amount;
+    double progress_percent;
+};
+
+dictionary ReportResultDto {
+    string title;
+    string base_currency;
+    string display_currency;
+    ReportSummaryDto summary;
+    sequence<ReportOperationRowDto> operations;
+    sequence<ReportMonthlyRowDto> monthly;
+    sequence<ReportCategoryRowDto> categories;
+    sequence<ReportTagRowDto> tags;
+    sequence<ReportDebtRowDto> debts;
+};
+
+dictionary ReportExportResultDto {
+    i64 exported_rows;
+    string path;
+};
+
 interface LedgeraEngine {
     constructor(string db_path);
 
     EngineStatusDto engine_status();
+    [Throws=LedgeraEngineError]
+    ReportResultDto generate_report(ReportFiltersDto filters);
+    [Throws=LedgeraEngineError]
+    ReportExportResultDto export_report_csv(ReportFiltersDto filters, string path);
+    [Throws=LedgeraEngineError]
+    ReportExportResultDto export_report_xlsx(ReportFiltersDto filters, string path);
+    [Throws=LedgeraEngineError]
+    ReportExportResultDto export_report_pdf(ReportFiltersDto filters, string path);
     [Throws=LedgeraEngineError]
     string base_currency();
     [Throws=LedgeraEngineError]

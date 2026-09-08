@@ -315,6 +315,7 @@ pub struct MetricsRefreshSnapshot {
 mod audit;
 mod metrics;
 mod planning;
+mod reporting;
 mod timeline;
 
 pub use audit::{AuditFindingRow, audit_run, audit_run_for_date};
@@ -342,6 +343,11 @@ pub use planning::{
     distribution_update_item_pct, distribution_update_subitem_name,
     distribution_update_subitem_order, distribution_update_subitem_pct,
     distribution_validate_structure, distribution_write_frozen_row,
+};
+pub use reporting::{
+    ReportCategoryRow, ReportDebtRow, ReportExportResult, ReportFilters, ReportMonthlyRow,
+    ReportOperationRow, ReportResult, ReportSummary, ReportTagRow, report_export_csv,
+    report_export_pdf, report_export_xlsx, report_generate,
 };
 pub use timeline::{
     timeline_cumulative_income_expense, timeline_monthly_cashflow,

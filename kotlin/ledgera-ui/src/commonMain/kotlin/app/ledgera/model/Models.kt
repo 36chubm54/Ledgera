@@ -341,3 +341,67 @@ data class EngineStatus(
     val dbPath: String,
     val message: String,
 )
+
+data class ReportFilters(
+    val walletId: Long? = null,
+    val periodStart: String? = null,
+    val periodEnd: String? = null,
+    val category: String = "",
+    val tag: String = "",
+    val tagMode: String = "or",
+    val totalsMode: String = "fixed",
+    val groupByCategory: Boolean = true,
+)
+
+data class ReportSummary(
+    val netWorthFixed: Double,
+    val netWorthCurrent: Double,
+    val initialBalance: Double,
+    val recordsTotalFixed: Double,
+    val finalBalanceFixed: Double,
+    val finalBalanceCurrent: Double,
+    val fxDifference: Double,
+    val recordsCount: Long,
+    val balanceLabel: String,
+    val activeTag: String,
+)
+
+data class ReportOperationRow(
+    val date: String,
+    val typeLabel: String,
+    val kind: String,
+    val category: String,
+    val tagsText: String,
+    val amountBase: Double,
+    val description: String,
+)
+
+data class ReportMonthlyRow(val month: String, val income: Double, val expenses: Double)
+data class ReportCategoryRow(val category: String, val operationsCount: Long, val totalBase: Double)
+data class ReportTagRow(val tag: String, val operationsCount: Long, val totalBase: Double)
+data class ReportDebtRow(
+    val contactName: String,
+    val kind: String,
+    val status: String,
+    val createdAt: String,
+    val closedAt: String?,
+    val currency: String,
+    val totalAmount: Double,
+    val remainingAmount: Double,
+    val settledAmount: Double,
+    val progressPercent: Double,
+)
+
+data class ReportResult(
+    val title: String,
+    val baseCurrency: String,
+    val displayCurrency: String,
+    val summary: ReportSummary,
+    val operations: List<ReportOperationRow>,
+    val monthly: List<ReportMonthlyRow>,
+    val categories: List<ReportCategoryRow>,
+    val tags: List<ReportTagRow>,
+    val debts: List<ReportDebtRow>,
+)
+
+data class ReportExportResult(val exportedRows: Long, val path: String)

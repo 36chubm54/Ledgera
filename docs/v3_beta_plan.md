@@ -63,6 +63,11 @@ Current status:
   auto-payments, and run CSV/XLSX previewed replace-import/export through
   Rust/Kotlin UniFFI. `.xls`, JSON backup/export, current-rate import, and
   wallet creation from import stay pending follow-up slices.
+- Reports foundation is wired through Rust/Kotlin UniFFI: Kotlin Desktop can
+  generate read-only period reports with Python-compatible wallet/category/tag,
+  fixed/current, monthly, category, tag, and debt summaries, and export the
+  generated view as CSV, XLSX, or PDF. Reports import is deliberately not part
+  of beta.1.
 - Remaining beta.1 work is capability wiring and screen parity for the other
   Operations flows and the other sections through Rust/Kotlin UniFFI, not a
   Kotlin-to-Python runtime bridge.

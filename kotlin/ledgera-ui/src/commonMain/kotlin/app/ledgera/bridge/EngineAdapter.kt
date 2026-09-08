@@ -23,6 +23,9 @@ import app.ledgera.model.MandatoryExportResult
 import app.ledgera.model.MandatoryImportResult
 import app.ledgera.model.MandatoryTemplateItem
 import app.ledgera.model.RegisterDebtPaymentRequest
+import app.ledgera.model.ReportFilters
+import app.ledgera.model.ReportResult
+import app.ledgera.model.ReportExportResult
 import app.ledgera.model.TransferDetails
 import app.ledgera.model.UpdateMandatoryTemplateRequest
 import app.ledgera.model.UpdateOperationRequest
@@ -34,6 +37,16 @@ import app.ledgera.model.WalletSettingsItem
 
 interface RuntimeEngine {
     suspend fun status(): EngineStatus
+}
+
+interface ReportsEngine {
+    suspend fun generateReport(filters: ReportFilters): ReportResult = error("Reports generation is unavailable")
+    suspend fun reportWallets(): List<WalletOption> = emptyList()
+    suspend fun reportCategories(): List<String> = emptyList()
+    suspend fun reportTags(): List<String> = emptyList()
+    suspend fun exportReportCsv(filters: ReportFilters, path: String): ReportExportResult = error("Reports export is unavailable")
+    suspend fun exportReportXlsx(filters: ReportFilters, path: String): ReportExportResult = error("Reports export is unavailable")
+    suspend fun exportReportPdf(filters: ReportFilters, path: String): ReportExportResult = error("Reports export is unavailable")
 }
 
 interface OperationsEngine {
@@ -107,4 +120,4 @@ interface MandatoryEngine {
     suspend fun exportMandatoryXlsx(path: String): MandatoryExportResult
 }
 
-interface EngineAdapter : RuntimeEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine
+interface EngineAdapter : RuntimeEngine, ReportsEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine

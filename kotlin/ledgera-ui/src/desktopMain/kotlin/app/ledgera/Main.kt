@@ -16,6 +16,8 @@ import app.ledgera.operations.ImportFileSnapshotProvider
 import app.ledgera.operations.OperationsViewModel
 import app.ledgera.operations.OperationsFileActions
 import app.ledgera.settings.SettingsViewModel
+import app.ledgera.reports.ReportsViewModel
+import app.ledgera.reports.ReportsFileActions
 import app.ledgera.shell.AppShell
 import app.ledgera.shell.AppShellViewModel
 import app.ledgera.theme.LedgeraTheme
@@ -68,8 +70,10 @@ private fun runApplication(args: Array<String>) = application {
                             importFileSnapshotProvider = DesktopImportFileSnapshotProvider,
                         ),
                         settingsViewModel = SettingsViewModel(engine),
+                        reportsViewModel = ReportsViewModel(engine),
                         operationsFileActions = DesktopOperationsFileActions(window),
                         mandatoryFileActions = DesktopMandatoryFileActions(window),
+                        reportsFileActions = DesktopReportsFileActions(window),
                     )
                 }
             }
@@ -138,6 +142,17 @@ private class DesktopMandatoryFileActions(private val owner: AwtWindow) : Mandat
     private fun ownerFrame(): Frame? = owner as? Frame
 }
 
+private class DesktopReportsFileActions(private val owner: AwtWindow) : ReportsFileActions {
+    override fun saveReportPath(extension: String): String? =
+        FileDialog(owner as? Frame, "Export report", FileDialog.SAVE)
+            .apply {
+                file = "report.$extension"
+                filenameFilter = FilenameFilter { _, name -> name.endsWith(".$extension", ignoreCase = true) }
+                isVisible = true
+            }
+            .selectedPath(defaultExtension = extension)
+}
+
 private object DesktopImportFileSnapshotProvider : ImportFileSnapshotProvider {
     override fun snapshot(path: String): String? {
         val file = File(path)
@@ -149,7 +164,8 @@ private fun FileDialog.selectedPath(defaultExtension: String): String? {
     val selectedDirectory = directory ?: return null
     val selectedFile = file ?: return null
     val path = File(selectedDirectory, selectedFile).absolutePath
-    return if (path.endsWith(".csv", ignoreCase = true) || path.endsWith(".xlsx", ignoreCase = true)) {
+    return if (path.endsWith(".$defaultExtension", ignoreCase = true) ||
+        path.endsWith(".csv", ignoreCase = true) || path.endsWith(".xlsx", ignoreCase = true) || path.endsWith(".pdf", ignoreCase = true)) {
         path
     } else {
         "$path.$defaultExtension"

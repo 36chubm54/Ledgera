@@ -108,6 +108,11 @@ Current Kotlin/Rust contract:
   previewed CSV/XLSX replace-import/export. `.xls`, JSON backup/export,
   current-rate import, and wallet creation from import remain outside the
   beta.1 Mandatory slice.
+- Kotlin Reports now uses a Rust-owned reporting contract for inclusive period
+  generation, opening balances, wallet/category/tag filters, fixed/current
+  totals, monthly/category/tag breakdowns, and overlapping debt summaries.
+  CSV, XLSX, and PDF are export-only from the generated report; Reports does
+  not introduce a second import contract.
 - Debts payment, write-off, and close actions keep remaining-balance validation,
   linked cashflow row writes, debt payment inserts, and debt status updates in a
   single Rust storage transaction; closing an already closed debt remains
@@ -149,10 +154,10 @@ Current Kotlin/Rust contract:
 Deferred Kotlin scope:
 
 - all 9-tab Desktop feature parity is the beta.1 target
-- reports, analytics, dashboard, budget, distribution, wallet edit, runtime
-  settings, sync, updater, transfer list parity, remaining import/export
-  slices, and broader operations workflows
-  still need Rust UniFFI capability wiring before beta.1 parity can be claimed
+- analytics, dashboard, budget, distribution, wallet edit, runtime settings,
+  sync, updater, transfer list parity, remaining import/export slices, and
+  broader operations workflows still need Rust UniFFI capability wiring before
+  beta.1 parity can be claimed
 - Android, iOS, CRDT sync, and Tkinter deprecation remain later beta/RC
   milestones
 

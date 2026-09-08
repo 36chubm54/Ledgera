@@ -3,23 +3,25 @@ use ledgera_engine_storage::{
     MandatoryAddToRecordsPayload, MandatoryAutoPayResult, MandatoryExpenseRow,
     MandatoryExportResult, MandatoryImportResult, MandatoryTemplateCreatePayload,
     MandatoryTemplateUpdatePayload, OperationDeleteResult, OperationExportResult,
-    OperationImportResult, RecordFilterPayload, RecordRow, StandaloneRecordCreatePayload,
-    StandaloneRecordUpdatePayload, TagColorAssignment as StorageTagColorAssignment,
-    TransferCreatePayload, TransferRow, TransferUpdatePayload, WalletBalanceRow,
-    WalletCreatePayload, WalletRow, audit_run_for_date, base_currency_code,
-    create_standalone_record_with_tag_colors, create_transfer, create_wallet, current_local_date,
-    debt_close_validated, debt_create, debt_delete, debt_delete_payment, debt_payment_rows,
-    debt_register_payment_validated, debt_register_write_off_validated, debt_rows,
-    delete_all_operations, delete_operations_selection, delete_standalone_record, delete_transfer,
-    delete_wallet, distinct_record_categories, distinct_record_descriptions, export_mandatory_csv,
-    export_mandatory_xlsx, export_records_csv, export_records_xlsx, filtered_record_list_rows,
-    import_mandatory_csv, import_mandatory_xlsx, import_records_csv, import_records_xlsx,
-    mandatory_add_to_records, mandatory_apply_auto_payments, mandatory_expense_row,
-    mandatory_expense_rows, mandatory_template_create, mandatory_template_delete,
-    mandatory_template_delete_all, mandatory_template_update, normalize_tag_colors,
-    operation_suggestions, preview_import_mandatory_csv, preview_import_mandatory_xlsx,
-    preview_import_records_csv, preview_import_records_xlsx, standalone_record_get_row,
-    tag_color_palette, tag_color_rows, tag_names, transfer_get_row,
+    OperationImportResult, RecordFilterPayload, RecordRow, ReportCategoryRow, ReportDebtRow,
+    ReportExportResult, ReportFilters, ReportMonthlyRow, ReportOperationRow, ReportResult,
+    ReportTagRow, StandaloneRecordCreatePayload, StandaloneRecordUpdatePayload,
+    TagColorAssignment as StorageTagColorAssignment, TransferCreatePayload, TransferRow,
+    TransferUpdatePayload, WalletBalanceRow, WalletCreatePayload, WalletRow, audit_run_for_date,
+    base_currency_code, create_standalone_record_with_tag_colors, create_transfer, create_wallet,
+    current_local_date, debt_close_validated, debt_create, debt_delete, debt_delete_payment,
+    debt_payment_rows, debt_register_payment_validated, debt_register_write_off_validated,
+    debt_rows, delete_all_operations, delete_operations_selection, delete_standalone_record,
+    delete_transfer, delete_wallet, distinct_record_categories, distinct_record_descriptions,
+    export_mandatory_csv, export_mandatory_xlsx, export_records_csv, export_records_xlsx,
+    filtered_record_list_rows, import_mandatory_csv, import_mandatory_xlsx, import_records_csv,
+    import_records_xlsx, mandatory_add_to_records, mandatory_apply_auto_payments,
+    mandatory_expense_row, mandatory_expense_rows, mandatory_template_create,
+    mandatory_template_delete, mandatory_template_delete_all, mandatory_template_update,
+    normalize_tag_colors, operation_suggestions, preview_import_mandatory_csv,
+    preview_import_mandatory_xlsx, preview_import_records_csv, preview_import_records_xlsx,
+    report_export_csv, report_export_pdf, report_export_xlsx, report_generate,
+    standalone_record_get_row, tag_color_palette, tag_color_rows, tag_names, transfer_get_row,
     update_standalone_record_with_tag_colors, update_transfer, wallet_balance_row,
     wallet_balance_rows, wallet_list_rows,
 };
@@ -327,6 +329,95 @@ pub struct EngineStatusDto {
     pub message: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportFiltersDto {
+    pub wallet_id: Option<i64>,
+    pub period_start: Option<String>,
+    pub period_end: Option<String>,
+    pub category: String,
+    pub tag: String,
+    pub tag_mode: String,
+    pub totals_mode: String,
+    pub group_by_category: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportSummaryDto {
+    pub net_worth_fixed: f64,
+    pub net_worth_current: f64,
+    pub initial_balance: f64,
+    pub records_total_fixed: f64,
+    pub final_balance_fixed: f64,
+    pub final_balance_current: f64,
+    pub fx_difference: f64,
+    pub records_count: i64,
+    pub balance_label: String,
+    pub active_tag: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportOperationRowDto {
+    pub date: String,
+    pub type_label: String,
+    pub kind: String,
+    pub category: String,
+    pub tags_text: String,
+    pub amount_base: f64,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportMonthlyRowDto {
+    pub month: String,
+    pub income: f64,
+    pub expenses: f64,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportCategoryRowDto {
+    pub category: String,
+    pub operations_count: i64,
+    pub total_base: f64,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportTagRowDto {
+    pub tag: String,
+    pub operations_count: i64,
+    pub total_base: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportDebtRowDto {
+    pub contact_name: String,
+    pub kind: String,
+    pub status: String,
+    pub created_at: String,
+    pub closed_at: Option<String>,
+    pub currency: String,
+    pub total_amount: f64,
+    pub remaining_amount: f64,
+    pub settled_amount: f64,
+    pub progress_percent: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportResultDto {
+    pub title: String,
+    pub base_currency: String,
+    pub display_currency: String,
+    pub summary: ReportSummaryDto,
+    pub operations: Vec<ReportOperationRowDto>,
+    pub monthly: Vec<ReportMonthlyRowDto>,
+    pub categories: Vec<ReportCategoryRowDto>,
+    pub tags: Vec<ReportTagRowDto>,
+    pub debts: Vec<ReportDebtRowDto>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportExportResultDto {
+    pub exported_rows: i64,
+    pub path: String,
+}
+
 #[derive(Debug)]
 pub enum LedgeraEngineError {
     Validation { message: String },
@@ -365,6 +456,57 @@ impl LedgeraEngine {
                 "database file does not exist".to_owned()
             },
         }
+    }
+
+    pub fn generate_report(
+        &self,
+        filters: ReportFiltersDto,
+    ) -> Result<ReportResultDto, LedgeraEngineError> {
+        report_generate(
+            &self.db_path,
+            &ReportFilters {
+                wallet_id: filters.wallet_id,
+                period_start: filters.period_start,
+                period_end: filters.period_end,
+                category: filters.category,
+                tag: filters.tag,
+                tag_mode: filters.tag_mode,
+                totals_mode: filters.totals_mode,
+                group_by_category: filters.group_by_category,
+            },
+        )
+        .map(report_to_dto)
+        .map_err(storage_error)
+    }
+
+    pub fn export_report_csv(
+        &self,
+        filters: ReportFiltersDto,
+        path: String,
+    ) -> Result<ReportExportResultDto, LedgeraEngineError> {
+        report_export_csv(&self.db_path, &report_filters_from_dto(filters), &path)
+            .map(report_export_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn export_report_xlsx(
+        &self,
+        filters: ReportFiltersDto,
+        path: String,
+    ) -> Result<ReportExportResultDto, LedgeraEngineError> {
+        report_export_xlsx(&self.db_path, &report_filters_from_dto(filters), &path)
+            .map(report_export_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn export_report_pdf(
+        &self,
+        filters: ReportFiltersDto,
+        path: String,
+    ) -> Result<ReportExportResultDto, LedgeraEngineError> {
+        report_export_pdf(&self.db_path, &report_filters_from_dto(filters), &path)
+            .map(report_export_to_dto)
+            .map_err(storage_error)
     }
 
     pub fn base_currency(&self) -> Result<String, LedgeraEngineError> {
@@ -1015,6 +1157,114 @@ fn validate_currency_code(value: &str) -> Result<(), LedgeraEngineError> {
         return Err(validation_error("Unsupported currency"));
     }
     Ok(())
+}
+
+fn report_to_dto(result: ReportResult) -> ReportResultDto {
+    ReportResultDto {
+        title: result.title,
+        base_currency: result.base_currency,
+        display_currency: result.display_currency,
+        summary: ReportSummaryDto {
+            net_worth_fixed: result.summary.net_worth_fixed,
+            net_worth_current: result.summary.net_worth_current,
+            initial_balance: result.summary.initial_balance,
+            records_total_fixed: result.summary.records_total_fixed,
+            final_balance_fixed: result.summary.final_balance_fixed,
+            final_balance_current: result.summary.final_balance_current,
+            fx_difference: result.summary.fx_difference,
+            records_count: result.summary.records_count,
+            balance_label: result.summary.balance_label,
+            active_tag: result.summary.active_tag,
+        },
+        operations: result
+            .operations
+            .into_iter()
+            .map(report_operation_to_dto)
+            .collect(),
+        monthly: result
+            .monthly
+            .into_iter()
+            .map(report_monthly_to_dto)
+            .collect(),
+        categories: result
+            .categories
+            .into_iter()
+            .map(report_category_to_dto)
+            .collect(),
+        tags: result.tags.into_iter().map(report_tag_to_dto).collect(),
+        debts: result.debts.into_iter().map(report_debt_to_dto).collect(),
+    }
+}
+
+fn report_filters_from_dto(filters: ReportFiltersDto) -> ReportFilters {
+    ReportFilters {
+        wallet_id: filters.wallet_id,
+        period_start: filters.period_start,
+        period_end: filters.period_end,
+        category: filters.category,
+        tag: filters.tag,
+        tag_mode: filters.tag_mode,
+        totals_mode: filters.totals_mode,
+        group_by_category: filters.group_by_category,
+    }
+}
+
+fn report_export_to_dto(result: ReportExportResult) -> ReportExportResultDto {
+    ReportExportResultDto {
+        exported_rows: result.exported_rows,
+        path: result.path,
+    }
+}
+
+fn report_operation_to_dto(row: ReportOperationRow) -> ReportOperationRowDto {
+    ReportOperationRowDto {
+        date: row.date,
+        type_label: row.type_label,
+        kind: row.kind,
+        category: row.category,
+        tags_text: row.tags_text,
+        amount_base: row.amount_base,
+        description: row.description,
+    }
+}
+
+fn report_monthly_to_dto(row: ReportMonthlyRow) -> ReportMonthlyRowDto {
+    ReportMonthlyRowDto {
+        month: row.month,
+        income: row.income,
+        expenses: row.expenses,
+    }
+}
+
+fn report_category_to_dto(row: ReportCategoryRow) -> ReportCategoryRowDto {
+    ReportCategoryRowDto {
+        category: row.category,
+        operations_count: row.operations_count,
+        total_base: row.total_base,
+    }
+}
+
+fn report_tag_to_dto(row: ReportTagRow) -> ReportTagRowDto {
+    ReportTagRowDto {
+        tag: row.tag,
+        operations_count: row.operations_count,
+        total_base: row.total_base,
+    }
+}
+
+fn report_debt_to_dto(row: ReportDebtRow) -> ReportDebtRowDto {
+    ReportDebtRowDto {
+        contact_name: row.contact_name,
+        kind: row.kind,
+        status: row.status,
+        created_at: row.created_at,
+        closed_at: row.closed_at,
+        currency: row.currency,
+        total_amount: row.total_amount,
+        remaining_amount: row.remaining_amount,
+        settled_amount: row.settled_amount,
+        progress_percent: row.progress_percent,
+    }
 }
 
 fn is_supported_currency(value: &str) -> bool {
