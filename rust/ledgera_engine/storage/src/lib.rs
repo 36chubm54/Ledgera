@@ -1496,6 +1496,8 @@ fn import_operation_plan(
     }
 
     let tx = conn.transaction().map_err(sqlite_err)?;
+    normalize_tag_colors_in_tx(&tx)?;
+    let preserved_tag_colors = tag_color_assignments_in_tx(&tx)?;
     let existing_transfer_ids = all_transfer_ids_in_tx(&tx)?;
     let existing_record_ids = import_replace_record_ids_in_tx(&tx, &existing_transfer_ids)?;
     let skipped_existing = skipped_operation_record_count_in_tx(&tx, &existing_transfer_ids)?;
@@ -1576,7 +1578,7 @@ fn import_operation_plan(
             }
             ParsedOperationCsvRow::Record(record) => {
                 let record_id = insert_import_record_in_tx(&tx, record, &record.description)?;
-                replace_record_tags_in_tx(&tx, record_id, &record.tags, &[])?;
+                replace_record_tags_in_tx(&tx, record_id, &record.tags, &preserved_tag_colors)?;
                 imported_records.push((record_id, record.description.clone()));
                 if let Some(debt_id) = record.related_debt_id
                     && let Some(source_record_id) = record.source_record_id
@@ -4038,6 +4040,23 @@ pub fn tag_color_rows(db_path: &str) -> StorageResult<Vec<TagColorRow>> {
     let rows = stmt
         .query_map([], |row| {
             Ok(TagColorRow {
+                name: row.get(0)?,
+                color: row.get(1)?,
+            })
+        })
+        .map_err(sqlite_err)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
+}
+
+fn tag_color_assignments_in_tx(
+    tx: &rusqlite::Transaction<'_>,
+) -> StorageResult<Vec<TagColorAssignment>> {
+    let mut stmt = tx
+        .prepare("SELECT name, COALESCE(color, '') FROM tags ORDER BY id")
+        .map_err(sqlite_err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(TagColorAssignment {
                 name: row.get(0)?,
                 color: row.get(1)?,
             })
@@ -9832,6 +9851,26 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
     #[test]
     fn import_records_csv_preview_then_commit_replaces_operations_owned_rows() {
         let db_path = create_balance_test_db();
+        create_standalone_record_with_tag_colors(
+            &db_path,
+            &StandaloneRecordCreatePayload {
+                record_type: "expense".to_owned(),
+                date: "2026-01-01".to_owned(),
+                wallet_id: 1,
+                amount_original: "1".to_owned(),
+                currency: "KZT".to_owned(),
+                rate_at_operation: "1".to_owned(),
+                amount_base: "1".to_owned(),
+                category: "Existing".to_owned(),
+                description: "Existing tag owner".to_owned(),
+                tags: vec!["work".to_owned()],
+            },
+            &[TagColorAssignment {
+                name: "work".to_owned(),
+                color: TAG_PALETTE[10].to_owned(),
+            }],
+        )
+        .unwrap();
         let path = std::env::temp_dir().join(format!(
             "ledgera_ops_import_{}.csv",
             SystemTime::now()
@@ -9850,7 +9889,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let preview = preview_import_records_csv(&db_path, path.to_str().unwrap()).unwrap();
         assert_eq!(preview.imported, 2);
         assert!(preview.dry_run);
-        assert_eq!(record_list_rows(&db_path).unwrap().len(), 5);
+        assert_eq!(record_list_rows(&db_path).unwrap().len(), 6);
 
         let result = import_records_csv(&db_path, path.to_str().unwrap()).unwrap();
 
@@ -9868,6 +9907,15 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 && record.category == "Salary"
                 && record.tags == vec!["main".to_owned(), "work".to_owned()]
         }));
+        let imported_tag_colors = tag_color_rows(&db_path).unwrap();
+        assert_eq!(
+            imported_tag_colors
+                .iter()
+                .find(|row| row.name == "work")
+                .unwrap()
+                .color,
+            TAG_PALETTE[10]
+        );
         let transfer_rows: Vec<_> = records
             .iter()
             .filter(|record| record.transfer_id.is_some())
