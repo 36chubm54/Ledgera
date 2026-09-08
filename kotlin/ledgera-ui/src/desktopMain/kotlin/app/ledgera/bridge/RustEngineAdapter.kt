@@ -119,7 +119,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
 
     override suspend fun reportWallets(): List<WalletOption> = listWallets()
     override suspend fun reportCategories(): List<String> =
-        (listCategories("income") + listCategories("expense") + listCategories("mandatory_expense")).distinct().sorted()
+        (listCategories("income") + listCategories("expense")).distinct().sorted()
     override suspend fun reportTags(): List<String> = listTags()
 
     override suspend fun exportReportCsv(filters: ReportFilters, path: String): ReportExportResult =

@@ -9855,6 +9855,51 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
     }
 
     #[test]
+    fn report_exports_keep_five_columns_and_sections() {
+        let db_path = create_balance_test_db();
+        let csv_path = temp_test_path("ledgera_report", "csv");
+        let xlsx_path = temp_test_path("ledgera_report", "xlsx");
+        let pdf_path = temp_test_path("ledgera_report", "pdf");
+        let filters = ReportFilters {
+            period_start: Some("2026-01-01".to_owned()),
+            period_end: Some("2026-01-04".to_owned()),
+            ..ReportFilters::default()
+        };
+
+        report_export_csv(&db_path, &filters, csv_path.to_str().unwrap()).unwrap();
+        let mut reader = ::csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_path(&csv_path)
+            .unwrap();
+        let rows: Vec<::csv::StringRecord> = reader.records().map(Result::unwrap).collect();
+        assert!(!rows.is_empty());
+        assert!(rows.iter().all(|row| row.len() == 5));
+        assert_eq!(rows[1].get(4), Some("Tags"));
+
+        report_export_xlsx(&db_path, &filters, xlsx_path.to_str().unwrap()).unwrap();
+        let mut workbook = open_workbook_auto(&xlsx_path).unwrap();
+        assert_eq!(
+            workbook.sheet_names(),
+            vec!["Report", "By Category", "By Tag", "Yearly Report"]
+        );
+        let report_range = workbook.worksheet_range("Report").unwrap();
+        assert_eq!(
+            report_range.get_value((1, 4)).map(xlsx_cell_to_string),
+            Some("Tags".to_owned())
+        );
+
+        report_export_pdf(&db_path, &filters, pdf_path.to_str().unwrap()).unwrap();
+        let pdf = fs::read(&pdf_path).unwrap();
+        assert!(pdf.starts_with(b"%PDF-1.4"));
+        assert!(String::from_utf8_lossy(&pdf).contains("Tags"));
+
+        let _ = fs::remove_file(csv_path);
+        let _ = fs::remove_file(xlsx_path);
+        let _ = fs::remove_file(pdf_path);
+        remove_test_db(&db_path);
+    }
+
+    #[test]
     fn import_records_csv_preview_then_commit_replaces_operations_owned_rows() {
         let db_path = create_balance_test_db();
         create_standalone_record_with_tag_colors(

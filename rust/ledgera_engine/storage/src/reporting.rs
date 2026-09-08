@@ -4,7 +4,7 @@ use std::path::Path;
 
 use ledgera_engine_core::minor_to_money_value;
 use rusqlite::Connection;
-use rust_xlsxwriter::{Format, Workbook};
+use rust_xlsxwriter::{Format, FormatAlign, FormatBorder, FormatPattern, Workbook, Worksheet};
 
 use crate::{
     RecordRow, StorageResult, base_currency_code, current_local_date, record_list_rows,
@@ -323,7 +323,11 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
         period_records.push((record, tags));
     }
     period_records.sort_by(|left, right| {
-        right.0.date.cmp(&left.0.date).then_with(|| right.0.id.cmp(&left.0.id))
+        right
+            .0
+            .date
+            .cmp(&left.0.date)
+            .then_with(|| right.0.id.cmp(&left.0.id))
     });
     if !normalized.category.trim().is_empty() || !normalized.tag.trim().is_empty() {
         opening_balance = 0.0;
@@ -476,7 +480,7 @@ pub fn report_export_csv(
     let report = report_generate(db_path, filters)?;
     let mut writer = csv::Writer::from_writer(Vec::new());
     writer
-        .write_record([report.title.as_str(), "", "", ""])
+        .write_record([report.title.as_str(), "", "", "", ""])
         .map_err(|err| err.to_string())?;
     writer
         .write_record([
@@ -485,6 +489,15 @@ pub fn report_export_csv(
             "Category",
             &format!("Amount ({})", report.base_currency),
             "Tags",
+        ])
+        .map_err(|err| err.to_string())?;
+    writer
+        .write_record([
+            "",
+            "",
+            "",
+            &report_amounts_note(&report.filters.totals_mode),
+            "",
         ])
         .map_err(|err| err.to_string())?;
     writer
@@ -540,17 +553,16 @@ pub fn report_export_xlsx(
 ) -> StorageResult<ReportExportResult> {
     let report = report_generate(db_path, filters)?;
     let mut workbook = Workbook::new();
-    let header = Format::new()
-        .set_bold()
-        .set_font_color("#FFFFFF")
-        .set_background_color("#1F4E78");
-    let amount = Format::new().set_num_format("#,##0.00");
+    let header = report_header_format();
+    let data = report_data_format();
+    let amount = report_amount_format();
+    let total = report_total_format();
     let worksheet = workbook
         .add_worksheet()
         .set_name("Report")
         .map_err(|err| err.to_string())?;
     worksheet
-        .write_string(0, 0, &report.title)
+        .write_string_with_format(0, 0, &report.title, &report_title_format())
         .map_err(|err| err.to_string())?;
     worksheet
         .write_string_with_format(1, 0, "Date", &header)
@@ -567,45 +579,70 @@ pub fn report_export_xlsx(
     worksheet
         .write_string_with_format(1, 4, "Tags", &header)
         .map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(
+            2,
+            3,
+            &report_amounts_note(&report.filters.totals_mode),
+            &report_note_format(),
+        )
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(3, 1, &report.summary.balance_label, &data)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_number_with_format(3, 3, report.summary.initial_balance, &amount)
+        .map_err(|err| err.to_string())?;
     for (index, row) in report.operations.iter().enumerate() {
-        let line = (index + 2) as u32;
+        let line = (index + 4) as u32;
         worksheet
-            .write_string(line, 0, &row.date)
+            .write_string_with_format(line, 0, &row.date, &data)
             .map_err(|err| err.to_string())?;
         worksheet
-            .write_string(line, 1, &row.type_label)
+            .write_string_with_format(line, 1, &row.type_label, &data)
             .map_err(|err| err.to_string())?;
         worksheet
-            .write_string(line, 2, &row.category)
+            .write_string_with_format(line, 2, &row.category, &data)
             .map_err(|err| err.to_string())?;
         worksheet
             .write_number_with_format(line, 3, row.amount_base, &amount)
             .map_err(|err| err.to_string())?;
         worksheet
-            .write_string(line, 4, &row.tags_text)
+            .write_string_with_format(line, 4, &row.tags_text, &data)
             .map_err(|err| err.to_string())?;
     }
+    let subtotal_row = (report.operations.len() + 4) as u32;
+    worksheet
+        .write_string_with_format(subtotal_row, 1, "Subtotal", &total)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_number_with_format(subtotal_row, 3, report.summary.records_total_fixed, &amount)
+        .map_err(|err| err.to_string())?;
+    let final_row = subtotal_row + 1;
+    worksheet
+        .write_string_with_format(final_row, 1, "Final balance", &total)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_number_with_format(final_row, 3, report.summary.final_balance_fixed, &amount)
+        .map_err(|err| err.to_string())?;
     worksheet
         .set_freeze_panes(2, 0)
         .map_err(|err| err.to_string())?;
     worksheet
-        .autofilter(1, 0, (report.operations.len() + 1) as u32, 4)
+        .autofilter(1, 0, final_row, 4)
         .map_err(|err| err.to_string())?;
-    worksheet
-        .set_column_width(0, 14)
-        .map_err(|err| err.to_string())?;
-    worksheet
-        .set_column_width(1, 20)
-        .map_err(|err| err.to_string())?;
-    worksheet
-        .set_column_width(2, 24)
-        .map_err(|err| err.to_string())?;
-    worksheet
-        .set_column_width(3, 16)
-        .map_err(|err| err.to_string())?;
-    worksheet
-        .set_column_width(4, 32)
-        .map_err(|err| err.to_string())?;
+    set_report_column_widths(worksheet)?;
+
+    if !report.categories.is_empty() {
+        write_report_category_sheet(&mut workbook, &report, &header, &data, &amount)?;
+    }
+    if !report.tags.is_empty() {
+        write_report_tag_sheet(&mut workbook, &report, &header, &data, &amount)?;
+    }
+    write_report_summary_sheet(&mut workbook, &report, &header, &data, &amount, &total)?;
+    if !report.debts.is_empty() {
+        write_report_debt_sheet(&mut workbook, &report, &header, &data, &amount)?;
+    }
     let bytes = workbook.save_to_buffer().map_err(|err| err.to_string())?;
     atomic_replace(Path::new(path), &bytes)?;
     Ok(ReportExportResult {
@@ -614,48 +651,454 @@ pub fn report_export_xlsx(
     })
 }
 
+fn report_title_format() -> Format {
+    Format::new()
+        .set_bold()
+        .set_font_size(14.0)
+        .set_background_color("#D9EAD3")
+        .set_pattern(FormatPattern::Solid)
+        .set_border(FormatBorder::Thin)
+        .set_border_color("#D9D9D9")
+}
+
+fn report_header_format() -> Format {
+    Format::new()
+        .set_bold()
+        .set_font_color("#FFFFFF")
+        .set_background_color("#1F4E78")
+        .set_pattern(FormatPattern::Solid)
+        .set_border(FormatBorder::Thin)
+        .set_border_color("#D9D9D9")
+        .set_align(FormatAlign::Left)
+}
+
+fn report_data_format() -> Format {
+    Format::new()
+        .set_border(FormatBorder::Thin)
+        .set_border_color("#D9D9D9")
+        .set_align(FormatAlign::Left)
+}
+
+fn report_note_format() -> Format {
+    report_data_format().set_italic().set_font_color("#666666")
+}
+
+fn report_amounts_note(totals_mode: &str) -> String {
+    if totals_mode.eq_ignore_ascii_case("current") {
+        "Current amounts using export-time rates".to_owned()
+    } else {
+        "Fixed amounts using operation-time rates".to_owned()
+    }
+}
+
+fn report_amount_format() -> Format {
+    report_data_format()
+        .set_num_format("#,##0.00")
+        .set_align(FormatAlign::Right)
+}
+
+fn report_total_format() -> Format {
+    report_data_format()
+        .set_bold()
+        .set_background_color("#E2F0D9")
+        .set_pattern(FormatPattern::Solid)
+}
+
+fn set_report_column_widths(worksheet: &mut Worksheet) -> StorageResult<()> {
+    for (column, width) in [14.0, 22.0, 26.0, 18.0, 32.0].into_iter().enumerate() {
+        worksheet
+            .set_column_width(column as u16, width)
+            .map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
+fn write_report_summary_sheet(
+    workbook: &mut Workbook,
+    report: &ReportResult,
+    header: &Format,
+    data: &Format,
+    amount: &Format,
+    total: &Format,
+) -> StorageResult<()> {
+    let worksheet = workbook
+        .add_worksheet()
+        .set_name("Yearly Report")
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(0, 0, "Month", header)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(0, 1, &format!("Income ({})", report.base_currency), header)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(
+            0,
+            2,
+            &format!("Expenses ({})", report.base_currency),
+            header,
+        )
+        .map_err(|err| err.to_string())?;
+    for (index, row) in report.monthly.iter().enumerate() {
+        let line = (index + 1) as u32;
+        worksheet
+            .write_string_with_format(line, 0, &row.month, data)
+            .map_err(|err| err.to_string())?;
+        worksheet
+            .write_number_with_format(line, 1, row.income, amount)
+            .map_err(|err| err.to_string())?;
+        worksheet
+            .write_number_with_format(line, 2, row.expenses, amount)
+            .map_err(|err| err.to_string())?;
+    }
+    let total_row = (report.monthly.len() + 1) as u32;
+    worksheet
+        .write_string_with_format(total_row, 0, "Total", total)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_number_with_format(
+            total_row,
+            1,
+            report.monthly.iter().map(|row| row.income).sum::<f64>(),
+            amount,
+        )
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_number_with_format(
+            total_row,
+            2,
+            report.monthly.iter().map(|row| row.expenses).sum::<f64>(),
+            amount,
+        )
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .set_freeze_panes(1, 0)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .autofilter(0, 0, total_row, 2)
+        .map_err(|err| err.to_string())?;
+    for (column, width) in [16.0, 18.0, 20.0].into_iter().enumerate() {
+        worksheet
+            .set_column_width(column as u16, width)
+            .map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
+fn write_report_category_sheet(
+    workbook: &mut Workbook,
+    report: &ReportResult,
+    header: &Format,
+    data: &Format,
+    amount: &Format,
+) -> StorageResult<()> {
+    let worksheet = workbook
+        .add_worksheet()
+        .set_name("By Category")
+        .map_err(|err| err.to_string())?;
+    for (column, value) in ["Category", "Operations", "Amount"].into_iter().enumerate() {
+        worksheet
+            .write_string_with_format(0, column as u16, value, header)
+            .map_err(|err| err.to_string())?;
+    }
+    for (index, row) in report.categories.iter().enumerate() {
+        let line = (index + 1) as u32;
+        worksheet
+            .write_string_with_format(line, 0, &row.category, data)
+            .map_err(|err| err.to_string())?;
+        worksheet
+            .write_number_with_format(line, 1, row.operations_count as f64, data)
+            .map_err(|err| err.to_string())?;
+        worksheet
+            .write_number_with_format(line, 2, row.total_base, amount)
+            .map_err(|err| err.to_string())?;
+    }
+    worksheet
+        .set_freeze_panes(1, 0)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .autofilter(0, 0, report.categories.len() as u32, 2)
+        .map_err(|err| err.to_string())?;
+    for (column, width) in [30.0, 16.0, 18.0].into_iter().enumerate() {
+        worksheet
+            .set_column_width(column as u16, width)
+            .map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
+fn write_report_tag_sheet(
+    workbook: &mut Workbook,
+    report: &ReportResult,
+    header: &Format,
+    data: &Format,
+    amount: &Format,
+) -> StorageResult<()> {
+    let worksheet = workbook
+        .add_worksheet()
+        .set_name("By Tag")
+        .map_err(|err| err.to_string())?;
+    for (column, value) in ["Tag", "Operations", "Amount"].into_iter().enumerate() {
+        worksheet
+            .write_string_with_format(0, column as u16, value, header)
+            .map_err(|err| err.to_string())?;
+    }
+    for (index, row) in report.tags.iter().enumerate() {
+        let line = (index + 1) as u32;
+        worksheet
+            .write_string_with_format(line, 0, &row.tag, data)
+            .map_err(|err| err.to_string())?;
+        worksheet
+            .write_number_with_format(line, 1, row.operations_count as f64, data)
+            .map_err(|err| err.to_string())?;
+        worksheet
+            .write_number_with_format(line, 2, row.total_base, amount)
+            .map_err(|err| err.to_string())?;
+    }
+    worksheet
+        .set_freeze_panes(1, 0)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .autofilter(0, 0, report.tags.len() as u32, 2)
+        .map_err(|err| err.to_string())?;
+    for (column, width) in [30.0, 16.0, 18.0].into_iter().enumerate() {
+        worksheet
+            .set_column_width(column as u16, width)
+            .map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
+fn write_report_debt_sheet(
+    workbook: &mut Workbook,
+    report: &ReportResult,
+    header: &Format,
+    data: &Format,
+    amount: &Format,
+) -> StorageResult<()> {
+    let worksheet = workbook
+        .add_worksheet()
+        .set_name("Debts")
+        .map_err(|err| err.to_string())?;
+    let headers = [
+        "Contact",
+        "Type",
+        "Status",
+        "Created",
+        "Closed",
+        "Currency",
+        "Total",
+        "Remaining",
+        "Settled",
+        "Progress %",
+    ];
+    for (column, value) in headers.into_iter().enumerate() {
+        worksheet
+            .write_string_with_format(0, column as u16, value, header)
+            .map_err(|err| err.to_string())?;
+    }
+    for (index, row) in report.debts.iter().enumerate() {
+        let line = (index + 1) as u32;
+        let values = [
+            &row.contact_name,
+            &row.kind,
+            &row.status,
+            &row.created_at,
+            row.closed_at.as_deref().unwrap_or("-"),
+            &row.currency,
+        ];
+        for (column, value) in values.into_iter().enumerate() {
+            worksheet
+                .write_string_with_format(line, column as u16, value, data)
+                .map_err(|err| err.to_string())?;
+        }
+        for (column, value) in [
+            (6, row.total_amount),
+            (7, row.remaining_amount),
+            (8, row.settled_amount),
+            (9, row.progress_percent),
+        ] {
+            worksheet
+                .write_number_with_format(line, column, value, amount)
+                .map_err(|err| err.to_string())?;
+        }
+    }
+    worksheet
+        .set_freeze_panes(1, 0)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .autofilter(0, 0, report.debts.len() as u32, 9)
+        .map_err(|err| err.to_string())?;
+    for (column, width) in [24.0, 14.0, 14.0, 14.0, 14.0, 12.0, 16.0, 16.0, 16.0, 14.0]
+        .into_iter()
+        .enumerate()
+    {
+        worksheet
+            .set_column_width(column as u16, width)
+            .map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn report_export_pdf(
     db_path: &str,
     filters: &ReportFilters,
     path: &str,
 ) -> StorageResult<ReportExportResult> {
     let report = report_generate(db_path, filters)?;
-    let mut text = format!("{}\n\n", report.title);
-    text.push_str(&format!(
-        "{}: {:.2}\n",
-        report.summary.balance_label, report.summary.initial_balance
-    ));
+    let mut lines = vec![
+        report.title.clone(),
+        String::new(),
+        format!(
+            "{}: {:.2} {}",
+            report.summary.balance_label, report.summary.initial_balance, report.base_currency
+        ),
+        "Date | Type | Category | Amount | Tags".to_owned(),
+    ];
     for row in &report.operations {
-        text.push_str(&format!(
-            "{} | {} | {} | {:.2}\n",
-            row.date, row.type_label, row.category, row.amount_base
+        lines.push(format!(
+            "{} | {} | {} | {:.2} {} | {}",
+            row.date,
+            row.type_label,
+            row.category,
+            row.amount_base,
+            report.base_currency,
+            row.tags_text
         ));
     }
-    text.push_str(&format!(
-        "\nSubtotal: {:.2}\nFinal balance: {:.2}\n",
-        report.summary.records_total_fixed, report.summary.final_balance_fixed
+    lines.push(String::new());
+    lines.push(format!(
+        "Subtotal: {:.2} {}",
+        report.summary.records_total_fixed, report.base_currency
     ));
-    let escaped = text
+    lines.push(format!(
+        "Final balance: {:.2} {}",
+        report.summary.final_balance_fixed, report.base_currency
+    ));
+    lines.push(String::new());
+    lines.push("Monthly summary".to_owned());
+    for row in &report.monthly {
+        lines.push(format!(
+            "{} | Income {:.2} | Expenses {:.2}",
+            row.month, row.income, row.expenses
+        ));
+    }
+    if !report.categories.is_empty() {
+        lines.push(String::new());
+        lines.push("Category summary".to_owned());
+        for row in &report.categories {
+            lines.push(format!(
+                "{} | {} operations | {:.2} {}",
+                row.category, row.operations_count, row.total_base, report.base_currency
+            ));
+        }
+    }
+    if !report.tags.is_empty() {
+        lines.push(String::new());
+        lines.push("Tag summary".to_owned());
+        for row in &report.tags {
+            lines.push(format!(
+                "{} | {} operations | {:.2} {}",
+                row.tag, row.operations_count, row.total_base, report.base_currency
+            ));
+        }
+    }
+    if !report.debts.is_empty() {
+        lines.push(String::new());
+        lines.push("Debts".to_owned());
+        for row in &report.debts {
+            lines.push(format!(
+                "{} | {} | {} | {:.2} / {:.2} {}",
+                row.contact_name,
+                row.kind,
+                row.status,
+                row.remaining_amount,
+                row.total_amount,
+                row.currency
+            ));
+        }
+    }
+    let pdf = build_text_pdf(&lines);
+    atomic_replace(Path::new(path), pdf.as_bytes())?;
+    Ok(ReportExportResult {
+        exported_rows: report.operations.len() as i64,
+        path: path.to_owned(),
+    })
+}
+
+fn build_text_pdf(lines: &[String]) -> String {
+    const LINES_PER_PAGE: usize = 48;
+    let pages = lines.chunks(LINES_PER_PAGE).collect::<Vec<_>>();
+    let page_count = pages.len().max(1);
+    let first_page_object = 3;
+    let font_object = first_page_object + page_count;
+    let first_content_object = font_object + 1;
+    let mut objects = Vec::new();
+    objects.push("<< /Type /Catalog /Pages 2 0 R >>".to_owned());
+    let kids = (0..page_count)
+        .map(|index| format!("{} 0 R", first_page_object + index))
+        .collect::<Vec<_>>()
+        .join(" ");
+    objects.push(format!(
+        "<< /Type /Pages /Kids [{kids}] /Count {page_count} >>"
+    ));
+    for index in 0..page_count {
+        objects.push(format!(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 {font_object} 0 R >> >> /Contents {} 0 R >>",
+            first_content_object + index
+        ));
+    }
+    objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned());
+    for page in pages.iter().take(page_count) {
+        let mut content = String::from("BT /F1 9 Tf 36 806 Td ");
+        for (index, line) in page.iter().enumerate() {
+            if index > 0 {
+                content.push_str("0 -14 Td ");
+            }
+            content.push('(');
+            content.push_str(&escape_pdf_text(line));
+            content.push_str(") Tj ");
+        }
+        content.push_str("ET");
+        objects.push(format!(
+            "<< /Length {} >>\nstream\n{}\nendstream",
+            content.len(),
+            content
+        ));
+    }
+    let mut pdf = String::from("%PDF-1.4\n");
+    let mut offsets = vec![0usize];
+    for (index, object) in objects.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.push_str(&format!("{} 0 obj\n{}\nendobj\n", index + 1, object));
+    }
+    let xref_offset = pdf.len();
+    pdf.push_str(&format!(
+        "xref\n0 {}\n0000000000 65535 f \n",
+        objects.len() + 1
+    ));
+    for offset in offsets.iter().skip(1) {
+        pdf.push_str(&format!("{offset:010} 00000 n \n"));
+    }
+    pdf.push_str(&format!(
+        "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n",
+        objects.len() + 1
+    ));
+    pdf
+}
+
+fn escape_pdf_text(value: &str) -> String {
+    value
         .bytes()
         .map(|byte| {
-            if byte.is_ascii_graphic() || byte == b' ' || byte == b'\n' || byte == b'\r' {
+            if byte.is_ascii_graphic() || byte == b' ' {
                 byte as char
             } else {
                 '?'
             }
         })
         .collect::<String>()
+        .replace('\\', "\\\\")
         .replace('(', "\\(")
-        .replace(')', "\\)");
-    let content = format!("BT /F1 9 Tf 36 806 Td ({escaped}) Tj ET");
-    let pdf = format!(
-        "%PDF-1.4\n1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>endobj\n4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n5 0 obj<< /Length {} >>stream\n{}\nendstream endobj\ntrailer<< /Root 1 0 R >>\n%%EOF\n",
-        content.len(),
-        content
-    );
-    atomic_replace(Path::new(path), pdf.as_bytes())?;
-    Ok(ReportExportResult {
-        exported_rows: report.operations.len() as i64,
-        path: path.to_owned(),
-    })
+        .replace(')', "\\)")
 }

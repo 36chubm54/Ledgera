@@ -24,7 +24,7 @@ This project adheres to Semantic Versioning.
 - Added a beta.1 Kotlin Settings wallet slice for listing wallets and creating active base-currency wallets through Rust/Kotlin UniFFI.
 - Added a beta.1 Kotlin Settings Audit card that runs the read-only Rust AuditEngine v2 report through Rust/Kotlin UniFFI and shows findings without repair actions.
 - Added the beta.1 Kotlin Reports read-only generation slice through Rust/Kotlin UniFFI, including period, wallet, category, tag, fixed/current, monthly, category, tag, and debt summaries.
-- Added Rust-backed Reports CSV/XLSX/PDF export with atomic file replacement; Reports import remains intentionally out of scope.
+- Added Rust-backed Reports CSV/XLSX/PDF export with atomic file replacement; the Transactions statement now uses a consistent five-column contract including Tags, XLSX exports include the Report, By Category, By Tag, Yearly Report, and Debts sheets, and Reports import remains intentionally out of scope.
 
 ### Changed
 
