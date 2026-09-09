@@ -9890,8 +9890,8 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
 
         report_export_pdf(&db_path, &filters, pdf_path.to_str().unwrap()).unwrap();
         let pdf = fs::read(&pdf_path).unwrap();
-        assert!(pdf.starts_with(b"%PDF-1.4"));
-        assert!(String::from_utf8_lossy(&pdf).contains("Tags"));
+        assert!(pdf.starts_with(b"%PDF-"));
+        assert!(String::from_utf8_lossy(&pdf).contains("/Type0"));
 
         let _ = fs::remove_file(csv_path);
         let _ = fs::remove_file(xlsx_path);

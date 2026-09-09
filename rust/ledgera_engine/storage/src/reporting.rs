@@ -3,6 +3,10 @@ use std::fs;
 use std::path::Path;
 
 use ledgera_engine_core::minor_to_money_value;
+use printpdf::{
+    Color, Mm, Op, PaintMode, ParsedFont, PdfDocument, PdfFontHandle, PdfPage, PdfSaveOptions,
+    Point, Pt, Rect, Rgb, TextItem,
+};
 use rusqlite::Connection;
 use rust_xlsxwriter::{Format, FormatAlign, FormatBorder, FormatPattern, Workbook, Worksheet};
 
@@ -556,13 +560,19 @@ pub fn report_export_xlsx(
     let header = report_header_format();
     let data = report_data_format();
     let amount = report_amount_format();
-    let total = report_total_format();
+    let subtotal = report_subtotal_format();
+    let total = report_final_format();
+    let subtotal_amount = report_subtotal_amount_format();
+    let total_amount = report_final_amount_format();
     let worksheet = workbook
         .add_worksheet()
         .set_name("Report")
         .map_err(|err| err.to_string())?;
     worksheet
-        .write_string_with_format(0, 0, &report.title, &report_title_format())
+        .merge_range(0, 0, 0, 4, &report.title, &report_title_format())
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .set_row_height(0, 18.0)
         .map_err(|err| err.to_string())?;
     worksheet
         .write_string_with_format(1, 0, "Date", &header)
@@ -578,6 +588,9 @@ pub fn report_export_xlsx(
         .map_err(|err| err.to_string())?;
     worksheet
         .write_string_with_format(1, 4, "Tags", &header)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .set_row_height(1, 20.0)
         .map_err(|err| err.to_string())?;
     worksheet
         .write_string_with_format(
@@ -613,17 +626,45 @@ pub fn report_export_xlsx(
     }
     let subtotal_row = (report.operations.len() + 4) as u32;
     worksheet
-        .write_string_with_format(subtotal_row, 1, "Subtotal", &total)
+        .write_string_with_format(subtotal_row, 1, "Subtotal", &subtotal)
         .map_err(|err| err.to_string())?;
     worksheet
-        .write_number_with_format(subtotal_row, 3, report.summary.records_total_fixed, &amount)
+        .write_number_with_format(
+            subtotal_row,
+            3,
+            report.summary.records_total_fixed,
+            &subtotal_amount,
+        )
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_blank(subtotal_row, 0, &subtotal)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_blank(subtotal_row, 2, &subtotal)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_blank(subtotal_row, 4, &subtotal)
         .map_err(|err| err.to_string())?;
     let final_row = subtotal_row + 1;
     worksheet
         .write_string_with_format(final_row, 1, "Final balance", &total)
         .map_err(|err| err.to_string())?;
     worksheet
-        .write_number_with_format(final_row, 3, report.summary.final_balance_fixed, &amount)
+        .write_blank(final_row, 0, &total)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_blank(final_row, 2, &total)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_blank(final_row, 4, &total)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_number_with_format(
+            final_row,
+            3,
+            report.summary.final_balance_fixed,
+            &total_amount,
+        )
         .map_err(|err| err.to_string())?;
     worksheet
         .set_freeze_panes(2, 0)
@@ -659,6 +700,7 @@ fn report_title_format() -> Format {
         .set_pattern(FormatPattern::Solid)
         .set_border(FormatBorder::Thin)
         .set_border_color("#D9D9D9")
+        .set_align(FormatAlign::VerticalCenter)
 }
 
 fn report_header_format() -> Format {
@@ -670,6 +712,7 @@ fn report_header_format() -> Format {
         .set_border(FormatBorder::Thin)
         .set_border_color("#D9D9D9")
         .set_align(FormatAlign::Left)
+        .set_align(FormatAlign::VerticalCenter)
 }
 
 fn report_data_format() -> Format {
@@ -677,6 +720,7 @@ fn report_data_format() -> Format {
         .set_border(FormatBorder::Thin)
         .set_border_color("#D9D9D9")
         .set_align(FormatAlign::Left)
+        .set_align(FormatAlign::VerticalCenter)
 }
 
 fn report_note_format() -> Format {
@@ -697,11 +741,30 @@ fn report_amount_format() -> Format {
         .set_align(FormatAlign::Right)
 }
 
-fn report_total_format() -> Format {
+fn report_subtotal_format() -> Format {
     report_data_format()
         .set_bold()
         .set_background_color("#E2F0D9")
         .set_pattern(FormatPattern::Solid)
+}
+
+fn report_final_format() -> Format {
+    report_data_format()
+        .set_bold()
+        .set_background_color("#FFF2CC")
+        .set_pattern(FormatPattern::Solid)
+}
+
+fn report_subtotal_amount_format() -> Format {
+    report_subtotal_format()
+        .set_num_format("#,##0.00")
+        .set_align(FormatAlign::Right)
+}
+
+fn report_final_amount_format() -> Format {
+    report_final_format()
+        .set_num_format("#,##0.00")
+        .set_align(FormatAlign::Right)
 }
 
 fn set_report_column_widths(worksheet: &mut Worksheet) -> StorageResult<()> {
@@ -721,6 +784,7 @@ fn write_report_summary_sheet(
     amount: &Format,
     total: &Format,
 ) -> StorageResult<()> {
+    let total_amount = report_final_amount_format();
     let worksheet = workbook
         .add_worksheet()
         .set_name("Yearly Report")
@@ -738,6 +802,9 @@ fn write_report_summary_sheet(
             &format!("Expenses ({})", report.base_currency),
             header,
         )
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .set_row_height(0, 20.0)
         .map_err(|err| err.to_string())?;
     for (index, row) in report.monthly.iter().enumerate() {
         let line = (index + 1) as u32;
@@ -760,7 +827,7 @@ fn write_report_summary_sheet(
             total_row,
             1,
             report.monthly.iter().map(|row| row.income).sum::<f64>(),
-            amount,
+            &total_amount,
         )
         .map_err(|err| err.to_string())?;
     worksheet
@@ -768,7 +835,7 @@ fn write_report_summary_sheet(
             total_row,
             2,
             report.monthly.iter().map(|row| row.expenses).sum::<f64>(),
-            amount,
+            &total_amount,
         )
         .map_err(|err| err.to_string())?;
     worksheet
@@ -946,159 +1013,420 @@ pub fn report_export_pdf(
     path: &str,
 ) -> StorageResult<ReportExportResult> {
     let report = report_generate(db_path, filters)?;
-    let mut lines = vec![
-        report.title.clone(),
-        String::new(),
-        format!(
-            "{}: {:.2} {}",
-            report.summary.balance_label, report.summary.initial_balance, report.base_currency
+    let mut rows = vec![
+        PdfReportRow::merged(report.title.clone(), PdfRowStyle::Title),
+        PdfReportRow::new(
+            ["Date", "Type", "Category", "Amount", "Tags"],
+            PdfRowStyle::Header,
         ),
-        "Date | Type | Category | Amount | Tags".to_owned(),
+        PdfReportRow::merged(
+            report_amounts_note(&report.filters.totals_mode),
+            PdfRowStyle::Note,
+        ),
     ];
+    rows.push(PdfReportRow::new(
+        [
+            String::new(),
+            report.summary.balance_label.clone(),
+            String::new(),
+            format!("{:.2}", report.summary.initial_balance),
+            String::new(),
+        ],
+        PdfRowStyle::Balance,
+    ));
     for row in &report.operations {
-        lines.push(format!(
-            "{} | {} | {} | {:.2} {} | {}",
-            row.date,
-            row.type_label,
-            row.category,
-            row.amount_base,
-            report.base_currency,
-            row.tags_text
+        rows.push(PdfReportRow::new(
+            [
+                row.date.clone(),
+                row.type_label.clone(),
+                row.category.clone(),
+                format!("{:.2}", row.amount_base),
+                row.tags_text.clone(),
+            ],
+            PdfRowStyle::Data,
         ));
     }
-    lines.push(String::new());
-    lines.push(format!(
-        "Subtotal: {:.2} {}",
-        report.summary.records_total_fixed, report.base_currency
+    rows.push(PdfReportRow::new(
+        [
+            String::new(),
+            "Subtotal".to_owned(),
+            String::new(),
+            format!("{:.2}", report.summary.records_total_fixed),
+            String::new(),
+        ],
+        PdfRowStyle::Subtotal,
     ));
-    lines.push(format!(
-        "Final balance: {:.2} {}",
-        report.summary.final_balance_fixed, report.base_currency
+    rows.push(PdfReportRow::new(
+        [
+            String::new(),
+            "Final balance".to_owned(),
+            String::new(),
+            format!("{:.2}", report.summary.final_balance_fixed),
+            String::new(),
+        ],
+        PdfRowStyle::Final,
     ));
-    lines.push(String::new());
-    lines.push("Monthly summary".to_owned());
+    rows.push(PdfReportRow::merged(
+        "Monthly summary".to_owned(),
+        PdfRowStyle::Section,
+    ));
+    rows.push(PdfReportRow::new(
+        ["Month", "Income", "Expenses", "", ""],
+        PdfRowStyle::Header,
+    ));
     for row in &report.monthly {
-        lines.push(format!(
-            "{} | Income {:.2} | Expenses {:.2}",
-            row.month, row.income, row.expenses
+        rows.push(PdfReportRow::new(
+            [
+                row.month.clone(),
+                format!("{:.2}", row.income),
+                format!("{:.2}", row.expenses),
+                String::new(),
+                String::new(),
+            ],
+            PdfRowStyle::Data,
         ));
     }
     if !report.categories.is_empty() {
-        lines.push(String::new());
-        lines.push("Category summary".to_owned());
+        rows.push(PdfReportRow::merged(
+            "Category summary".to_owned(),
+            PdfRowStyle::Section,
+        ));
+        rows.push(PdfReportRow::new(
+            ["Category", "Operations", "Amount", "", ""],
+            PdfRowStyle::Header,
+        ));
         for row in &report.categories {
-            lines.push(format!(
-                "{} | {} operations | {:.2} {}",
-                row.category, row.operations_count, row.total_base, report.base_currency
+            rows.push(PdfReportRow::new(
+                [
+                    row.category.clone(),
+                    row.operations_count.to_string(),
+                    format!("{:.2}", row.total_base),
+                    String::new(),
+                    String::new(),
+                ],
+                PdfRowStyle::Data,
             ));
         }
     }
     if !report.tags.is_empty() {
-        lines.push(String::new());
-        lines.push("Tag summary".to_owned());
+        rows.push(PdfReportRow::merged(
+            "Tag summary".to_owned(),
+            PdfRowStyle::Section,
+        ));
+        rows.push(PdfReportRow::new(
+            ["Tag", "Operations", "Amount", "", ""],
+            PdfRowStyle::Header,
+        ));
         for row in &report.tags {
-            lines.push(format!(
-                "{} | {} operations | {:.2} {}",
-                row.tag, row.operations_count, row.total_base, report.base_currency
+            rows.push(PdfReportRow::new(
+                [
+                    row.tag.clone(),
+                    row.operations_count.to_string(),
+                    format!("{:.2}", row.total_base),
+                    String::new(),
+                    String::new(),
+                ],
+                PdfRowStyle::Data,
             ));
         }
     }
     if !report.debts.is_empty() {
-        lines.push(String::new());
-        lines.push("Debts".to_owned());
+        rows.push(PdfReportRow::merged(
+            "Debts".to_owned(),
+            PdfRowStyle::Section,
+        ));
+        rows.push(PdfReportRow::new(
+            ["Contact", "Type", "Status", "Total", "Remaining"],
+            PdfRowStyle::Header,
+        ));
         for row in &report.debts {
-            lines.push(format!(
-                "{} | {} | {} | {:.2} / {:.2} {}",
-                row.contact_name,
-                row.kind,
-                row.status,
-                row.remaining_amount,
-                row.total_amount,
-                row.currency
+            rows.push(PdfReportRow::new(
+                [
+                    row.contact_name.clone(),
+                    row.kind.clone(),
+                    row.status.clone(),
+                    format!("{:.2} {}", row.total_amount, row.currency),
+                    format!("{:.2} {}", row.remaining_amount, row.currency),
+                ],
+                PdfRowStyle::Data,
             ));
         }
     }
-    let pdf = build_text_pdf(&lines);
-    atomic_replace(Path::new(path), pdf.as_bytes())?;
+    let font_bytes = load_report_font()?;
+    let font = ParsedFont::from_bytes(&font_bytes, 0, &mut Vec::new())
+        .ok_or_else(|| "unable to parse report font".to_owned())?;
+    let mut document = PdfDocument::new(&report.title);
+    let font_id = document.add_font(&font);
+    let pages = render_pdf_report_pages(&rows, &font_id);
+    let pages = if pages.is_empty() {
+        vec![PdfPage::new(Mm(210.0), Mm(297.0), vec![])]
+    } else {
+        pages
+    };
+    let pdf = document
+        .with_pages(pages)
+        .save(&PdfSaveOptions::default(), &mut Vec::new());
+    atomic_replace(Path::new(path), &pdf)?;
     Ok(ReportExportResult {
         exported_rows: report.operations.len() as i64,
         path: path.to_owned(),
     })
 }
 
-fn build_text_pdf(lines: &[String]) -> String {
-    const LINES_PER_PAGE: usize = 48;
-    let pages = lines.chunks(LINES_PER_PAGE).collect::<Vec<_>>();
-    let page_count = pages.len().max(1);
-    let first_page_object = 3;
-    let font_object = first_page_object + page_count;
-    let first_content_object = font_object + 1;
-    let mut objects = Vec::new();
-    objects.push("<< /Type /Catalog /Pages 2 0 R >>".to_owned());
-    let kids = (0..page_count)
-        .map(|index| format!("{} 0 R", first_page_object + index))
-        .collect::<Vec<_>>()
-        .join(" ");
-    objects.push(format!(
-        "<< /Type /Pages /Kids [{kids}] /Count {page_count} >>"
-    ));
-    for index in 0..page_count {
-        objects.push(format!(
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 {font_object} 0 R >> >> /Contents {} 0 R >>",
-            first_content_object + index
-        ));
-    }
-    objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned());
-    for page in pages.iter().take(page_count) {
-        let mut content = String::from("BT /F1 9 Tf 36 806 Td ");
-        for (index, line) in page.iter().enumerate() {
-            if index > 0 {
-                content.push_str("0 -14 Td ");
-            }
-            content.push('(');
-            content.push_str(&escape_pdf_text(line));
-            content.push_str(") Tj ");
-        }
-        content.push_str("ET");
-        objects.push(format!(
-            "<< /Length {} >>\nstream\n{}\nendstream",
-            content.len(),
-            content
-        ));
-    }
-    let mut pdf = String::from("%PDF-1.4\n");
-    let mut offsets = vec![0usize];
-    for (index, object) in objects.iter().enumerate() {
-        offsets.push(pdf.len());
-        pdf.push_str(&format!("{} 0 obj\n{}\nendobj\n", index + 1, object));
-    }
-    let xref_offset = pdf.len();
-    pdf.push_str(&format!(
-        "xref\n0 {}\n0000000000 65535 f \n",
-        objects.len() + 1
-    ));
-    for offset in offsets.iter().skip(1) {
-        pdf.push_str(&format!("{offset:010} 00000 n \n"));
-    }
-    pdf.push_str(&format!(
-        "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n",
-        objects.len() + 1
-    ));
-    pdf
+#[derive(Debug, Clone, Copy)]
+enum PdfRowStyle {
+    Title,
+    Header,
+    Note,
+    Data,
+    Balance,
+    Subtotal,
+    Final,
+    Section,
 }
 
-fn escape_pdf_text(value: &str) -> String {
-    value
-        .bytes()
-        .map(|byte| {
-            if byte.is_ascii_graphic() || byte == b' ' {
-                byte as char
-            } else {
-                '?'
+#[derive(Debug, Clone)]
+struct PdfReportRow {
+    cells: Vec<String>,
+    style: PdfRowStyle,
+    merged: bool,
+}
+
+impl PdfReportRow {
+    fn new<const N: usize>(cells: [impl Into<String>; N], style: PdfRowStyle) -> Self {
+        Self {
+            cells: cells.into_iter().map(Into::into).collect(),
+            style,
+            merged: false,
+        }
+    }
+
+    fn merged(value: String, style: PdfRowStyle) -> Self {
+        Self {
+            cells: vec![value],
+            style,
+            merged: true,
+        }
+    }
+}
+
+fn render_pdf_report_pages(rows: &[PdfReportRow], font_id: &printpdf::FontId) -> Vec<PdfPage> {
+    const LEFT: f32 = 36.0;
+    const TOP: f32 = 806.0;
+    const BOTTOM: f32 = 36.0;
+    const WIDTHS: [f32; 5] = [84.0, 94.0, 147.0, 105.0, 93.0];
+    const TOTAL_WIDTH: f32 = 523.0;
+
+    let mut pages = Vec::new();
+    let mut current = Vec::new();
+    let mut y = TOP;
+    let mut row_index = 0usize;
+    let mut repeat_header: Option<&PdfReportRow> = None;
+    while row_index < rows.len() {
+        let row = &rows[row_index];
+        let height = pdf_row_height(row, &WIDTHS);
+        if y - height < BOTTOM && !current.is_empty() {
+            pages.push(PdfPage::new(Mm(210.0), Mm(297.0), current));
+            current = Vec::new();
+            y = TOP;
+            if !matches!(
+                row.style,
+                PdfRowStyle::Header | PdfRowStyle::Title | PdfRowStyle::Section
+            ) {
+                if let Some(header) = repeat_header {
+                    append_pdf_row(&mut current, header, LEFT, y, &WIDTHS, TOTAL_WIDTH, font_id);
+                    y -= pdf_row_height(header, &WIDTHS);
+                }
             }
-        })
-        .collect::<String>()
-        .replace('\\', "\\\\")
-        .replace('(', "\\(")
-        .replace(')', "\\)")
+        }
+        append_pdf_row(&mut current, row, LEFT, y, &WIDTHS, TOTAL_WIDTH, font_id);
+        y -= height;
+        if matches!(row.style, PdfRowStyle::Header) {
+            repeat_header = Some(row);
+        }
+        row_index += 1;
+    }
+    if !current.is_empty() {
+        pages.push(PdfPage::new(Mm(210.0), Mm(297.0), current));
+    }
+    if pages.is_empty() {
+        pages.push(PdfPage::new(Mm(210.0), Mm(297.0), vec![]));
+    }
+    pages
+}
+
+fn pdf_row_height(row: &PdfReportRow, widths: &[f32; 5]) -> f32 {
+    let base = match row.style {
+        PdfRowStyle::Title => 24.0,
+        PdfRowStyle::Section => 20.0,
+        PdfRowStyle::Header | PdfRowStyle::Note => 18.0,
+        _ => 17.0,
+    };
+    if row.merged {
+        return base;
+    }
+    row.cells
+        .iter()
+        .zip(widths.iter())
+        .map(|(cell, width)| wrap_pdf_line(cell, ((*width / 4.4) as usize).max(8)).len())
+        .max()
+        .unwrap_or(1)
+        .max(1) as f32
+        * 10.0
+        + 7.0
+}
+
+fn append_pdf_row(
+    ops: &mut Vec<Op>,
+    row: &PdfReportRow,
+    left: f32,
+    top: f32,
+    widths: &[f32; 5],
+    total_width: f32,
+    font_id: &printpdf::FontId,
+) {
+    let height = pdf_row_height(row, widths);
+    let fill = match row.style {
+        PdfRowStyle::Title => (217.0, 234.0, 211.0),
+        PdfRowStyle::Header => (211.0, 211.0, 211.0),
+        PdfRowStyle::Note => (255.0, 255.0, 255.0),
+        PdfRowStyle::Balance => (242.0, 242.0, 242.0),
+        PdfRowStyle::Subtotal => (226.0, 240.0, 217.0),
+        PdfRowStyle::Final => (255.0, 242.0, 204.0),
+        PdfRowStyle::Section => (217.0, 234.0, 247.0),
+        PdfRowStyle::Data => (255.0, 255.0, 255.0),
+    };
+    let text_color = if matches!(row.style, PdfRowStyle::Header) {
+        (31.0, 31.0, 31.0)
+    } else {
+        (0.0, 0.0, 0.0)
+    };
+    let cell_count = if row.merged { 1 } else { 5 };
+    let cell_widths = if row.merged {
+        vec![total_width]
+    } else {
+        widths.to_vec()
+    };
+    let mut x = left;
+    for cell_index in 0..cell_count {
+        let width = cell_widths[cell_index];
+        ops.push(Op::SetFillColor {
+            col: Color::Rgb(Rgb::new(
+                fill.0 / 255.0,
+                fill.1 / 255.0,
+                fill.2 / 255.0,
+                None,
+            )),
+        });
+        ops.push(Op::SetOutlineColor {
+            col: Color::Rgb(Rgb::new(0.55, 0.55, 0.55, None)),
+        });
+        ops.push(Op::SetOutlineThickness { pt: Pt(0.45) });
+        ops.push(Op::DrawRectangle {
+            rectangle: Rect {
+                x: Pt(x),
+                y: Pt(top - height),
+                width: Pt(width),
+                height: Pt(height),
+                mode: Some(PaintMode::FillStroke),
+                winding_order: None,
+            },
+        });
+        let value = row.cells.get(cell_index).cloned().unwrap_or_default();
+        let max_chars = ((width / 4.4) as usize).max(8);
+        let lines = wrap_pdf_line(&value, max_chars);
+        ops.push(Op::SetFillColor {
+            col: Color::Rgb(Rgb::new(
+                text_color.0 / 255.0,
+                text_color.1 / 255.0,
+                text_color.2 / 255.0,
+                None,
+            )),
+        });
+        let font_size = match row.style {
+            PdfRowStyle::Title => 12.0,
+            PdfRowStyle::Header => 8.5,
+            PdfRowStyle::Section => 9.5,
+            _ => 7.5,
+        };
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::External(font_id.clone()),
+            size: Pt(font_size),
+        });
+        ops.push(Op::StartTextSection);
+        for (line_index, line) in lines.iter().enumerate() {
+            let align_center = row.merged || matches!(row.style, PdfRowStyle::Header);
+            let align_right = !align_center && !row.merged && cell_index >= 3;
+            let text_width = line.chars().count() as f32 * font_size * 0.48;
+            let text_x = if row.merged {
+                left + (total_width - text_width).max(0.0) / 2.0
+            } else if align_center {
+                x + (width - text_width).max(0.0) / 2.0
+            } else if align_right {
+                x + width - 4.0 - text_width
+            } else {
+                x + 4.0
+            };
+            let text_y = if align_center {
+                top - height / 2.0 - font_size / 2.0 - line_index as f32 * 9.0
+            } else {
+                top - 11.0 - line_index as f32 * 9.0
+            };
+            ops.push(Op::SetTextCursor {
+                pos: Point::new(Pt(text_x).into(), Pt(text_y).into()),
+            });
+            ops.push(Op::ShowText {
+                items: vec![TextItem::Text(line.clone())],
+            });
+        }
+        ops.push(Op::EndTextSection);
+        x += width;
+    }
+}
+
+fn load_report_font() -> StorageResult<Vec<u8>> {
+    let mut candidates = Vec::new();
+    if let Ok(path) = std::env::var("LEDGER_REPORT_FONT") {
+        candidates.push(path);
+    }
+    candidates.extend([
+        "C:/Windows/Fonts/arial.ttf".to_owned(),
+        "C:/Windows/Fonts/segoeui.ttf".to_owned(),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf".to_owned(),
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf".to_owned(),
+    ]);
+    for path in candidates {
+        if let Ok(bytes) = fs::read(path) {
+            return Ok(bytes);
+        }
+    }
+    Err("no Unicode report font found; set LEDGER_REPORT_FONT".to_owned())
+}
+
+fn wrap_pdf_line(value: &str, max_chars: usize) -> Vec<String> {
+    if value.chars().count() <= max_chars {
+        return vec![value.to_owned()];
+    }
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for word in value.split_whitespace() {
+        let separator = if current.is_empty() { 0 } else { 1 };
+        if current.chars().count() + separator + word.chars().count() > max_chars
+            && !current.is_empty()
+        {
+            lines.push(std::mem::take(&mut current));
+        }
+        if !current.is_empty() {
+            current.push(' ');
+        }
+        current.push_str(word);
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        vec![String::new()]
+    } else {
+        lines
+    }
 }
