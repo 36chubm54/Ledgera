@@ -25,7 +25,7 @@ data class ReportsUiState(
     val tag: String = "",
     val tagMode: String = "or",
     val totalsMode: String = "fixed",
-    val groupByCategory: Boolean = true,
+    val groupByCategory: Boolean = false,
     val result: ReportResult? = null,
     val periodStartError: String? = null,
     val periodEndError: String? = null,

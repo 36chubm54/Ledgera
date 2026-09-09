@@ -350,7 +350,7 @@ data class ReportFilters(
     val tag: String = "",
     val tagMode: String = "or",
     val totalsMode: String = "fixed",
-    val groupByCategory: Boolean = true,
+    val groupByCategory: Boolean = false,
 )
 
 data class ReportSummary(
@@ -378,9 +378,9 @@ data class ReportOperationRow(
     val description: String,
 )
 
-data class ReportMonthlyRow(val month: String, val income: Double, val expenses: Double)
-data class ReportCategoryRow(val category: String, val operationsCount: Long, val totalBase: Double)
-data class ReportTagRow(val tag: String, val operationsCount: Long, val totalBase: Double)
+data class ReportMonthlyRow(val month: String, val income: Double, val expenses: Double, val incomeCurrent: Double, val expensesCurrent: Double)
+data class ReportCategoryRow(val category: String, val operationsCount: Long, val totalBase: Double, val totalCurrent: Double)
+data class ReportTagRow(val tag: String, val operationsCount: Long, val totalBase: Double, val totalCurrent: Double)
 data class ReportDebtRow(
     val contactName: String,
     val kind: String,

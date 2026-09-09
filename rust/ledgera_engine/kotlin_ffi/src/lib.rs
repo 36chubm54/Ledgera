@@ -373,18 +373,22 @@ pub struct ReportMonthlyRowDto {
     pub month: String,
     pub income: f64,
     pub expenses: f64,
+    pub income_current: f64,
+    pub expenses_current: f64,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReportCategoryRowDto {
     pub category: String,
     pub operations_count: i64,
     pub total_base: f64,
+    pub total_current: f64,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReportTagRowDto {
     pub tag: String,
     pub operations_count: i64,
     pub total_base: f64,
+    pub total_current: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1248,6 +1252,8 @@ fn report_monthly_to_dto(row: ReportMonthlyRow) -> ReportMonthlyRowDto {
         month: row.month,
         income: row.income,
         expenses: row.expenses,
+        income_current: row.income_current,
+        expenses_current: row.expenses_current,
     }
 }
 
@@ -1256,6 +1262,7 @@ fn report_category_to_dto(row: ReportCategoryRow) -> ReportCategoryRowDto {
         category: row.category,
         operations_count: row.operations_count,
         total_base: row.total_base,
+        total_current: row.total_current,
     }
 }
 
@@ -1264,6 +1271,7 @@ fn report_tag_to_dto(row: ReportTagRow) -> ReportTagRowDto {
         tag: row.tag,
         operations_count: row.operations_count,
         total_base: row.total_base,
+        total_current: row.total_current,
     }
 }
 

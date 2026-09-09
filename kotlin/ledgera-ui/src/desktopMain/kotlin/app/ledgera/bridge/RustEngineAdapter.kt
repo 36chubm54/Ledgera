@@ -122,9 +122,9 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                     )
                 },
                 operations = dto.operations.map { value -> ReportOperationRow(value.date, value.typeLabel, value.kind, value.category, value.tagsText, value.amountBase, value.amountCurrent, value.description) },
-                monthly = dto.monthly.map { value -> ReportMonthlyRow(value.month, value.income, value.expenses) },
-                categories = dto.categories.map { value -> ReportCategoryRow(value.category, value.operationsCount, value.totalBase) },
-                tags = dto.tags.map { value -> ReportTagRow(value.tag, value.operationsCount, value.totalBase) },
+                monthly = dto.monthly.map { value -> ReportMonthlyRow(value.month, value.income, value.expenses, value.incomeCurrent, value.expensesCurrent) },
+                categories = dto.categories.map { value -> ReportCategoryRow(value.category, value.operationsCount, value.totalBase, value.totalCurrent) },
+                tags = dto.tags.map { value -> ReportTagRow(value.tag, value.operationsCount, value.totalBase, value.totalCurrent) },
                 debts = dto.debts.map { value -> ReportDebtRow(value.contactName, value.kind, value.status, value.createdAt, value.closedAt, value.currency, value.totalAmount, value.remainingAmount, value.settledAmount, value.progressPercent) },
             )
         }

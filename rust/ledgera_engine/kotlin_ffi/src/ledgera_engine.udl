@@ -313,18 +313,22 @@ dictionary ReportMonthlyRowDto {
     string month;
     double income;
     double expenses;
+    double income_current;
+    double expenses_current;
 };
 
 dictionary ReportCategoryRowDto {
     string category;
     i64 operations_count;
     double total_base;
+    double total_current;
 };
 
 dictionary ReportTagRowDto {
     string tag;
     i64 operations_count;
     double total_base;
+    double total_current;
 };
 
 dictionary ReportDebtRowDto {

@@ -9863,7 +9863,6 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let filters = ReportFilters {
             period_start: Some("2026-01-01".to_owned()),
             period_end: Some("2026-01-04".to_owned()),
-            group_by_category: true,
             ..ReportFilters::default()
         };
 
@@ -9881,7 +9880,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let mut workbook = open_workbook_auto(&xlsx_path).unwrap();
         assert_eq!(
             workbook.sheet_names(),
-            vec!["Report", "By Category", "By Tag", "Yearly Report"]
+            vec!["Report", "By Tag", "Yearly Report"]
         );
         let report_range = workbook.worksheet_range("Report").unwrap();
         assert_eq!(
@@ -9894,9 +9893,32 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert!(pdf.starts_with(b"%PDF-"));
         assert!(String::from_utf8_lossy(&pdf).contains("/Type0"));
 
+        let grouped_csv_path = temp_test_path("ledgera_grouped_report", "csv");
+        let grouped_xlsx_path = temp_test_path("ledgera_grouped_report", "xlsx");
+        let grouped_pdf_path = temp_test_path("ledgera_grouped_report", "pdf");
+        let grouped_filters = ReportFilters {
+            group_by_category: true,
+            ..filters.clone()
+        };
+        report_export_csv(&db_path, &grouped_filters, grouped_csv_path.to_str().unwrap()).unwrap();
+        let mut grouped_reader = ::csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_path(&grouped_csv_path)
+            .unwrap();
+        let grouped_rows: Vec<::csv::StringRecord> = grouped_reader.records().map(Result::unwrap).collect();
+        assert!(!grouped_rows.is_empty());
+        assert!(grouped_rows.iter().all(|row| row.len() == 3));
+        report_export_xlsx(&db_path, &grouped_filters, grouped_xlsx_path.to_str().unwrap()).unwrap();
+        let grouped_workbook = open_workbook_auto(&grouped_xlsx_path).unwrap();
+        assert_eq!(grouped_workbook.sheet_names(), vec!["Report"]);
+        report_export_pdf(&db_path, &grouped_filters, grouped_pdf_path.to_str().unwrap()).unwrap();
+
         let _ = fs::remove_file(csv_path);
         let _ = fs::remove_file(xlsx_path);
         let _ = fs::remove_file(pdf_path);
+        let _ = fs::remove_file(grouped_csv_path);
+        let _ = fs::remove_file(grouped_xlsx_path);
+        let _ = fs::remove_file(grouped_pdf_path);
         remove_test_db(&db_path);
     }
 

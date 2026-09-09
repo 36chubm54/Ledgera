@@ -71,6 +71,11 @@ fun ReportsScreen(viewModel: ReportsViewModel, fileActions: ReportsFileActions =
                     FilterChip(state.totalsMode == "current", { viewModel.updateTotalsMode("current") }, label = { Text("Current") })
                     FilterChip(state.groupByCategory, { viewModel.updateGrouping(!state.groupByCategory) }, label = { Text("Group by category") })
                 }
+                Text(
+                    if (state.totalsMode == "current") "Current amounts using export-time rates"
+                    else "Fixed amounts using operation-time rates",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = viewModel::generate, enabled = !state.loading) { Text("Generate") }
                     Button(onClick = { viewModel.export("csv", fileActions) }, enabled = state.result != null && !state.loading) { Text("CSV") }
@@ -81,22 +86,38 @@ fun ReportsScreen(viewModel: ReportsViewModel, fileActions: ReportsFileActions =
         }
         state.result?.let { result ->
             ReportSummaryCard(result)
-            ReportSection("Operations") {
-                val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
-                result.operations.forEach { row ->
-                    val amount = if (currentMode) row.amountCurrent else row.amountBase
-                    Text("${row.date} · ${row.typeLabel} · ${row.category} · ${"%.2f".format(amount)}")
-                    if (row.tagsText.isNotBlank()) Text(row.tagsText, style = MaterialTheme.typography.bodySmall)
+            if (result.filters.groupByCategory) {
+                ReportSection("Categories") {
+                    val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
+                    result.categories.forEach { row ->
+                        val amount = if (currentMode) row.totalCurrent else row.totalBase
+                        Text("${row.category}: ${row.operationsCount} · ${"%.2f".format(amount)}")
+                    }
+                }
+            } else {
+                ReportSection("Operations") {
+                    val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
+                    result.operations.forEach { row ->
+                        val amount = if (currentMode) row.amountCurrent else row.amountBase
+                        Text("${row.date} · ${row.typeLabel} · ${row.category} · ${"%.2f".format(amount)}")
+                        if (row.tagsText.isNotBlank()) Text(row.tagsText, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
             ReportSection("Monthly") {
-                result.monthly.forEach { row -> Text("${row.month}: income ${"%.2f".format(row.income)}, expenses ${"%.2f".format(row.expenses)}") }
-            }
-            ReportSection("Categories") {
-                result.categories.forEach { row -> Text("${row.category}: ${row.operationsCount} · ${"%.2f".format(row.totalBase)}") }
+                val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
+                result.monthly.forEach { row ->
+                    val income = if (currentMode) row.incomeCurrent else row.income
+                    val expenses = if (currentMode) row.expensesCurrent else row.expenses
+                    Text("${row.month}: income ${"%.2f".format(income)}, expenses ${"%.2f".format(expenses)}")
+                }
             }
             ReportSection("Tags") {
-                result.tags.forEach { row -> Text("${row.tag}: ${row.operationsCount} · ${"%.2f".format(row.totalBase)}") }
+                val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
+                result.tags.forEach { row ->
+                    val amount = if (currentMode) row.totalCurrent else row.totalBase
+                    Text("${row.tag}: ${row.operationsCount} · ${"%.2f".format(amount)}")
+                }
             }
             if (result.debts.isNotEmpty()) ReportSection("Debts") {
                 result.debts.forEach { row -> Text("${row.contactName} · ${row.kind} · ${row.remainingAmount} / ${row.totalAmount} ${row.currency}") }
