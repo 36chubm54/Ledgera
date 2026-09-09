@@ -35,11 +35,12 @@ fun LedgerDateField(
     required: Boolean = true,
     allowFuture: Boolean = false,
     enabled: Boolean = true,
+    externalError: String? = null,
 ) {
     var text by remember { mutableStateOf(displayDate(value)) }
     var pickerOpen by remember { mutableStateOf(false) }
     val today = currentLedgerDate()
-    val error = validateDisplayDate(text, required, allowFuture, today)
+    val error = externalError ?: validateDisplayDate(text, required, allowFuture, today)
 
     LaunchedEffect(value) {
         val nextText = displayDate(value)

@@ -27,6 +27,8 @@ data class ReportsUiState(
     val totalsMode: String = "fixed",
     val groupByCategory: Boolean = true,
     val result: ReportResult? = null,
+    val periodStartError: String? = null,
+    val periodEndError: String? = null,
     val error: String? = null,
     val notice: String? = null,
 )
@@ -41,8 +43,8 @@ class ReportsViewModel(
     init { refreshLookups() }
 
     fun clearFeedback() { mutableState.value = mutableState.value.copy(error = null, notice = null) }
-    fun updatePeriodStart(value: String) { mutableState.value = mutableState.value.copy(periodStart = value, error = null) }
-    fun updatePeriodEnd(value: String) { mutableState.value = mutableState.value.copy(periodEnd = value, error = null) }
+    fun updatePeriodStart(value: String) { mutableState.value = mutableState.value.copy(periodStart = value, periodStartError = null, periodEndError = null, error = null) }
+    fun updatePeriodEnd(value: String) { mutableState.value = mutableState.value.copy(periodEnd = value, periodEndError = null, error = null) }
     fun updateWallet(value: Long?) { mutableState.value = mutableState.value.copy(walletId = value) }
     fun updateCategory(value: String) { mutableState.value = mutableState.value.copy(category = value) }
     fun updateTag(value: String) { mutableState.value = mutableState.value.copy(tag = value) }
@@ -73,10 +75,10 @@ class ReportsViewModel(
         val end = current.periodEnd.trim()
         val startYmd = if (start.isBlank()) null else DateValidation.parseDmyStrict(start)?.let(DateValidation::formatYmd)
         val endYmd = if (end.isBlank()) null else DateValidation.parseDmyStrict(end)?.let(DateValidation::formatYmd)
-        if (start.isNotBlank() && startYmd == null) return fail("Start date must use DD.MM.YYYY")
-        if (end.isNotBlank() && endYmd == null) return fail("End date must use DD.MM.YYYY")
-        if (startYmd == null && endYmd != null) return fail("Report end date requires a start date")
-        mutableState.value = current.copy(loading = true, error = null, notice = null)
+        if (start.isNotBlank() && startYmd == null) return setPeriodError(start = "Start date must use DD.MM.YYYY")
+        if (end.isNotBlank() && endYmd == null) return setPeriodError(end = "End date must use DD.MM.YYYY")
+        if (startYmd == null && endYmd != null) return setPeriodError(start = "Start date is required when an end date is set")
+        mutableState.value = current.copy(loading = true, periodStartError = null, periodEndError = null, error = null, notice = null)
         scope.launch {
             runCatching {
                 engine.generateReport(ReportFilters(current.walletId, startYmd, endYmd, current.category, current.tag, current.tagMode, current.totalsMode, current.groupByCategory))
@@ -95,16 +97,7 @@ class ReportsViewModel(
         mutableState.value = current.copy(loading = true, error = null, notice = null)
         scope.launch {
             runCatching {
-                val filters = ReportFilters(
-                    current.walletId,
-                    current.periodStart.takeIf { it.isNotBlank() }?.let { DateValidation.formatDmyToYmd(it) },
-                    current.periodEnd.takeIf { it.isNotBlank() }?.let { DateValidation.formatDmyToYmd(it) },
-                    current.category,
-                    current.tag,
-                    current.tagMode,
-                    current.totalsMode,
-                    current.groupByCategory,
-                )
+                val filters = current.result.filters
                 when (format.lowercase()) {
                     "csv" -> engine.exportReportCsv(filters, path)
                     "xlsx" -> engine.exportReportXlsx(filters, path)
@@ -117,6 +110,10 @@ class ReportsViewModel(
                 mutableState.value = mutableState.value.copy(loading = false, error = error.message ?: "Failed to export report", notice = null)
             }
         }
+    }
+
+    private fun setPeriodError(start: String? = null, end: String? = null) {
+        mutableState.value = mutableState.value.copy(loading = false, periodStartError = start, periodEndError = end, error = null, notice = null)
     }
 
     private fun fail(message: String) { mutableState.value = mutableState.value.copy(loading = false, error = message, notice = null) }

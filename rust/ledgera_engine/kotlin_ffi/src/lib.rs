@@ -347,6 +347,7 @@ pub struct ReportSummaryDto {
     pub net_worth_current: f64,
     pub initial_balance: f64,
     pub records_total_fixed: f64,
+    pub records_total_current: f64,
     pub final_balance_fixed: f64,
     pub final_balance_current: f64,
     pub fx_difference: f64,
@@ -363,6 +364,7 @@ pub struct ReportOperationRowDto {
     pub category: String,
     pub tags_text: String,
     pub amount_base: f64,
+    pub amount_current: f64,
     pub description: String,
 }
 
@@ -404,6 +406,7 @@ pub struct ReportResultDto {
     pub title: String,
     pub base_currency: String,
     pub display_currency: String,
+    pub filters: ReportFiltersDto,
     pub summary: ReportSummaryDto,
     pub operations: Vec<ReportOperationRowDto>,
     pub monthly: Vec<ReportMonthlyRowDto>,
@@ -1164,11 +1167,22 @@ fn report_to_dto(result: ReportResult) -> ReportResultDto {
         title: result.title,
         base_currency: result.base_currency,
         display_currency: result.display_currency,
+        filters: ReportFiltersDto {
+            wallet_id: result.filters.wallet_id,
+            period_start: result.filters.period_start.clone(),
+            period_end: result.filters.period_end.clone(),
+            category: result.filters.category.clone(),
+            tag: result.filters.tag.clone(),
+            tag_mode: result.filters.tag_mode.clone(),
+            totals_mode: result.filters.totals_mode.clone(),
+            group_by_category: result.filters.group_by_category,
+        },
         summary: ReportSummaryDto {
             net_worth_fixed: result.summary.net_worth_fixed,
             net_worth_current: result.summary.net_worth_current,
             initial_balance: result.summary.initial_balance,
             records_total_fixed: result.summary.records_total_fixed,
+            records_total_current: result.summary.records_total_current,
             final_balance_fixed: result.summary.final_balance_fixed,
             final_balance_current: result.summary.final_balance_current,
             fx_difference: result.summary.fx_difference,
@@ -1224,6 +1238,7 @@ fn report_operation_to_dto(row: ReportOperationRow) -> ReportOperationRowDto {
         category: row.category,
         tags_text: row.tags_text,
         amount_base: row.amount_base,
+        amount_current: row.amount_current,
         description: row.description,
     }
 }

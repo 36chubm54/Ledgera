@@ -9863,6 +9863,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let filters = ReportFilters {
             period_start: Some("2026-01-01".to_owned()),
             period_end: Some("2026-01-04".to_owned()),
+            group_by_category: true,
             ..ReportFilters::default()
         };
 

@@ -33,6 +33,7 @@ pub struct ReportSummary {
     pub net_worth_current: f64,
     pub initial_balance: f64,
     pub records_total_fixed: f64,
+    pub records_total_current: f64,
     pub final_balance_fixed: f64,
     pub final_balance_current: f64,
     pub fx_difference: f64,
@@ -49,6 +50,7 @@ pub struct ReportOperationRow {
     pub category: String,
     pub tags_text: String,
     pub amount_base: f64,
+    pub amount_current: f64,
     pub description: String,
 }
 
@@ -212,12 +214,13 @@ fn debt_rows_for_period(
     conn: &Connection,
     start: &str,
     end: &str,
+    wallet_id: Option<i64>,
 ) -> StorageResult<Vec<ReportDebtRow>> {
     let mut stmt = conn.prepare(
-        "SELECT contact_name, kind, status, created_at, closed_at, currency, total_amount_minor, remaining_amount_minor FROM debts WHERE created_at <= ?2 AND (closed_at IS NULL OR closed_at >= ?1) ORDER BY created_at, id",
+        "SELECT contact_name, kind, status, created_at, closed_at, currency, total_amount_minor, remaining_amount_minor FROM debts WHERE created_at <= ?2 AND (closed_at IS NULL OR closed_at >= ?1) AND (?3 IS NULL OR EXISTS (SELECT 1 FROM records WHERE records.related_debt_id = debts.id AND records.wallet_id = ?3)) ORDER BY created_at, id",
     ).map_err(sqlite_err)?;
     let rows = stmt
-        .query_map((start, end), |row| {
+        .query_map((start, end, wallet_id), |row| {
             let total: i64 = row.get(6)?;
             let remaining: i64 = row.get(7)?;
             let total_f = minor_to_money_value(total);
@@ -333,9 +336,6 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
             .cmp(&left.0.date)
             .then_with(|| right.0.id.cmp(&left.0.id))
     });
-    if !normalized.category.trim().is_empty() || !normalized.tag.trim().is_empty() {
-        opening_balance = 0.0;
-    }
     let rates = if normalized.totals_mode.eq_ignore_ascii_case("current") {
         load_cached_rates(db_path)?
     } else {
@@ -378,6 +378,7 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
             category: record.category.clone(),
             tags_text: tags.join(" "),
             amount_base: fixed,
+            amount_current: current,
             description: record.description.clone(),
         });
         let entry = category_totals.entry(record.category.clone()).or_default();
@@ -405,6 +406,7 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
         net_worth_current: final_current,
         initial_balance: initial,
         records_total_fixed: fixed_total,
+        records_total_current: current_total,
         final_balance_fixed: final_fixed,
         final_balance_current: final_current,
         fx_difference: current_total - fixed_total,
@@ -445,8 +447,10 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
             conn,
             start.unwrap_or("0000-01-01"),
             end.unwrap_or("9999-12-31"),
+            normalized.wallet_id,
         )
     })?;
+    let include_categories = normalized.group_by_category;
     let title = match (start, end) {
         (Some(a), Some(b)) => format!("Transaction statement ({a} - {b})"),
         _ => "Transaction statement".to_owned(),
@@ -459,21 +463,32 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
         summary,
         operations,
         monthly,
-        categories,
+        categories: if include_categories { categories } else { Vec::new() },
         tags,
         debts,
     })
 }
 
 fn atomic_replace(path: &Path, bytes: &[u8]) -> StorageResult<()> {
-    let temp = path.with_extension(format!(
-        "{}.tmp",
-        path.extension()
-            .and_then(|v| v.to_str())
-            .unwrap_or("report")
-    ));
-    fs::write(&temp, bytes).map_err(|err| format!("Failed to write report export: {err}"))?;
-    fs::rename(&temp, path).map_err(|err| format!("Failed to finalize report export: {err}"))
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "Export path must include a file name".to_owned())?;
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
+    let temp = parent.join(format!(".{file_name}.{unique}.tmp"));
+    if let Err(error) = fs::write(&temp, bytes) {
+        let _ = fs::remove_file(&temp);
+        return Err(format!("Failed to write report export: {error}"));
+    }
+    if let Err(error) = crate::replace_export_file(&temp, path) {
+        let _ = fs::remove_file(&temp);
+        return Err(format!("Failed to finalize report export: {error}"));
+    }
+    Ok(())
 }
 
 pub fn report_export_csv(
@@ -482,6 +497,7 @@ pub fn report_export_csv(
     path: &str,
 ) -> StorageResult<ReportExportResult> {
     let report = report_generate(db_path, filters)?;
+    let use_current = report.filters.totals_mode.eq_ignore_ascii_case("current");
     let mut writer = csv::Writer::from_writer(Vec::new());
     writer
         .write_record([report.title.as_str(), "", "", "", ""])
@@ -519,7 +535,7 @@ pub fn report_export_csv(
                 row.date.as_str(),
                 row.type_label.as_str(),
                 row.category.as_str(),
-                &format!("{:.2}", row.amount_base),
+                &format!("{:.2}", if use_current { row.amount_current } else { row.amount_base }),
                 row.tags_text.as_str(),
             ])
             .map_err(|err| err.to_string())?;
@@ -529,7 +545,7 @@ pub fn report_export_csv(
             "",
             "Subtotal",
             "",
-            &format!("{:.2}", report.summary.records_total_fixed),
+            &format!("{:.2}", if use_current { report.summary.records_total_current } else { report.summary.records_total_fixed }),
             "",
         ])
         .map_err(|err| err.to_string())?;
@@ -538,7 +554,7 @@ pub fn report_export_csv(
             "",
             "Final balance",
             "",
-            &format!("{:.2}", report.summary.final_balance_fixed),
+            &format!("{:.2}", if use_current { report.summary.final_balance_current } else { report.summary.final_balance_fixed }),
             "",
         ])
         .map_err(|err| err.to_string())?;
@@ -556,6 +572,7 @@ pub fn report_export_xlsx(
     path: &str,
 ) -> StorageResult<ReportExportResult> {
     let report = report_generate(db_path, filters)?;
+    let use_current = report.filters.totals_mode.eq_ignore_ascii_case("current");
     let mut workbook = Workbook::new();
     let header = report_header_format();
     let data = report_data_format();
@@ -632,7 +649,7 @@ pub fn report_export_xlsx(
         .write_number_with_format(
             subtotal_row,
             3,
-            report.summary.records_total_fixed,
+            if use_current { report.summary.records_total_current } else { report.summary.records_total_fixed },
             &subtotal_amount,
         )
         .map_err(|err| err.to_string())?;
@@ -662,7 +679,7 @@ pub fn report_export_xlsx(
         .write_number_with_format(
             final_row,
             3,
-            report.summary.final_balance_fixed,
+            if use_current { report.summary.final_balance_current } else { report.summary.final_balance_fixed },
             &total_amount,
         )
         .map_err(|err| err.to_string())?;
@@ -1013,6 +1030,7 @@ pub fn report_export_pdf(
     path: &str,
 ) -> StorageResult<ReportExportResult> {
     let report = report_generate(db_path, filters)?;
+    let use_current = report.filters.totals_mode.eq_ignore_ascii_case("current");
     let mut rows = vec![
         PdfReportRow::merged(report.title.clone(), PdfRowStyle::Title),
         PdfReportRow::new(
@@ -1040,7 +1058,7 @@ pub fn report_export_pdf(
                 row.date.clone(),
                 row.type_label.clone(),
                 row.category.clone(),
-                format!("{:.2}", row.amount_base),
+            format!("{:.2}", if use_current { row.amount_current } else { row.amount_base }),
                 row.tags_text.clone(),
             ],
             PdfRowStyle::Data,
@@ -1051,7 +1069,7 @@ pub fn report_export_pdf(
             String::new(),
             "Subtotal".to_owned(),
             String::new(),
-            format!("{:.2}", report.summary.records_total_fixed),
+            format!("{:.2}", if use_current { report.summary.records_total_current } else { report.summary.records_total_fixed }),
             String::new(),
         ],
         PdfRowStyle::Subtotal,
@@ -1061,7 +1079,7 @@ pub fn report_export_pdf(
             String::new(),
             "Final balance".to_owned(),
             String::new(),
-            format!("{:.2}", report.summary.final_balance_fixed),
+            format!("{:.2}", if use_current { report.summary.final_balance_current } else { report.summary.final_balance_fixed }),
             String::new(),
         ],
         PdfRowStyle::Final,
@@ -1385,6 +1403,10 @@ fn append_pdf_row(
 }
 
 fn load_report_font() -> StorageResult<Vec<u8>> {
+    const BUNDLED_FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
+    if !BUNDLED_FONT.is_empty() {
+        return Ok(BUNDLED_FONT.to_vec());
+    }
     let mut candidates = Vec::new();
     if let Ok(path) = std::env::var("LEDGER_REPORT_FONT") {
         candidates.push(path);

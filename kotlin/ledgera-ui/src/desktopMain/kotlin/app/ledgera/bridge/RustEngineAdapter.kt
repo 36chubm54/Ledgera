@@ -94,12 +94,25 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 title = dto.title,
                 baseCurrency = dto.baseCurrency,
                 displayCurrency = dto.displayCurrency,
+                filters = dto.filters.let { value ->
+                    ReportFilters(
+                        value.walletId,
+                        value.periodStart,
+                        value.periodEnd,
+                        value.category,
+                        value.tag,
+                        value.tagMode,
+                        value.totalsMode,
+                        value.groupByCategory,
+                    )
+                },
                 summary = dto.summary.let { value ->
                     ReportSummary(
                         netWorthFixed = value.netWorthFixed,
                         netWorthCurrent = value.netWorthCurrent,
                         initialBalance = value.initialBalance,
                         recordsTotalFixed = value.recordsTotalFixed,
+                        recordsTotalCurrent = value.recordsTotalCurrent,
                         finalBalanceFixed = value.finalBalanceFixed,
                         finalBalanceCurrent = value.finalBalanceCurrent,
                         fxDifference = value.fxDifference,
@@ -108,7 +121,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                         activeTag = value.activeTag,
                     )
                 },
-                operations = dto.operations.map { value -> ReportOperationRow(value.date, value.typeLabel, value.kind, value.category, value.tagsText, value.amountBase, value.description) },
+                operations = dto.operations.map { value -> ReportOperationRow(value.date, value.typeLabel, value.kind, value.category, value.tagsText, value.amountBase, value.amountCurrent, value.description) },
                 monthly = dto.monthly.map { value -> ReportMonthlyRow(value.month, value.income, value.expenses) },
                 categories = dto.categories.map { value -> ReportCategoryRow(value.category, value.operationsCount, value.totalBase) },
                 tags = dto.tags.map { value -> ReportTagRow(value.tag, value.operationsCount, value.totalBase) },

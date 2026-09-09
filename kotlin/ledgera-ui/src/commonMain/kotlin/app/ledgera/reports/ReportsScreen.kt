@@ -34,8 +34,8 @@ fun ReportsScreen(viewModel: ReportsViewModel, fileActions: ReportsFileActions =
         Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LedgerDateField(state.periodStart, viewModel::updatePeriodStart, "From", Modifier.weight(1f), required = false)
-                    LedgerDateField(state.periodEnd, viewModel::updatePeriodEnd, "To", Modifier.weight(1f), required = false)
+                    LedgerDateField(state.periodStart, viewModel::updatePeriodStart, "From", Modifier.weight(1f), required = false, externalError = state.periodStartError)
+                    LedgerDateField(state.periodEnd, viewModel::updatePeriodEnd, "To", Modifier.weight(1f), required = false, externalError = state.periodEndError)
                 }
                 Row(
                     modifier = Modifier
@@ -69,6 +69,7 @@ fun ReportsScreen(viewModel: ReportsViewModel, fileActions: ReportsFileActions =
                     FilterChip(state.tagMode == "and", { viewModel.updateTagMode("and") }, label = { Text("Tags AND") })
                     FilterChip(state.totalsMode == "fixed", { viewModel.updateTotalsMode("fixed") }, label = { Text("Fixed") })
                     FilterChip(state.totalsMode == "current", { viewModel.updateTotalsMode("current") }, label = { Text("Current") })
+                    FilterChip(state.groupByCategory, { viewModel.updateGrouping(!state.groupByCategory) }, label = { Text("Group by category") })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = viewModel::generate, enabled = !state.loading) { Text("Generate") }
@@ -81,8 +82,10 @@ fun ReportsScreen(viewModel: ReportsViewModel, fileActions: ReportsFileActions =
         state.result?.let { result ->
             ReportSummaryCard(result)
             ReportSection("Operations") {
+                val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
                 result.operations.forEach { row ->
-                    Text("${row.date} · ${row.typeLabel} · ${row.category} · ${"%.2f".format(row.amountBase)}")
+                    val amount = if (currentMode) row.amountCurrent else row.amountBase
+                    Text("${row.date} · ${row.typeLabel} · ${row.category} · ${"%.2f".format(amount)}")
                     if (row.tagsText.isNotBlank()) Text(row.tagsText, style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -104,12 +107,15 @@ fun ReportsScreen(viewModel: ReportsViewModel, fileActions: ReportsFileActions =
 
 @Composable
 private fun ReportSummaryCard(result: app.ledgera.model.ReportResult) {
+    val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
+    val operationsTotal = if (currentMode) result.summary.recordsTotalCurrent else result.summary.recordsTotalFixed
+    val finalBalance = if (currentMode) result.summary.finalBalanceCurrent else result.summary.finalBalanceFixed
     Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(result.title, style = MaterialTheme.typography.titleLarge)
             Text("Initial: ${"%.2f".format(result.summary.initialBalance)} ${result.displayCurrency}")
-            Text("Operations: ${"%.2f".format(result.summary.recordsTotalFixed)} ${result.baseCurrency}")
-            Text("Final: ${"%.2f".format(result.summary.finalBalanceFixed)} ${result.baseCurrency}")
+            Text("Operations: ${"%.2f".format(operationsTotal)} ${result.baseCurrency}")
+            Text("Final: ${"%.2f".format(finalBalance)} ${result.baseCurrency}")
             Text("Count: ${result.summary.recordsCount}")
             if (result.summary.fxDifference != 0.0) Text("FX difference: ${"%.2f".format(result.summary.fxDifference)}")
         }

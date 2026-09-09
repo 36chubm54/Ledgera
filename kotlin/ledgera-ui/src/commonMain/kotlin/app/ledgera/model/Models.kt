@@ -358,6 +358,7 @@ data class ReportSummary(
     val netWorthCurrent: Double,
     val initialBalance: Double,
     val recordsTotalFixed: Double,
+    val recordsTotalCurrent: Double,
     val finalBalanceFixed: Double,
     val finalBalanceCurrent: Double,
     val fxDifference: Double,
@@ -373,6 +374,7 @@ data class ReportOperationRow(
     val category: String,
     val tagsText: String,
     val amountBase: Double,
+    val amountCurrent: Double,
     val description: String,
 )
 
@@ -396,6 +398,7 @@ data class ReportResult(
     val title: String,
     val baseCurrency: String,
     val displayCurrency: String,
+    val filters: ReportFilters,
     val summary: ReportSummary,
     val operations: List<ReportOperationRow>,
     val monthly: List<ReportMonthlyRow>,
