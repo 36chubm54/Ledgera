@@ -1,29 +1,30 @@
 use ledgera_engine_storage::{
-    AuditFindingRow, DebtCreatePayload, DebtPayload, DebtPaymentPayload, DebtPaymentRequestPayload,
-    MandatoryAddToRecordsPayload, MandatoryAutoPayResult, MandatoryExpenseRow,
-    MandatoryExportResult, MandatoryImportResult, MandatoryTemplateCreatePayload,
-    MandatoryTemplateUpdatePayload, OperationDeleteResult, OperationExportResult,
-    OperationImportResult, RecordFilterPayload, RecordRow, ReportCategoryRow, ReportDebtRow,
-    ReportExportResult, ReportFilters, ReportMonthlyRow, ReportOperationRow, ReportResult,
-    ReportTagRow, StandaloneRecordCreatePayload, StandaloneRecordUpdatePayload,
-    TagColorAssignment as StorageTagColorAssignment, TransferCreatePayload, TransferRow,
-    TransferUpdatePayload, WalletBalanceRow, WalletCreatePayload, WalletRow, audit_run_for_date,
-    base_currency_code, create_standalone_record_with_tag_colors, create_transfer, create_wallet,
-    current_local_date, debt_close_validated, debt_create, debt_delete, debt_delete_payment,
-    debt_payment_rows, debt_register_payment_validated, debt_register_write_off_validated,
-    debt_rows, delete_all_operations, delete_operations_selection, delete_standalone_record,
-    delete_transfer, delete_wallet, distinct_record_categories, distinct_record_descriptions,
-    export_mandatory_csv, export_mandatory_xlsx, export_records_csv, export_records_xlsx,
-    filtered_record_list_rows, import_mandatory_csv, import_mandatory_xlsx, import_records_csv,
-    import_records_xlsx, mandatory_add_to_records, mandatory_apply_auto_payments,
-    mandatory_expense_row, mandatory_expense_rows, mandatory_template_create,
-    mandatory_template_delete, mandatory_template_delete_all, mandatory_template_update,
-    normalize_tag_colors, operation_suggestions, preview_import_mandatory_csv,
-    preview_import_mandatory_xlsx, preview_import_records_csv, preview_import_records_xlsx,
-    report_export_csv, report_export_pdf, report_export_xlsx, report_generate,
-    standalone_record_get_row, tag_color_palette, tag_color_rows, tag_names, transfer_get_row,
-    update_standalone_record_with_tag_colors, update_transfer, wallet_balance_row,
-    wallet_balance_rows, wallet_list_rows,
+    AuditFindingRow, BudgetCreatePayload, BudgetPayload, BudgetResultPayload, DebtCreatePayload,
+    DebtPayload, DebtPaymentPayload, DebtPaymentRequestPayload, MandatoryAddToRecordsPayload,
+    MandatoryAutoPayResult, MandatoryExpenseRow, MandatoryExportResult, MandatoryImportResult,
+    MandatoryTemplateCreatePayload, MandatoryTemplateUpdatePayload, OperationDeleteResult,
+    OperationExportResult, OperationImportResult, RecordFilterPayload, RecordRow,
+    ReportCategoryRow, ReportDebtRow, ReportExportResult, ReportFilters, ReportMonthlyRow,
+    ReportOperationRow, ReportResult, ReportTagRow, StandaloneRecordCreatePayload,
+    StandaloneRecordUpdatePayload, TagColorAssignment as StorageTagColorAssignment,
+    TransferCreatePayload, TransferRow, TransferUpdatePayload, WalletBalanceRow,
+    WalletCreatePayload, WalletRow, audit_run_for_date, base_currency_code, budget_create,
+    budget_delete, budget_results, budget_rows, budget_update_limit,
+    create_standalone_record_with_tag_colors, create_transfer, create_wallet, current_local_date,
+    debt_close_validated, debt_create, debt_delete, debt_delete_payment, debt_payment_rows,
+    debt_register_payment_validated, debt_register_write_off_validated, debt_rows,
+    delete_all_operations, delete_operations_selection, delete_standalone_record, delete_transfer,
+    delete_wallet, distinct_record_categories, distinct_record_descriptions, export_mandatory_csv,
+    export_mandatory_xlsx, export_records_csv, export_records_xlsx, filtered_record_list_rows,
+    import_mandatory_csv, import_mandatory_xlsx, import_records_csv, import_records_xlsx,
+    mandatory_add_to_records, mandatory_apply_auto_payments, mandatory_expense_row,
+    mandatory_expense_rows, mandatory_template_create, mandatory_template_delete,
+    mandatory_template_delete_all, mandatory_template_update, normalize_tag_colors,
+    operation_suggestions, preview_import_mandatory_csv, preview_import_mandatory_xlsx,
+    preview_import_records_csv, preview_import_records_xlsx, report_export_csv, report_export_pdf,
+    report_export_xlsx, report_generate, standalone_record_get_row, tag_color_palette,
+    tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
+    update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
 };
 use std::fmt;
 use std::path::Path;
@@ -164,6 +165,47 @@ pub struct AddMandatoryToRecordsRequest {
     pub template_id: i64,
     pub date: String,
     pub wallet_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateBudgetRequest {
+    pub category: String,
+    pub scope_type: String,
+    pub scope_value: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub limit_base: String,
+    pub include_mandatory: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BudgetDto {
+    pub id: i64,
+    pub category: String,
+    pub scope_type: String,
+    pub scope_value: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub limit_base: String,
+    pub limit_base_minor: i64,
+    pub include_mandatory: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BudgetResultDto {
+    pub budget: BudgetDto,
+    pub spent_base: String,
+    pub spent_minor: i64,
+    pub remaining_base: String,
+    pub usage_pct: f64,
+    pub time_pct: f64,
+    pub status: String,
+    pub pace_status: String,
+    pub forecast_remaining_base: Option<String>,
+    pub forecast_delta_base: Option<String>,
+    pub forecast_days_left: Option<i64>,
+    pub forecast_status_key: Option<String>,
+    pub forecast_status_params: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -827,6 +869,67 @@ impl LedgeraEngine {
             .map_err(storage_error)
     }
 
+    pub fn list_budgets(&self) -> Result<Vec<BudgetDto>, LedgeraEngineError> {
+        budget_rows(&self.db_path)
+            .map(|rows| rows.into_iter().map(budget_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn list_budget_results(
+        &self,
+        today: Option<String>,
+    ) -> Result<Vec<BudgetResultDto>, LedgeraEngineError> {
+        budget_results(&self.db_path, today.as_deref())
+            .map(|rows| rows.into_iter().map(budget_result_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn create_budget(
+        &self,
+        request: CreateBudgetRequest,
+    ) -> Result<BudgetDto, LedgeraEngineError> {
+        let limit_value = request
+            .limit_base
+            .parse::<f64>()
+            .map_err(|error| validation_error(&error.to_string()))?;
+        let limit_base_minor = (limit_value * 100.0).round() as i64;
+        budget_create(
+            &self.db_path,
+            BudgetCreatePayload {
+                category: &request.category,
+                scope_type: &request.scope_type,
+                scope_value: &request.scope_value,
+                start_date: &request.start_date,
+                end_date: &request.end_date,
+                limit_base: limit_value,
+                limit_base_minor,
+                include_mandatory: request.include_mandatory,
+            },
+        )
+        .map(budget_to_dto)
+        .map_err(storage_error)
+    }
+
+    pub fn update_budget_limit(
+        &self,
+        budget_id: i64,
+        limit_base: String,
+    ) -> Result<BudgetDto, LedgeraEngineError> {
+        let limit_value = limit_base
+            .parse::<f64>()
+            .map_err(|error| validation_error(&error.to_string()))?;
+        let limit_base_minor = (limit_value * 100.0).round() as i64;
+        budget_update_limit(&self.db_path, budget_id, limit_value, limit_base_minor)
+            .map(budget_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn delete_budget(&self, budget_id: i64) -> Result<bool, LedgeraEngineError> {
+        budget_delete(&self.db_path, budget_id)
+            .map(|_| true)
+            .map_err(storage_error)
+    }
+
     pub fn list_debts(&self) -> Result<Vec<DebtDto>, LedgeraEngineError> {
         debt_rows(&self.db_path)
             .map(|rows| rows.into_iter().map(debt_to_dto).collect())
@@ -1428,6 +1531,38 @@ fn transfer_to_dto(row: TransferRow) -> TransferDto {
     }
 }
 
+fn budget_to_dto(row: BudgetPayload) -> BudgetDto {
+    BudgetDto {
+        id: row.id,
+        category: row.category,
+        scope_type: row.scope_type,
+        scope_value: row.scope_value,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        limit_base: format_money(row.limit_base),
+        limit_base_minor: row.limit_base_minor,
+        include_mandatory: row.include_mandatory,
+    }
+}
+
+fn budget_result_to_dto(row: BudgetResultPayload) -> BudgetResultDto {
+    BudgetResultDto {
+        budget: budget_to_dto(row.budget),
+        spent_base: format_money(row.spent_base),
+        spent_minor: row.spent_minor,
+        remaining_base: format_money(row.remaining_base),
+        usage_pct: row.usage_pct,
+        time_pct: row.time_pct,
+        status: row.status,
+        pace_status: row.pace_status,
+        forecast_remaining_base: row.forecast_remaining_base.map(format_money),
+        forecast_delta_base: row.forecast_delta_base.map(format_money),
+        forecast_days_left: row.forecast_days_left,
+        forecast_status_key: row.forecast_status_key,
+        forecast_status_params: row.forecast_status_params,
+    }
+}
+
 fn debt_to_dto(row: DebtPayload) -> DebtDto {
     DebtDto {
         id: row.id,
@@ -1602,6 +1737,17 @@ mod tests {
                 is_write_off INTEGER NOT NULL DEFAULT 0,
                 payment_date TEXT NOT NULL
             );
+            CREATE TABLE budgets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                limit_base REAL NOT NULL,
+                limit_base_minor INTEGER NOT NULL,
+                include_mandatory INTEGER NOT NULL DEFAULT 0,
+                scope_type TEXT NOT NULL DEFAULT 'category',
+                scope_value TEXT NOT NULL DEFAULT ''
+            );
             INSERT INTO wallets (id, name, currency, initial_balance, initial_balance_minor, is_active)
             VALUES (1, 'Main', 'KZT', 100.0, 10000, 1);
             INSERT INTO wallets (id, name, currency, initial_balance, initial_balance_minor, is_active)
@@ -1753,6 +1899,55 @@ mod tests {
         assert_eq!(engine.wallet_balance(1).unwrap().unwrap().balance, "110.01");
         assert!(engine.wallet_balance(3).unwrap().is_none());
         assert!(engine.wallet_balance(99).unwrap().is_none());
+        fs::remove_file(db_path).ok();
+    }
+
+    #[test]
+    fn engine_manages_budget_results() {
+        let db_path = fixture_db();
+        let engine = LedgeraEngine::new(db_path.clone());
+        let created = engine
+            .create_budget(CreateBudgetRequest {
+                category: " Food ".to_owned(),
+                scope_type: "CATEGORY".to_owned(),
+                scope_value: " Food ".to_owned(),
+                start_date: "2026-01-01".to_owned(),
+                end_date: "2026-01-31".to_owned(),
+                limit_base: "50".to_owned(),
+                include_mandatory: false,
+            })
+            .unwrap();
+        assert_eq!(created.scope_type, "category");
+        assert_eq!(created.scope_value, "Food");
+
+        engine
+            .create_record(CreateRecordRequest {
+                record_type: "expense".to_owned(),
+                date: "2026-01-02".to_owned(),
+                wallet_id: 1,
+                amount_original: "20".to_owned(),
+                currency: "KZT".to_owned(),
+                rate_at_operation: "1".to_owned(),
+                amount_base: "20".to_owned(),
+                category: "Food".to_owned(),
+                description: "Lunch".to_owned(),
+                tags: Vec::new(),
+            })
+            .unwrap();
+        let results = engine
+            .list_budget_results(Some("2026-01-05".to_owned()))
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].spent_base, "20.00");
+        assert_eq!(results[0].status, "active");
+        assert_eq!(results[0].pace_status, "overpace");
+
+        let updated = engine
+            .update_budget_limit(created.id, "100".to_owned())
+            .unwrap();
+        assert_eq!(updated.limit_base, "100.00");
+        assert!(engine.delete_budget(created.id).unwrap());
+        assert!(engine.list_budgets().unwrap().is_empty());
         fs::remove_file(db_path).ok();
     }
 

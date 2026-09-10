@@ -325,15 +325,16 @@ pub use metrics::{
     metrics_spending_by_category, metrics_spending_by_tag, metrics_tag_coverage,
 };
 pub use planning::{
-    BudgetCreatePayload, BudgetPayload, DebtCreatePayload, DebtPayload, DebtPaymentPayload,
-    DebtPaymentRequestPayload, DebtRecalculatePayload, DebtRecordPayload, DistributionItemPayload,
-    DistributionMonthlyPayload, DistributionSubitemPayload, DistributionValidationRow,
-    FrozenDistributionPayload, budget_batch_spent_minor, budget_create, budget_delete,
-    budget_overlap_exists, budget_replace_rows, budget_rows, budget_spent_minor,
-    budget_update_limit, debt_close_validated, debt_create, debt_create_obligation, debt_delete,
-    debt_delete_payment, debt_payment_rows, debt_payment_total_minor, debt_recalculate_payload,
-    debt_register_payment, debt_register_payment_validated, debt_register_write_off_validated,
-    debt_replace_rows, debt_rows, debt_validate_payment_amount, distribution_available_months,
+    BudgetCreatePayload, BudgetPayload, BudgetResultPayload, DebtCreatePayload, DebtPayload,
+    DebtPaymentPayload, DebtPaymentRequestPayload, DebtRecalculatePayload, DebtRecordPayload,
+    DistributionItemPayload, DistributionMonthlyPayload, DistributionSubitemPayload,
+    DistributionValidationRow, FrozenDistributionPayload, budget_batch_spent_minor, budget_create,
+    budget_delete, budget_overlap_exists, budget_replace_rows, budget_results, budget_rows,
+    budget_spent_minor, budget_update_limit, debt_close_validated, debt_create,
+    debt_create_obligation, debt_delete, debt_delete_payment, debt_payment_rows,
+    debt_payment_total_minor, debt_recalculate_payload, debt_register_payment,
+    debt_register_payment_validated, debt_register_write_off_validated, debt_replace_rows,
+    debt_rows, debt_validate_payment_amount, distribution_available_months,
     distribution_create_item, distribution_create_subitem, distribution_delete_item,
     distribution_delete_subitem, distribution_frozen_rows, distribution_history_months,
     distribution_is_month_auto_fixed, distribution_is_month_fixed, distribution_item_rows,
@@ -4090,8 +4091,11 @@ pub fn normalize_tag_colors(db_path: &str) -> StorageResult<()> {
 pub fn distinct_record_categories(db_path: &str, record_type: &str) -> StorageResult<Vec<String>> {
     let conn = open_sqlite_connection(db_path)?;
     let normalized_type = record_type.trim().to_lowercase();
-    if normalized_type != "income" && normalized_type != "expense" {
-        return Err("record_type must be income or expense".to_owned());
+    if normalized_type != "income"
+        && normalized_type != "expense"
+        && normalized_type != "mandatory_expense"
+    {
+        return Err("record_type must be income, expense, or mandatory_expense".to_owned());
     }
     let mut stmt = conn
         .prepare(
@@ -9900,18 +9904,34 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             group_by_category: true,
             ..filters.clone()
         };
-        report_export_csv(&db_path, &grouped_filters, grouped_csv_path.to_str().unwrap()).unwrap();
+        report_export_csv(
+            &db_path,
+            &grouped_filters,
+            grouped_csv_path.to_str().unwrap(),
+        )
+        .unwrap();
         let mut grouped_reader = ::csv::ReaderBuilder::new()
             .has_headers(false)
             .from_path(&grouped_csv_path)
             .unwrap();
-        let grouped_rows: Vec<::csv::StringRecord> = grouped_reader.records().map(Result::unwrap).collect();
+        let grouped_rows: Vec<::csv::StringRecord> =
+            grouped_reader.records().map(Result::unwrap).collect();
         assert!(!grouped_rows.is_empty());
         assert!(grouped_rows.iter().all(|row| row.len() == 3));
-        report_export_xlsx(&db_path, &grouped_filters, grouped_xlsx_path.to_str().unwrap()).unwrap();
+        report_export_xlsx(
+            &db_path,
+            &grouped_filters,
+            grouped_xlsx_path.to_str().unwrap(),
+        )
+        .unwrap();
         let grouped_workbook = open_workbook_auto(&grouped_xlsx_path).unwrap();
         assert_eq!(grouped_workbook.sheet_names(), vec!["Report"]);
-        report_export_pdf(&db_path, &grouped_filters, grouped_pdf_path.to_str().unwrap()).unwrap();
+        report_export_pdf(
+            &db_path,
+            &grouped_filters,
+            grouped_pdf_path.to_str().unwrap(),
+        )
+        .unwrap();
 
         let _ = fs::remove_file(csv_path);
         let _ = fs::remove_file(xlsx_path);

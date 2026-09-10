@@ -33,6 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.ledgera.debts.DebtsScreen
 import app.ledgera.debts.DebtsViewModel
+import app.ledgera.budget.BudgetScreen
+import app.ledgera.budget.BudgetViewModel
 import app.ledgera.mandatory.MandatoryFileActions
 import app.ledgera.mandatory.MandatoryScreen
 import app.ledgera.mandatory.MandatoryViewModel
@@ -78,6 +80,7 @@ fun AppShell(
     mandatoryViewModel: MandatoryViewModel,
     settingsViewModel: SettingsViewModel,
     reportsViewModel: ReportsViewModel,
+    budgetViewModel: BudgetViewModel,
     modifier: Modifier = Modifier,
     operationsFileActions: OperationsFileActions = NoOperationsFileActions,
     mandatoryFileActions: MandatoryFileActions = NoMandatoryFileActions,
@@ -89,6 +92,7 @@ fun AppShell(
     val mandatoryState by mandatoryViewModel.state.collectAsState()
     val settingsState by settingsViewModel.state.collectAsState()
     val reportsState by reportsViewModel.state.collectAsState()
+    val budgetState by budgetViewModel.state.collectAsState()
     LaunchedEffect(Unit) {
         viewModel.refreshStatus()
         mandatoryViewModel.applyAutoPaymentsOnStartup()
@@ -101,6 +105,7 @@ fun AppShell(
             DesktopSection.Mandatory -> mandatoryState.notice ?: mandatoryState.error
             DesktopSection.Settings -> settingsState.notice ?: settingsState.error
             DesktopSection.Reports -> reportsState.notice ?: reportsState.error
+            DesktopSection.Budget -> budgetState.notice ?: budgetState.error
             else -> null
         },
         modifier = modifier.fillMaxSize(),
@@ -111,6 +116,7 @@ fun AppShell(
                 DesktopSection.Mandatory -> mandatoryViewModel.clearFeedback()
                 DesktopSection.Settings -> settingsViewModel.clearFeedback()
                 DesktopSection.Reports -> reportsViewModel.clearFeedback()
+                DesktopSection.Budget -> budgetViewModel.clearFeedback()
                 else -> Unit
             }
         },
@@ -155,7 +161,7 @@ fun AppShell(
                         DesktopSection.Reports -> ReportsScreen(reportsViewModel, reportsFileActions)
                         DesktopSection.Analytics -> PendingSection(state.selectedSection)
                         DesktopSection.Dashboard -> PendingSection(state.selectedSection)
-                        DesktopSection.Budget -> PendingSection(state.selectedSection)
+                        DesktopSection.Budget -> BudgetScreen(budgetViewModel)
                         DesktopSection.Debts -> DebtsScreen(debtsViewModel)
                         DesktopSection.Distribution -> PendingSection(state.selectedSection)
                         DesktopSection.Mandatory -> MandatoryScreen(

@@ -85,6 +85,23 @@ pub struct BudgetCreatePayload<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct BudgetResultPayload {
+    pub budget: BudgetPayload,
+    pub spent_base: f64,
+    pub spent_minor: i64,
+    pub remaining_base: f64,
+    pub usage_pct: f64,
+    pub time_pct: f64,
+    pub status: String,
+    pub pace_status: String,
+    pub forecast_remaining_base: Option<f64>,
+    pub forecast_delta_base: Option<f64>,
+    pub forecast_days_left: Option<i64>,
+    pub forecast_status_key: Option<String>,
+    pub forecast_status_params: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct DebtRecalculatePayload {
     pub remaining_amount_minor: i64,
     pub status: String,
@@ -286,6 +303,178 @@ fn budget_exists(conn: &Connection, budget_id: i64) -> StorageResult<bool> {
     .optional()
     .map_err(sqlite_err)
     .map(|row| row.is_some())
+}
+
+fn budget_date_parts(value: &str) -> StorageResult<(i32, i32, i32)> {
+    let parts: Vec<_> = value.split('-').collect();
+    if parts.len() != 3 {
+        return Err(format!("Invalid budget date: {value}"));
+    }
+    let year = parts[0]
+        .parse::<i32>()
+        .map_err(|_| format!("Invalid budget date: {value}"))?;
+    let month = parts[1]
+        .parse::<i32>()
+        .map_err(|_| format!("Invalid budget date: {value}"))?;
+    let day = parts[2]
+        .parse::<i32>()
+        .map_err(|_| format!("Invalid budget date: {value}"))?;
+    if parts[0].len() != 4
+        || parts[1].len() != 2
+        || parts[2].len() != 2
+        || !(1..=12).contains(&month)
+    {
+        return Err(format!("Invalid budget date: {value}"));
+    }
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    if !(1..=days[(month - 1) as usize]).contains(&day) {
+        return Err(format!("Invalid budget date: {value}"));
+    }
+    Ok((year, month, day))
+}
+
+fn budget_day_number(year: i32, month: i32, day: i32) -> i64 {
+    let y = year - i32::from(month <= 2);
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let year_of_era = y - era * 400;
+    let month_index = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * month_index + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    i64::from(era * 146097 + day_of_era)
+}
+
+fn normalize_budget_fields(
+    category: &str,
+    scope_type: &str,
+    scope_value: &str,
+    limit_base: f64,
+    limit_base_minor: i64,
+) -> StorageResult<(String, String, String)> {
+    let scope_type = scope_type.trim().to_ascii_lowercase();
+    if scope_type != "category" && scope_type != "tag" {
+        return Err("scope_type must be 'category' or 'tag'".to_owned());
+    }
+    let normalized_category = category.trim().to_owned();
+    let normalized_scope_value = scope_value.trim().to_owned();
+    if normalized_category.is_empty() || normalized_scope_value.is_empty() {
+        return Err("scope_value is required".to_owned());
+    }
+    if !limit_base.is_finite() || limit_base_minor <= 0 {
+        return Err("Budget limit must be positive".to_owned());
+    }
+    Ok((normalized_category, scope_type, normalized_scope_value))
+}
+
+fn validate_budget_payload(
+    category: &str,
+    scope_type: &str,
+    scope_value: &str,
+    start_date: &str,
+    end_date: &str,
+    limit_base: f64,
+    limit_base_minor: i64,
+) -> StorageResult<()> {
+    normalize_budget_fields(
+        category,
+        scope_type,
+        scope_value,
+        limit_base,
+        limit_base_minor,
+    )?;
+    budget_date_parts(start_date)?;
+    budget_date_parts(end_date)?;
+    if start_date > end_date {
+        return Err("start_date must be <= end_date".to_owned());
+    }
+    Ok(())
+}
+
+fn budget_status(start_date: &str, end_date: &str, today: &str) -> StorageResult<String> {
+    let start = budget_date_parts(start_date)?;
+    let end = budget_date_parts(end_date)?;
+    let today = budget_date_parts(today)?;
+    Ok(if today < start {
+        "future"
+    } else if today > end {
+        "expired"
+    } else {
+        "active"
+    }
+    .to_owned())
+}
+
+fn budget_forecast(
+    budget: &BudgetPayload,
+    spent_minor: i64,
+    today: &str,
+) -> StorageResult<(
+    Option<f64>,
+    Option<f64>,
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+)> {
+    let start = budget_date_parts(&budget.start_date)?;
+    let end = budget_date_parts(&budget.end_date)?;
+    let today = budget_date_parts(today)?;
+    let total_days =
+        (budget_day_number(end.0, end.1, end.2) - budget_day_number(start.0, start.1, start.2) + 1)
+            .max(1);
+    let elapsed_days = if today < start {
+        0
+    } else if today > end {
+        total_days
+    } else {
+        budget_day_number(today.0, today.1, today.2) - budget_day_number(start.0, start.1, start.2)
+            + 1
+    };
+    if elapsed_days < 3 && spent_minor < (budget.limit_base_minor / 10).max(1) {
+        return Ok((None, None, None, None, None));
+    }
+    let daily_burn = spent_minor as f64 / elapsed_days.max(1) as f64;
+    let projected_spent = (daily_burn * total_days as f64).round() as i64;
+    let projected_remaining = budget.limit_base_minor - projected_spent;
+    let current_remaining = budget.limit_base_minor - spent_minor;
+    let days_left = if daily_burn > 0.0 && current_remaining > 0 {
+        Some((current_remaining as f64 / daily_burn).max(0.0) as i64)
+    } else {
+        None
+    };
+    let remaining = minor_to_money_value(projected_remaining);
+    let (key, params) = if projected_remaining < 0 && days_left.is_some() {
+        (
+            "budget.forecast.overspend_in_days",
+            Some(format!("{{\"days\":{}}}", days_left.unwrap())),
+        )
+    } else if projected_remaining < 0 {
+        ("budget.forecast.overspend", None)
+    } else {
+        (
+            "budget.forecast.remaining",
+            Some(format!("{{\"amount_base\":{remaining:.2}}}")),
+        )
+    };
+    Ok((
+        Some(remaining),
+        Some(remaining),
+        days_left,
+        Some(key.to_owned()),
+        params,
+    ))
 }
 
 fn debt_from_conn(conn: &Connection, debt_id: i64) -> StorageResult<DebtPayload> {
@@ -1417,6 +1606,35 @@ pub fn budget_create(
     db_path: &str,
     payload: BudgetCreatePayload<'_>,
 ) -> StorageResult<BudgetPayload> {
+    validate_budget_payload(
+        payload.category,
+        payload.scope_type,
+        payload.scope_value,
+        payload.start_date,
+        payload.end_date,
+        payload.limit_base,
+        payload.limit_base_minor,
+    )?;
+    let (category, scope_type, scope_value) = normalize_budget_fields(
+        payload.category,
+        payload.scope_type,
+        payload.scope_value,
+        payload.limit_base,
+        payload.limit_base_minor,
+    )?;
+    if budget_overlap_exists(
+        db_path,
+        &scope_type,
+        &scope_value,
+        payload.start_date,
+        payload.end_date,
+        None,
+    )? {
+        return Err(format!(
+            "Budget for '{}' already exists for overlapping period",
+            payload.scope_value
+        ));
+    }
     let mut conn = open_write_connection(db_path)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
     tx.execute(
@@ -1426,9 +1644,9 @@ pub fn budget_create(
          )
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         params![
-            payload.category,
-            payload.scope_type,
-            payload.scope_value,
+            category,
+            scope_type,
+            scope_value,
             payload.start_date,
             payload.end_date,
             payload.limit_base,
@@ -1463,6 +1681,9 @@ pub fn budget_update_limit(
     limit_base: f64,
     limit_base_minor: i64,
 ) -> StorageResult<BudgetPayload> {
+    if !limit_base.is_finite() || limit_base_minor <= 0 {
+        return Err("Budget limit must be positive".to_owned());
+    }
     let mut conn = open_write_connection(db_path)?;
     if !budget_exists(&conn, budget_id)? {
         return Err(format!("Budget not found: {budget_id}"));
@@ -1480,12 +1701,30 @@ pub fn budget_update_limit(
 }
 
 pub fn budget_replace_rows(db_path: &str, budgets: &[BudgetPayload]) -> StorageResult<()> {
+    for budget in budgets {
+        validate_budget_payload(
+            &budget.category,
+            &budget.scope_type,
+            &budget.scope_value,
+            &budget.start_date,
+            &budget.end_date,
+            budget.limit_base,
+            budget.limit_base_minor,
+        )?;
+    }
     let mut conn = open_write_connection(db_path)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
     tx.execute("DELETE FROM budgets", []).map_err(sqlite_err)?;
     let mut sorted = budgets.to_vec();
     sorted.sort_by_key(|budget| budget.id);
     for budget in &sorted {
+        let (category, scope_type, scope_value) = normalize_budget_fields(
+            &budget.category,
+            &budget.scope_type,
+            &budget.scope_value,
+            budget.limit_base,
+            budget.limit_base_minor,
+        )?;
         tx.execute(
             "INSERT INTO budgets (
                 id, category, start_date, end_date,
@@ -1494,14 +1733,14 @@ pub fn budget_replace_rows(db_path: &str, budgets: &[BudgetPayload]) -> StorageR
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 budget.id,
-                budget.category,
+                category,
                 budget.start_date,
                 budget.end_date,
                 budget.limit_base,
                 budget.limit_base_minor,
                 budget.include_mandatory,
-                budget.scope_type,
-                budget.scope_value,
+                scope_type,
+                scope_value,
             ],
         )
         .map_err(sqlite_err)?;
@@ -1591,6 +1830,85 @@ pub fn budget_batch_spent_minor(
                 .map(|spent| (*id, spent))
             },
         )
+        .collect()
+}
+
+pub fn budget_results(
+    db_path: &str,
+    today: Option<&str>,
+) -> StorageResult<Vec<BudgetResultPayload>> {
+    let today = today.map(str::to_owned).unwrap_or_else(|| {
+        let (year, month, day) = crate::current_local_date();
+        format!("{year:04}-{month:02}-{day:02}")
+    });
+    budget_date_parts(&today)?;
+    let budgets = budget_rows(db_path)?;
+    budgets
+        .into_iter()
+        .map(|budget| {
+            let spent_minor = budget_spent_minor(
+                db_path,
+                &budget.scope_type,
+                &budget.scope_value,
+                &budget.start_date,
+                &budget.end_date,
+                budget.include_mandatory,
+            )?;
+            let spent_base = minor_to_money_value(spent_minor);
+            let limit_minor = budget.limit_base_minor;
+            let usage_pct = if limit_minor > 0 {
+                spent_minor as f64 / limit_minor as f64 * 100.0
+            } else {
+                0.0
+            };
+            let start = budget_date_parts(&budget.start_date)?;
+            let end = budget_date_parts(&budget.end_date)?;
+            let current = budget_date_parts(&today)?;
+            let total_days = (budget_day_number(end.0, end.1, end.2)
+                - budget_day_number(start.0, start.1, start.2)
+                + 1)
+            .max(1);
+            let elapsed_days = if current < start {
+                0
+            } else if current > end {
+                total_days
+            } else {
+                budget_day_number(current.0, current.1, current.2)
+                    - budget_day_number(start.0, start.1, start.2)
+                    + 1
+            };
+            let time_pct = (elapsed_days as f64 / total_days as f64 * 100.0 * 10.0).round() / 10.0;
+            let status = budget_status(&budget.start_date, &budget.end_date, &today)?;
+            let pace_status = if spent_minor >= limit_minor {
+                "overspent"
+            } else if usage_pct > time_pct + 10.0 {
+                "overpace"
+            } else {
+                "on_track"
+            };
+            let (
+                forecast_remaining_base,
+                forecast_delta_base,
+                forecast_days_left,
+                forecast_status_key,
+                forecast_status_params,
+            ) = budget_forecast(&budget, spent_minor, &today)?;
+            Ok(BudgetResultPayload {
+                remaining_base: minor_to_money_value(limit_minor - spent_minor),
+                budget,
+                spent_base,
+                spent_minor,
+                usage_pct: (usage_pct * 10.0).round() / 10.0,
+                time_pct,
+                status: status.to_owned(),
+                pace_status: pace_status.to_owned(),
+                forecast_remaining_base,
+                forecast_delta_base,
+                forecast_days_left,
+                forecast_status_key,
+                forecast_status_params,
+            })
+        })
         .collect()
 }
 
@@ -2788,6 +3106,15 @@ mod tests {
         )
         .expect("create after replace");
         assert_eq!(created.id, 8);
+        let results = budget_results(&db_path, Some("2026-04-15")).expect("results");
+        assert_eq!(results.len(), 2);
+        let travel = results
+            .iter()
+            .find(|item| item.budget.id == 7)
+            .expect("travel result");
+        assert_eq!(travel.status, "active");
+        assert_eq!(travel.pace_status, "on_track");
+        assert_eq!(travel.spent_minor, 0);
         fs::remove_file(db_path).ok();
     }
 

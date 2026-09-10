@@ -342,6 +342,44 @@ data class EngineStatus(
     val message: String,
 )
 
+data class CreateBudgetRequest(
+    val category: String,
+    val scopeType: String,
+    val scopeValue: String,
+    val startDate: String,
+    val endDate: String,
+    val limitBase: String,
+    val includeMandatory: Boolean,
+)
+
+data class BudgetItem(
+    val id: Long,
+    val category: String,
+    val scopeType: String,
+    val scopeValue: String,
+    val startDate: String,
+    val endDate: String,
+    val limitBase: String,
+    val limitBaseMinor: Long,
+    val includeMandatory: Boolean,
+)
+
+data class BudgetResultItem(
+    val budget: BudgetItem,
+    val spentBase: String,
+    val spentMinor: Long,
+    val remainingBase: String,
+    val usagePct: Double,
+    val timePct: Double,
+    val status: String,
+    val paceStatus: String,
+    val forecastRemainingBase: String?,
+    val forecastDeltaBase: String?,
+    val forecastDaysLeft: Long?,
+    val forecastStatusKey: String?,
+    val forecastStatusParams: String?,
+)
+
 data class ReportFilters(
     val walletId: Long? = null,
     val periodStart: String? = null,

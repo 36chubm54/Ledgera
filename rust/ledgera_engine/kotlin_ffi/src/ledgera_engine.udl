@@ -111,6 +111,44 @@ dictionary UpdateMandatoryTemplateRequest {
     string date;
 };
 
+dictionary CreateBudgetRequest {
+    string category;
+    string scope_type;
+    string scope_value;
+    string start_date;
+    string end_date;
+    string limit_base;
+    boolean include_mandatory;
+};
+
+dictionary BudgetDto {
+    i64 id;
+    string category;
+    string scope_type;
+    string scope_value;
+    string start_date;
+    string end_date;
+    string limit_base;
+    i64 limit_base_minor;
+    boolean include_mandatory;
+};
+
+dictionary BudgetResultDto {
+    BudgetDto budget;
+    string spent_base;
+    i64 spent_minor;
+    string remaining_base;
+    double usage_pct;
+    double time_pct;
+    string status;
+    string pace_status;
+    string? forecast_remaining_base;
+    string? forecast_delta_base;
+    i64? forecast_days_left;
+    string? forecast_status_key;
+    string? forecast_status_params;
+};
+
 dictionary AddMandatoryToRecordsRequest {
     i64 template_id;
     string date;
@@ -433,6 +471,16 @@ interface LedgeraEngine {
     WalletDto create_wallet(CreateWalletRequest request);
     [Throws=LedgeraEngineError]
     WalletDeleteResultDto delete_wallet(i64 wallet_id);
+    [Throws=LedgeraEngineError]
+    sequence<BudgetDto> list_budgets();
+    [Throws=LedgeraEngineError]
+    sequence<BudgetResultDto> list_budget_results(string? today);
+    [Throws=LedgeraEngineError]
+    BudgetDto create_budget(CreateBudgetRequest request);
+    [Throws=LedgeraEngineError]
+    BudgetDto update_budget_limit(i64 budget_id, string limit_base);
+    [Throws=LedgeraEngineError]
+    boolean delete_budget(i64 budget_id);
     [Throws=LedgeraEngineError]
     sequence<DebtDto> list_debts();
     [Throws=LedgeraEngineError]

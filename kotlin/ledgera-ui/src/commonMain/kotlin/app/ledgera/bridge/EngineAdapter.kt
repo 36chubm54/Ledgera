@@ -2,6 +2,9 @@ package app.ledgera.bridge
 
 import app.ledgera.model.CreateOperationRequest
 import app.ledgera.model.CreateDebtRequest
+import app.ledgera.model.CreateBudgetRequest
+import app.ledgera.model.BudgetItem
+import app.ledgera.model.BudgetResultItem
 import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CreateTransferResult
 import app.ledgera.model.CreateWalletRequest
@@ -88,6 +91,15 @@ interface SettingsEngine {
     suspend fun runAudit(): List<AuditFinding>
 }
 
+interface BudgetEngine {
+    suspend fun budgetScopeSuggestions(scopeType: String): List<String> = emptyList()
+    suspend fun listBudgets(): List<BudgetItem>
+    suspend fun listBudgetResults(today: String? = null): List<BudgetResultItem>
+    suspend fun createBudget(request: CreateBudgetRequest): BudgetItem
+    suspend fun updateBudgetLimit(budgetId: Long, limitBase: String): BudgetItem
+    suspend fun deleteBudget(budgetId: Long): Boolean
+}
+
 interface DebtsEngine {
     suspend fun baseCurrency(): String
     suspend fun listWallets(): List<WalletOption>
@@ -120,4 +132,4 @@ interface MandatoryEngine {
     suspend fun exportMandatoryXlsx(path: String): MandatoryExportResult
 }
 
-interface EngineAdapter : RuntimeEngine, ReportsEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine
+interface EngineAdapter : RuntimeEngine, ReportsEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine, BudgetEngine

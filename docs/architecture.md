@@ -469,6 +469,11 @@ owns selected atomic SQLite mutations and read helpers for budget
 create/list/delete/update-limit/replace, overlap checks, and spent-minor
 calculation when the bridge is enabled.
 
+The beta.1 Kotlin Budget screen uses the Rust/Kotlin UniFFI BudgetEngine for
+the same category/tag scope, mandatory-expense inclusion, overlap, pace, and
+forecast semantics. JSON full-backup budget restore remains a separate
+migration slice; no standalone CSV/XLSX Budget contract is introduced.
+
 ### 4.3 Debts and Loans
 
 Core modules:

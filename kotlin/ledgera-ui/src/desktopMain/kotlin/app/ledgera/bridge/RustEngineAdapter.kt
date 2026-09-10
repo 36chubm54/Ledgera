@@ -4,6 +4,7 @@ import app.ledgera.engine.AddMandatoryToRecordsRequest as NativeAddMandatoryToRe
 import app.ledgera.engine.CreateMandatoryTemplateRequest as NativeCreateMandatoryTemplateRequest
 import app.ledgera.engine.CreateRecordRequest as NativeCreateRecordRequest
 import app.ledgera.engine.CreateDebtRequest as NativeCreateDebtRequest
+import app.ledgera.engine.CreateBudgetRequest as NativeCreateBudgetRequest
 import app.ledgera.engine.CreateTransferRequest as NativeCreateTransferRequest
 import app.ledgera.engine.CreateWalletRequest as NativeCreateWalletRequest
 import app.ledgera.engine.LedgeraEngine
@@ -22,6 +23,9 @@ import app.ledgera.engine.TagColorAssignment as NativeTagColorAssignment
 import app.ledgera.model.AddMandatoryToRecordsRequest
 import app.ledgera.model.AuditFinding
 import app.ledgera.model.CreateDebtRequest
+import app.ledgera.model.CreateBudgetRequest
+import app.ledgera.model.BudgetItem
+import app.ledgera.model.BudgetResultItem
 import app.ledgera.model.CreateMandatoryTemplateRequest
 import app.ledgera.model.CreateOperationRequest
 import app.ledgera.model.CreateTransferRequest
@@ -435,6 +439,57 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         )
     }
 
+    override suspend fun listBudgets(): List<BudgetItem> = withContext(Dispatchers.IO) {
+        engine.listBudgets().map(::toBudgetItem)
+    }
+
+    override suspend fun budgetScopeSuggestions(scopeType: String): List<String> = withContext(Dispatchers.IO) {
+        if (scopeType == "tag") engine.listTags()
+        else (engine.listCategories("expense") + engine.listCategories("mandatory_expense")).distinct().sorted()
+    }
+
+    override suspend fun listBudgetResults(today: String?): List<BudgetResultItem> = withContext(Dispatchers.IO) {
+        engine.listBudgetResults(today).map { result ->
+            BudgetResultItem(
+                budget = toBudgetItem(result.budget),
+                spentBase = result.spentBase,
+                spentMinor = result.spentMinor,
+                remainingBase = result.remainingBase,
+                usagePct = result.usagePct,
+                timePct = result.timePct,
+                status = result.status,
+                paceStatus = result.paceStatus,
+                forecastRemainingBase = result.forecastRemainingBase,
+                forecastDeltaBase = result.forecastDeltaBase,
+                forecastDaysLeft = result.forecastDaysLeft,
+                forecastStatusKey = result.forecastStatusKey,
+                forecastStatusParams = result.forecastStatusParams,
+            )
+        }
+    }
+
+    override suspend fun createBudget(request: CreateBudgetRequest): BudgetItem = withContext(Dispatchers.IO) {
+        engine.createBudget(
+            NativeCreateBudgetRequest(
+                category = request.category,
+                scopeType = request.scopeType,
+                scopeValue = request.scopeValue,
+                startDate = request.startDate,
+                endDate = request.endDate,
+                limitBase = request.limitBase,
+                includeMandatory = request.includeMandatory,
+            )
+        ).let(::toBudgetItem)
+    }
+
+    override suspend fun updateBudgetLimit(budgetId: Long, limitBase: String): BudgetItem = withContext(Dispatchers.IO) {
+        engine.updateBudgetLimit(budgetId, limitBase).let(::toBudgetItem)
+    }
+
+    override suspend fun deleteBudget(budgetId: Long): Boolean = withContext(Dispatchers.IO) {
+        engine.deleteBudget(budgetId)
+    }
+
     override suspend fun listDebts(): List<DebtItem> = withContext(Dispatchers.IO) {
         engine.listDebts().map {
             DebtItem(
@@ -634,6 +689,19 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
             rateAtOperation = transfer.rateAtOperation,
             amountBase = transfer.amountBase,
             description = transfer.description,
+        )
+
+    private fun toBudgetItem(budget: app.ledgera.engine.BudgetDto): BudgetItem =
+        BudgetItem(
+            id = budget.id,
+            category = budget.category,
+            scopeType = budget.scopeType,
+            scopeValue = budget.scopeValue,
+            startDate = budget.startDate,
+            endDate = budget.endDate,
+            limitBase = budget.limitBase,
+            limitBaseMinor = budget.limitBaseMinor,
+            includeMandatory = budget.includeMandatory,
         )
 
     private fun toDebtItem(debt: app.ledgera.engine.DebtDto): DebtItem =
