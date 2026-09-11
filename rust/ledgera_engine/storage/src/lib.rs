@@ -1,7 +1,11 @@
+mod backup;
 mod csv;
 mod excel;
 mod tag_palette;
 
+pub use backup::{
+    FullBackupResult, export_full_backup_json, import_full_backup_json, preview_full_backup_json,
+};
 use calamine::{Data, Reader, open_workbook_auto};
 use csv::{normalize_tabular_key, read_csv_rows, write_csv_rows};
 use excel::StyledWorksheet;
@@ -6175,6 +6179,17 @@ mod tests {
                 is_write_off INTEGER NOT NULL DEFAULT 0,
                 payment_date TEXT NOT NULL
             );
+            CREATE TABLE budgets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                limit_base REAL NOT NULL,
+                limit_base_minor INTEGER NOT NULL,
+                include_mandatory INTEGER NOT NULL DEFAULT 0,
+                scope_type TEXT NOT NULL DEFAULT 'category',
+                scope_value TEXT NOT NULL DEFAULT ''
+            );
             ",
         )
         .unwrap();
@@ -6407,6 +6422,54 @@ mod tests {
             rows[1],
             (2, "Card".to_owned(), "KZT".to_owned(), 500.0, -25.0)
         );
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn full_backup_round_trips_budgets_and_supports_legacy_scope_fields() {
+        let db_path = create_balance_test_db();
+        let backup_path = temp_test_path("ledgera_budget_backup", "json");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO budgets (
+                id, category, start_date, end_date, limit_base, limit_base_minor,
+                include_mandatory, scope_type, scope_value
+             ) VALUES (7, 'Food', '2026-01-01', '2026-01-31', 100.0, 10000, 1, 'category', 'Food')",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let exported = export_full_backup_json(&db_path, backup_path.to_str().unwrap()).unwrap();
+        assert_eq!(exported.budget_rows, 1);
+        assert_eq!(
+            preview_full_backup_json(&db_path, backup_path.to_str().unwrap())
+                .unwrap()
+                .budget_rows,
+            1
+        );
+
+        budget_replace_rows(&db_path, &[]).unwrap();
+        let imported = import_full_backup_json(&db_path, backup_path.to_str().unwrap()).unwrap();
+        assert_eq!(imported.budget_rows, 1);
+        assert_eq!(budget_rows(&db_path).unwrap()[0].id, 7);
+
+        let legacy_path = temp_test_path("ledgera_legacy_budget_backup", "json");
+        let mut payload: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&backup_path).unwrap()).unwrap();
+        let budget = payload["budgets"][0].as_object_mut().unwrap();
+        budget.remove("scope_type");
+        budget.remove("scope_value");
+        fs::write(&legacy_path, serde_json::to_vec(&payload).unwrap()).unwrap();
+        assert_eq!(
+            preview_full_backup_json(&db_path, legacy_path.to_str().unwrap())
+                .unwrap()
+                .budget_rows,
+            1
+        );
+
+        fs::remove_file(backup_path).ok();
+        fs::remove_file(legacy_path).ok();
         remove_test_db(&db_path);
     }
 

@@ -8,6 +8,7 @@ import app.ledgera.model.BudgetResultItem
 import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CreateTransferResult
 import app.ledgera.model.CreateWalletRequest
+import app.ledgera.model.FullBackupResult
 import app.ledgera.model.AuditFinding
 import app.ledgera.model.AddMandatoryToRecordsRequest
 import app.ledgera.model.DebtItem
@@ -89,6 +90,9 @@ interface SettingsEngine {
     suspend fun createWallet(request: CreateWalletRequest): WalletSettingsItem
     suspend fun deleteWallet(walletId: Long): WalletDeleteResult
     suspend fun runAudit(): List<AuditFinding>
+    suspend fun previewFullBackup(path: String): FullBackupResult = error("Full backup preview is unavailable")
+    suspend fun importFullBackup(path: String): FullBackupResult = error("Full backup restore is unavailable")
+    suspend fun exportFullBackup(path: String): FullBackupResult = error("Full backup export is unavailable")
 }
 
 interface BudgetEngine {

@@ -4,6 +4,7 @@ import app.ledgera.bridge.SettingsEngine
 import app.ledgera.model.AuditFinding
 import app.ledgera.model.AuditSummary
 import app.ledgera.model.CreateWalletRequest
+import app.ledgera.model.FullBackupResult
 import app.ledgera.model.WalletSettingsItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,8 @@ data class SettingsUiState(
     val auditSummary: AuditSummary? = null,
     val error: String? = null,
     val notice: String? = null,
+    val backupPreview: FullBackupResult? = null,
+    val backupPath: String? = null,
 )
 
 class SettingsViewModel(
@@ -52,6 +55,63 @@ class SettingsViewModel(
 
     fun clearNotice() {
         mutableState.value = mutableState.value.copy(notice = null)
+    }
+
+    fun previewBackup(path: String?) {
+        val normalized = path?.trim().orEmpty()
+        if (normalized.isEmpty()) return showError(IllegalArgumentException("Backup file is required"))
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.previewFullBackup(normalized) }
+                .onSuccess { result ->
+                    mutableState.value = mutableState.value.copy(
+                        loading = false,
+                        backupPreview = result,
+                        backupPath = normalized,
+                    )
+                }.onFailure(::showError)
+        }
+    }
+
+    fun cancelBackupPreview() {
+        mutableState.value = mutableState.value.copy(backupPreview = null, backupPath = null, error = null)
+    }
+
+    fun restoreBackup() {
+        val path = mutableState.value.backupPath ?: return showError(IllegalArgumentException("Backup file is required"))
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching {
+                val result = engine.importFullBackup(path)
+                val baseCurrency = engine.baseCurrency()
+                val wallets = engine.listWalletsForSettings()
+                result to (baseCurrency to wallets)
+            }.onSuccess { (result, data) ->
+                mutableState.value = mutableState.value.copy(
+                    loading = false,
+                    wallets = data.second,
+                    baseCurrency = data.first,
+                    backupPreview = null,
+                    backupPath = null,
+                    notice = "Backup restored: ${result.importedRows} rows, ${result.budgetRows} budgets",
+                )
+            }.onFailure(::showError)
+        }
+    }
+
+    fun exportBackup(path: String?) {
+        val normalized = path?.trim().orEmpty()
+        if (normalized.isEmpty()) return showError(IllegalArgumentException("Backup file is required"))
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.exportFullBackup(normalized) }
+                .onSuccess { result ->
+                    mutableState.value = mutableState.value.copy(
+                        loading = false,
+                        notice = "Backup exported: ${result.importedRows} rows, ${result.budgetRows} budgets",
+                    )
+                }.onFailure(::showError)
+        }
     }
 
     fun createWallet(request: CreateWalletRequest) {

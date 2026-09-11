@@ -14,13 +14,14 @@ use ledgera_engine_storage::{
     debt_close_validated, debt_create, debt_delete, debt_delete_payment, debt_payment_rows,
     debt_register_payment_validated, debt_register_write_off_validated, debt_rows,
     delete_all_operations, delete_operations_selection, delete_standalone_record, delete_transfer,
-    delete_wallet, distinct_record_categories, distinct_record_descriptions, export_mandatory_csv,
-    export_mandatory_xlsx, export_records_csv, export_records_xlsx, filtered_record_list_rows,
-    import_mandatory_csv, import_mandatory_xlsx, import_records_csv, import_records_xlsx,
-    mandatory_add_to_records, mandatory_apply_auto_payments, mandatory_expense_row,
-    mandatory_expense_rows, mandatory_template_create, mandatory_template_delete,
-    mandatory_template_delete_all, mandatory_template_update, normalize_tag_colors,
-    operation_suggestions, preview_import_mandatory_csv, preview_import_mandatory_xlsx,
+    delete_wallet, distinct_record_categories, distinct_record_descriptions,
+    export_full_backup_json, export_mandatory_csv, export_mandatory_xlsx, export_records_csv,
+    export_records_xlsx, filtered_record_list_rows, import_full_backup_json, import_mandatory_csv,
+    import_mandatory_xlsx, import_records_csv, import_records_xlsx, mandatory_add_to_records,
+    mandatory_apply_auto_payments, mandatory_expense_row, mandatory_expense_rows,
+    mandatory_template_create, mandatory_template_delete, mandatory_template_delete_all,
+    mandatory_template_update, normalize_tag_colors, operation_suggestions,
+    preview_full_backup_json, preview_import_mandatory_csv, preview_import_mandatory_xlsx,
     preview_import_records_csv, preview_import_records_xlsx, report_export_csv, report_export_pdf,
     report_export_xlsx, report_generate, standalone_record_get_row, tag_color_palette,
     tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
@@ -206,6 +207,13 @@ pub struct BudgetResultDto {
     pub forecast_days_left: Option<i64>,
     pub forecast_status_key: Option<String>,
     pub forecast_status_params: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FullBackupResultDto {
+    pub path: String,
+    pub imported_rows: i64,
+    pub budget_rows: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -930,6 +938,33 @@ impl LedgeraEngine {
             .map_err(storage_error)
     }
 
+    pub fn preview_full_backup_json(
+        &self,
+        path: String,
+    ) -> Result<FullBackupResultDto, LedgeraEngineError> {
+        preview_full_backup_json(&self.db_path, &path)
+            .map(full_backup_result_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn import_full_backup_json(
+        &self,
+        path: String,
+    ) -> Result<FullBackupResultDto, LedgeraEngineError> {
+        import_full_backup_json(&self.db_path, &path)
+            .map(full_backup_result_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn export_full_backup_json(
+        &self,
+        path: String,
+    ) -> Result<FullBackupResultDto, LedgeraEngineError> {
+        export_full_backup_json(&self.db_path, &path)
+            .map(full_backup_result_to_dto)
+            .map_err(storage_error)
+    }
+
     pub fn list_debts(&self) -> Result<Vec<DebtDto>, LedgeraEngineError> {
         debt_rows(&self.db_path)
             .map(|rows| rows.into_iter().map(debt_to_dto).collect())
@@ -1563,6 +1598,14 @@ fn budget_result_to_dto(row: BudgetResultPayload) -> BudgetResultDto {
     }
 }
 
+fn full_backup_result_to_dto(row: ledgera_engine_storage::FullBackupResult) -> FullBackupResultDto {
+    FullBackupResultDto {
+        path: row.path,
+        imported_rows: row.imported_rows,
+        budget_rows: row.budget_rows,
+    }
+}
+
 fn debt_to_dto(row: DebtPayload) -> DebtDto {
     DebtDto {
         id: row.id,
@@ -1942,12 +1985,31 @@ mod tests {
         assert_eq!(results[0].status, "active");
         assert_eq!(results[0].pace_status, "overpace");
 
+        let backup_path = std::env::temp_dir().join(format!(
+            "ledgera_kotlin_budget_backup_{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let backup_path = backup_path.to_string_lossy().into_owned();
+        let exported = engine.export_full_backup_json(backup_path.clone()).unwrap();
+        assert_eq!(exported.budget_rows, 1);
+        assert_eq!(
+            engine
+                .preview_full_backup_json(backup_path.clone())
+                .unwrap()
+                .budget_rows,
+            1
+        );
+
         let updated = engine
             .update_budget_limit(created.id, "100".to_owned())
             .unwrap();
         assert_eq!(updated.limit_base, "100.00");
         assert!(engine.delete_budget(created.id).unwrap());
         assert!(engine.list_budgets().unwrap().is_empty());
+        std::fs::remove_file(backup_path).ok();
         fs::remove_file(db_path).ok();
     }
 

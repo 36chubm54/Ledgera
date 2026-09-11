@@ -145,7 +145,7 @@ class BudgetViewModel(
         val start = DateValidation.parseDmyStrict(draft.startDate)
         val end = DateValidation.parseDmyStrict(draft.endDate)
         if (start == null || end == null) return "Dates must use valid DD.MM.YYYY values"
-        if (start != null && end != null && start > end) return "Start date must be before end date"
+        if (start > end) return "Start date must be before end date"
         if (draft.limitBase.toDoubleOrNull()?.let { it > 0.0 } != true) return "Budget limit must be positive"
         return null
     }

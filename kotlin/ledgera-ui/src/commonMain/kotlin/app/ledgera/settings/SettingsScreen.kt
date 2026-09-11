@@ -41,8 +41,22 @@ import app.ledgera.model.AuditSummary
 import app.ledgera.model.CreateWalletRequest
 import app.ledgera.model.WalletSettingsItem
 
+interface SettingsFileActions {
+    fun openBackupPath(): String?
+    fun saveBackupPath(): String?
+}
+
+object NoSettingsFileActions : SettingsFileActions {
+    override fun openBackupPath(): String? = null
+    override fun saveBackupPath(): String? = null
+}
+
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel,
+    modifier: Modifier = Modifier,
+    fileActions: SettingsFileActions = NoSettingsFileActions,
+) {
     val state by viewModel.state.collectAsState()
     var showCreateWalletDialog by remember { mutableStateOf(false) }
     var walletPendingDelete by remember { mutableStateOf<WalletSettingsItem?>(null) }
@@ -94,6 +108,11 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
             },
             onViewReport = { showAuditReport = true },
         )
+        BackupSection(
+            loading = state.loading,
+            onRestore = { viewModel.previewBackup(fileActions.openBackupPath()) },
+            onExport = { viewModel.exportBackup(fileActions.saveBackupPath()) },
+        )
     }
 
     if (showCreateWalletDialog) {
@@ -119,6 +138,37 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
             findings = state.auditFindings,
             onClose = { showAuditReport = false },
         )
+    }
+    state.backupPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelBackupPreview,
+            title = { Text("Restore backup?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Current wallets, operations, debts, mandatory templates, tags, and budgets will be replaced.")
+                    Text("Rows: ${preview.importedRows} · Budgets: ${preview.budgetRows}")
+                    state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                Button(onClick = viewModel::restoreBackup, enabled = !state.loading) { Text("Restore") }
+            },
+            dismissButton = { TextButton(onClick = viewModel::cancelBackupPreview) { Text("Cancel") } },
+        )
+    }
+}
+
+@Composable
+private fun BackupSection(loading: Boolean, onRestore: () -> Unit, onExport: () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Full backup", style = MaterialTheme.typography.titleMedium)
+            Text("Export or restore the complete JSON database snapshot, including budgets.")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onExport, enabled = !loading) { Text("Export JSON") }
+                TextButton(onClick = onRestore, enabled = !loading) { Text("Restore JSON") }
+            }
+        }
     }
 }
 

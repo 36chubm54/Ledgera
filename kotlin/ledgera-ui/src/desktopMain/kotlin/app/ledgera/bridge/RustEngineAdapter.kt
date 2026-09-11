@@ -8,6 +8,7 @@ import app.ledgera.engine.CreateBudgetRequest as NativeCreateBudgetRequest
 import app.ledgera.engine.CreateTransferRequest as NativeCreateTransferRequest
 import app.ledgera.engine.CreateWalletRequest as NativeCreateWalletRequest
 import app.ledgera.engine.LedgeraEngine
+import app.ledgera.engine.FullBackupResultDto
 import app.ledgera.engine.MandatoryExportResultDto
 import app.ledgera.engine.MandatoryImportResultDto
 import app.ledgera.engine.OperationExportResultDto
@@ -31,6 +32,7 @@ import app.ledgera.model.CreateOperationRequest
 import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CreateTransferResult
 import app.ledgera.model.CreateWalletRequest
+import app.ledgera.model.FullBackupResult
 import app.ledgera.model.DebtItem
 import app.ledgera.model.DebtPaymentItem
 import app.ledgera.model.EngineStatus
@@ -661,6 +663,18 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         }
     }
 
+    override suspend fun previewFullBackup(path: String): FullBackupResult = withContext(Dispatchers.IO) {
+        engine.previewFullBackupJson(path).toModel()
+    }
+
+    override suspend fun importFullBackup(path: String): FullBackupResult = withContext(Dispatchers.IO) {
+        engine.importFullBackupJson(path).toModel()
+    }
+
+    override suspend fun exportFullBackup(path: String): FullBackupResult = withContext(Dispatchers.IO) {
+        engine.exportFullBackupJson(path).toModel()
+    }
+
     private fun toOperationRecord(record: app.ledgera.engine.RecordDto): OperationRecord =
         OperationRecord(
             id = record.id,
@@ -776,6 +790,9 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
 
     private fun MandatoryExportResultDto.toModel(): MandatoryExportResult =
         MandatoryExportResult(exportedRows = exportedRows, path = path)
+
+    private fun FullBackupResultDto.toModel(): FullBackupResult =
+        FullBackupResult(path = path, importedRows = importedRows, budgetRows = budgetRows)
 }
 
 private fun ReportFilters.toNative() = NativeReportFiltersDto(

@@ -48,6 +48,8 @@ import app.ledgera.reports.ReportsViewModel
 import app.ledgera.reports.ReportsFileActions
 import app.ledgera.reports.NoReportsFileActions
 import app.ledgera.settings.SettingsScreen
+import app.ledgera.settings.SettingsFileActions
+import app.ledgera.settings.NoSettingsFileActions
 import app.ledgera.settings.SettingsViewModel
 import app.ledgera.ui.ToastHost
 import app.ledgera.resources.Res
@@ -85,6 +87,7 @@ fun AppShell(
     operationsFileActions: OperationsFileActions = NoOperationsFileActions,
     mandatoryFileActions: MandatoryFileActions = NoMandatoryFileActions,
     reportsFileActions: ReportsFileActions = NoReportsFileActions,
+    settingsFileActions: SettingsFileActions = NoSettingsFileActions,
 ) {
     val state by viewModel.state.collectAsState()
     val operationsState by operationsViewModel.state.collectAsState()
@@ -168,7 +171,7 @@ fun AppShell(
                             viewModel = mandatoryViewModel,
                             fileActions = mandatoryFileActions,
                         )
-                        DesktopSection.Settings -> SettingsScreen(settingsViewModel)
+                        DesktopSection.Settings -> SettingsScreen(settingsViewModel, fileActions = settingsFileActions)
                     }
                 }
             }

@@ -149,6 +149,12 @@ dictionary BudgetResultDto {
     string? forecast_status_params;
 };
 
+dictionary FullBackupResultDto {
+    string path;
+    i64 imported_rows;
+    i64 budget_rows;
+};
+
 dictionary AddMandatoryToRecordsRequest {
     i64 template_id;
     string date;
@@ -481,6 +487,12 @@ interface LedgeraEngine {
     BudgetDto update_budget_limit(i64 budget_id, string limit_base);
     [Throws=LedgeraEngineError]
     boolean delete_budget(i64 budget_id);
+    [Throws=LedgeraEngineError]
+    FullBackupResultDto preview_full_backup_json(string path);
+    [Throws=LedgeraEngineError]
+    FullBackupResultDto import_full_backup_json(string path);
+    [Throws=LedgeraEngineError]
+    FullBackupResultDto export_full_backup_json(string path);
     [Throws=LedgeraEngineError]
     sequence<DebtDto> list_debts();
     [Throws=LedgeraEngineError]

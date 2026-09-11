@@ -471,8 +471,10 @@ calculation when the bridge is enabled.
 
 The beta.1 Kotlin Budget screen uses the Rust/Kotlin UniFFI BudgetEngine for
 the same category/tag scope, mandatory-expense inclusion, overlap, pace, and
-forecast semantics. JSON full-backup budget restore remains a separate
-migration slice; no standalone CSV/XLSX Budget contract is introduced.
+forecast semantics. Full JSON backup/restore is also exposed through the
+Rust/Kotlin bridge: budgets are part of the atomic full-database snapshot,
+with preview validation and compatibility for legacy category-only rows. No
+standalone CSV/XLSX Budget contract is introduced.
 
 ### 4.3 Debts and Loans
 

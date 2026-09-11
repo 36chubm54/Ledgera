@@ -195,6 +195,12 @@ data class WalletDeleteResult(
     val action: String,
 )
 
+data class FullBackupResult(
+    val path: String,
+    val importedRows: Long,
+    val budgetRows: Long,
+)
+
 data class DebtItem(
     val id: Long,
     val contactName: String,

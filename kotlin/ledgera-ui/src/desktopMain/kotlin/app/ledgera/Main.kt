@@ -17,6 +17,7 @@ import app.ledgera.operations.ImportFileSnapshotProvider
 import app.ledgera.operations.OperationsViewModel
 import app.ledgera.operations.OperationsFileActions
 import app.ledgera.settings.SettingsViewModel
+import app.ledgera.settings.SettingsFileActions
 import app.ledgera.reports.ReportsViewModel
 import app.ledgera.reports.ReportsFileActions
 import app.ledgera.shell.AppShell
@@ -76,6 +77,7 @@ private fun runApplication(args: Array<String>) = application {
                         operationsFileActions = DesktopOperationsFileActions(window),
                         mandatoryFileActions = DesktopMandatoryFileActions(window),
                         reportsFileActions = DesktopReportsFileActions(window),
+                        settingsFileActions = DesktopSettingsFileActions(window),
                     )
                 }
             }
@@ -153,6 +155,26 @@ private class DesktopReportsFileActions(private val owner: AwtWindow) : ReportsF
                 isVisible = true
             }
             .selectedPath(defaultExtension = extension)
+}
+
+private class DesktopSettingsFileActions(private val owner: AwtWindow) : SettingsFileActions {
+    override fun openBackupPath(): String? =
+        FileDialog(owner as? Frame, "Restore full backup", FileDialog.LOAD)
+            .apply {
+                file = "*.json"
+                filenameFilter = FilenameFilter { _, name -> name.endsWith(".json", ignoreCase = true) }
+                isVisible = true
+            }
+            .selectedPath(defaultExtension = "json")
+
+    override fun saveBackupPath(): String? =
+        FileDialog(owner as? Frame, "Export full backup", FileDialog.SAVE)
+            .apply {
+                file = "ledgera-backup.json"
+                filenameFilter = FilenameFilter { _, name -> name.endsWith(".json", ignoreCase = true) }
+                isVisible = true
+            }
+            .selectedPath(defaultExtension = "json")
 }
 
 private object DesktopImportFileSnapshotProvider : ImportFileSnapshotProvider {
