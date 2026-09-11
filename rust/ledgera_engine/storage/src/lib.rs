@@ -6463,12 +6463,8 @@ mod tests {
         budget.remove("scope_value");
         payload.as_object_mut().unwrap().remove("checksum");
         fs::write(&legacy_path, serde_json::to_vec(&payload).unwrap()).unwrap();
-        assert_eq!(
-            preview_full_backup_json(&db_path, legacy_path.to_str().unwrap())
-                .unwrap()
-                .budget_rows,
-            1
-        );
+        let error = preview_full_backup_json(&db_path, legacy_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("checksum is required"));
 
         let invalid_money_path = temp_test_path("ledgera_invalid_money_backup", "json");
         let mut invalid_money =
@@ -6483,7 +6479,7 @@ mod tests {
         .unwrap();
         let error =
             preview_full_backup_json(&db_path, invalid_money_path.to_str().unwrap()).unwrap_err();
-        assert!(error.contains("limit_base and limit_base_minor mismatch"));
+        assert!(error.contains("checksum is required"));
 
         let tampered_path = temp_test_path("ledgera_tampered_backup", "json");
         let mut tampered =

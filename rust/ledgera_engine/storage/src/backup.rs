@@ -54,6 +54,33 @@ fn table_columns(conn: &Connection, table: &str) -> StorageResult<Vec<String>> {
     rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
 }
 
+#[derive(Debug, Clone)]
+struct TableColumn {
+    name: String,
+    declared_type: String,
+    not_null: bool,
+    has_default: bool,
+    is_primary_key: bool,
+}
+
+fn table_schema(conn: &Connection, table: &str) -> StorageResult<Vec<TableColumn>> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(sqlite_err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(TableColumn {
+                name: row.get(1)?,
+                declared_type: row.get::<_, String>(2)?.to_ascii_uppercase(),
+                not_null: row.get::<_, i64>(3)? != 0,
+                has_default: row.get::<_, Option<String>>(4)?.is_some(),
+                is_primary_key: row.get::<_, i64>(5)? != 0,
+            })
+        })
+        .map_err(sqlite_err)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
+}
+
 fn sql_value_to_json(value: rusqlite::types::ValueRef<'_>) -> JsonValue {
     match value {
         rusqlite::types::ValueRef::Null => JsonValue::Null,
@@ -131,7 +158,7 @@ fn payload_checksum(payload: &JsonValue) -> StorageResult<String> {
 fn verify_checksum(payload: &JsonValue) -> StorageResult<String> {
     let object = sections(payload)?;
     let Some(value) = object.get("checksum").and_then(JsonValue::as_str) else {
-        return Ok(String::new());
+        return Err("Backup checksum is required".to_owned());
     };
     let actual = payload_checksum(payload)?;
     let expected = value.strip_prefix("sha256:").unwrap_or(value);
@@ -146,6 +173,252 @@ fn verify_checksum(payload: &JsonValue) -> StorageResult<String> {
         return Err("Backup checksum mismatch".to_owned());
     }
     Ok(format!("sha256:{actual}"))
+}
+
+fn validate_scalar_type(
+    table: &str,
+    row_index: usize,
+    column: &TableColumn,
+    value: &JsonValue,
+) -> StorageResult<()> {
+    if value.is_null() {
+        if column.not_null || column.is_primary_key {
+            return Err(format!(
+                "{table} row {row_index} column '{}' cannot be null",
+                column.name
+            ));
+        }
+        return Ok(());
+    }
+    let valid = if column.declared_type.contains("INT") {
+        value.as_i64().is_some()
+    } else if column.declared_type.contains("REAL")
+        || column.declared_type.contains("FLOA")
+        || column.declared_type.contains("DOUB")
+    {
+        value.as_f64().is_some_and(f64::is_finite)
+    } else if column.declared_type.contains("TEXT")
+        || column.declared_type.contains("CHAR")
+        || column.declared_type.contains("CLOB")
+    {
+        value.is_string()
+    } else {
+        matches!(
+            value,
+            JsonValue::Null | JsonValue::Bool(_) | JsonValue::Number(_) | JsonValue::String(_)
+        )
+    };
+    if !valid {
+        return Err(format!(
+            "{table} row {row_index} column '{}' has an invalid JSON type",
+            column.name
+        ));
+    }
+    if column.name == "id" || column.name.ends_with("_id") {
+        if value.as_i64().map(|id| id <= 0).unwrap_or(true) {
+            return Err(format!(
+                "{table} row {row_index} column '{}' must be a positive integer",
+                column.name
+            ));
+        }
+    }
+    if [
+        "system",
+        "allow_negative",
+        "is_active",
+        "auto_pay",
+        "include_mandatory",
+        "is_write_off",
+    ]
+    .contains(&column.name.as_str())
+        && !matches!(value.as_i64(), Some(0 | 1))
+    {
+        return Err(format!(
+            "{table} row {row_index} column '{}' must be 0 or 1",
+            column.name
+        ));
+    }
+    if ["date", "start_date", "end_date", "payment_date"].contains(&column.name.as_str())
+        && !value.is_null()
+    {
+        validate_backup_date(
+            value.as_str().ok_or_else(|| {
+                format!(
+                    "{table} row {row_index} column '{}' must be text",
+                    column.name
+                )
+            })?,
+            &column.name,
+        )?;
+    }
+    Ok(())
+}
+
+fn row_id_set(table: &str, rows: &[JsonValue]) -> StorageResult<HashSet<i64>> {
+    rows.iter()
+        .enumerate()
+        .map(|(index, row)| {
+            row.as_object()
+                .and_then(|object| object.get("id"))
+                .and_then(JsonValue::as_i64)
+                .ok_or_else(|| format!("{table} row {} must have an integer id", index + 1))
+        })
+        .collect()
+}
+
+fn validate_reference(
+    table: &str,
+    row_index: usize,
+    column: &str,
+    value: Option<&JsonValue>,
+    target: &HashSet<i64>,
+) -> StorageResult<()> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    if value.is_null() {
+        return Ok(());
+    }
+    let Some(id) = value.as_i64() else {
+        return Err(format!(
+            "{table} row {row_index} column '{column}' must be an integer"
+        ));
+    };
+    if !target.contains(&id) {
+        return Err(format!(
+            "{table} row {row_index} column '{column}' references missing id {id}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_relationships(object: &Map<String, JsonValue>) -> StorageResult<()> {
+    let rows = |table: &str| object[table].as_array().unwrap();
+    let wallets = row_id_set("wallets", rows("wallets"))?;
+    let transfers = row_id_set("transfers", rows("transfers"))?;
+    let tags = row_id_set("tags", rows("tags"))?;
+    let records = row_id_set("records", rows("records"))?;
+    let debts = row_id_set("debts", rows("debts"))?;
+    for (index, row) in rows("transfers").iter().enumerate() {
+        let row = row.as_object().unwrap();
+        validate_reference(
+            "transfers",
+            index + 1,
+            "from_wallet_id",
+            row.get("from_wallet_id"),
+            &wallets,
+        )?;
+        validate_reference(
+            "transfers",
+            index + 1,
+            "to_wallet_id",
+            row.get("to_wallet_id"),
+            &wallets,
+        )?;
+    }
+    for (index, row) in rows("mandatory_expenses").iter().enumerate() {
+        validate_reference(
+            "mandatory_expenses",
+            index + 1,
+            "wallet_id",
+            row.as_object().unwrap().get("wallet_id"),
+            &wallets,
+        )?;
+    }
+    for (index, row) in rows("records").iter().enumerate() {
+        let row = row.as_object().unwrap();
+        validate_reference(
+            "records",
+            index + 1,
+            "wallet_id",
+            row.get("wallet_id"),
+            &wallets,
+        )?;
+        validate_reference(
+            "records",
+            index + 1,
+            "transfer_id",
+            row.get("transfer_id"),
+            &transfers,
+        )?;
+        validate_reference(
+            "records",
+            index + 1,
+            "related_debt_id",
+            row.get("related_debt_id"),
+            &debts,
+        )?;
+    }
+    let mut record_tags = HashSet::new();
+    for (index, row) in rows("record_tags").iter().enumerate() {
+        let row = row.as_object().unwrap();
+        let record_id = row["record_id"].as_i64().unwrap();
+        let tag_id = row["tag_id"].as_i64().unwrap();
+        validate_reference(
+            "record_tags",
+            index + 1,
+            "record_id",
+            row.get("record_id"),
+            &records,
+        )?;
+        validate_reference("record_tags", index + 1, "tag_id", row.get("tag_id"), &tags)?;
+        if !record_tags.insert((record_id, tag_id)) {
+            return Err(format!(
+                "record_tags row {} duplicates a record/tag link",
+                index + 1
+            ));
+        }
+    }
+    for (index, row) in rows("debt_payments").iter().enumerate() {
+        let row = row.as_object().unwrap();
+        validate_reference(
+            "debt_payments",
+            index + 1,
+            "debt_id",
+            row.get("debt_id"),
+            &debts,
+        )?;
+        validate_reference(
+            "debt_payments",
+            index + 1,
+            "record_id",
+            row.get("record_id"),
+            &records,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_table_rows(conn: &Connection, table: &str, rows: &[JsonValue]) -> StorageResult<()> {
+    let schema = table_schema(conn, table)?;
+    let known: HashSet<_> = schema.iter().map(|column| column.name.as_str()).collect();
+    for (index, value) in rows.iter().enumerate() {
+        let row_index = index + 1;
+        let object = value
+            .as_object()
+            .ok_or_else(|| format!("{table} row {row_index} must be an object"))?;
+        for name in object.keys() {
+            if !known.contains(name.as_str()) {
+                return Err(format!(
+                    "{table} row {row_index} contains unknown column '{name}'"
+                ));
+            }
+        }
+        for column in &schema {
+            if column.is_primary_key || (column.not_null && !column.has_default) {
+                if !object.contains_key(&column.name) {
+                    return Err(format!(
+                        "{table} row {row_index} is missing required column '{}'",
+                        column.name
+                    ));
+                }
+            }
+            if let Some(value) = object.get(&column.name) {
+                validate_scalar_type(table, row_index, column, value)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn budget_legacy_row(row: &Map<String, JsonValue>) -> StorageResult<Map<String, JsonValue>> {
@@ -285,6 +558,14 @@ fn validate_payload(conn: &Connection, payload: &JsonValue) -> StorageResult<Vec
             return Err(format!("Backup section '{table}' must be an array"));
         }
     }
+    for table in BACKUP_TABLES {
+        let rows = object
+            .get(*table)
+            .and_then(JsonValue::as_array)
+            .map_or(&[][..], Vec::as_slice);
+        validate_table_rows(conn, table, rows)?;
+    }
+    validate_relationships(object)?;
     let mut budgets = Vec::new();
     let budget_rows = object
         .get("budgets")
@@ -467,8 +748,8 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
     let mut conn = Connection::open(db_path).map_err(sqlite_err)?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(sqlite_err)?;
-    let budgets = validate_payload(&conn, &payload)?;
     let checksum = verify_checksum(&payload)?;
+    let budgets = validate_payload(&conn, &payload)?;
     let object = sections(&payload)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
     tx.execute_batch(
