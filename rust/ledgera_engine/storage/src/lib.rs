@@ -2153,6 +2153,7 @@ fn parse_operation_tabular_import(
     let base_currency = base_currency_code_in_conn(conn)?;
     let wallet_ids = active_wallet_ids_in_conn(conn)?;
     let debt_ids = debt_ids_in_conn(conn)?;
+    let aggregate_transfer_ids = valid_aggregate_transfer_ids(&rows, &base_currency, &wallet_ids);
     let mut plan = OperationCsvPlan::default();
     let mut logical_transfer_ids = HashSet::new();
     let mut debt_source_record_ids = HashSet::new();
@@ -2172,6 +2173,7 @@ fn parse_operation_tabular_import(
             &debt_ids,
             &mut logical_transfer_ids,
             &mut next_implicit_transfer_id,
+            &aggregate_transfer_ids,
         );
         match row {
             Ok(row) => {
@@ -2200,6 +2202,30 @@ fn parse_operation_tabular_import(
         }
     }
     Ok(plan)
+}
+
+fn valid_aggregate_transfer_ids(
+    rows: &[(usize, HashMap<String, String>)],
+    base_currency: &str,
+    wallet_ids: &HashSet<i64>,
+) -> HashSet<i64> {
+    let mut transfer_ids = HashSet::new();
+    let mut next_implicit_transfer_id = -1_i64;
+    for (_, values) in rows {
+        if csv_value(values, "type").trim().to_lowercase() != "transfer" {
+            continue;
+        }
+        if let Ok(transfer) = parse_operation_csv_transfer(
+            values,
+            "aggregate transfer",
+            base_currency,
+            wallet_ids,
+            &mut next_implicit_transfer_id,
+        ) {
+            transfer_ids.insert(transfer.logical_id);
+        }
+    }
+    transfer_ids
 }
 
 #[derive(Debug, Clone)]
@@ -2244,6 +2270,7 @@ fn parse_operation_csv_row(
     debt_ids: &HashSet<i64>,
     logical_transfer_ids: &mut HashSet<i64>,
     next_implicit_transfer_id: &mut i64,
+    aggregate_transfer_ids: &HashSet<i64>,
 ) -> StorageResult<ParsedOperationCsvRow> {
     let row_type = csv_value(values, "type").trim().to_lowercase();
     if row_type == "transfer" {
@@ -2321,7 +2348,9 @@ fn parse_operation_csv_row(
     }
     let category = required_csv_value(values, "category", row_label)?;
     let description = csv_value(values, "description");
-    if let Some(marker_transfer_id) = transfer_marker_id(&description) {
+    if let Some(marker_transfer_id) = transfer_marker_id(&description)
+        && !aggregate_transfer_ids.contains(&marker_transfer_id)
+    {
         return Err(format!(
             "{row_label}: transfer commission marker [transfer:{marker_transfer_id}] requires an aggregate transfer row"
         ));
@@ -10458,6 +10487,54 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let result = import_records_csv(&db_path, path.to_str().unwrap()).unwrap();
         assert_eq!(result.imported, 0);
         assert_eq!(record_list_rows(&db_path).unwrap().len(), 5);
+
+        let _ = fs::remove_file(path);
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn import_records_csv_accepts_commission_marker_before_aggregate_transfer() {
+        let db_path = create_balance_test_db();
+        let path = std::env::temp_dir().join(format!(
+            "ledgera_ops_import_commission_{}.csv",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::write(
+            &path,
+            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,record_id,related_debt_id,transfer_id,from_wallet_id,to_wallet_id\n\
+             2026-02-01,expense,1,Commission,3.50,KZT,1,3.50,[transfer:42],,,,,,,\n\
+             2026-02-01,transfer,,Transfer,100.00,KZT,1,100.00,Move funds,,,,,42,1,2\n",
+        )
+        .unwrap();
+
+        let preview = preview_import_records_csv(&db_path, path.to_str().unwrap()).unwrap();
+        assert_eq!(preview.imported, 2);
+        assert_eq!(preview.skipped, 0);
+        assert!(preview.errors.is_empty());
+
+        let result = import_records_csv(&db_path, path.to_str().unwrap()).unwrap();
+        assert_eq!(result.imported, 2);
+        assert_eq!(result.skipped, 0);
+
+        let transfer = transfer_list_rows(&db_path)
+            .unwrap()
+            .into_iter()
+            .find(|transfer| transfer.description == "Move funds")
+            .unwrap();
+        let marker = format!("[transfer:{}]", transfer.id);
+        let commission = record_list_rows(&db_path)
+            .unwrap()
+            .into_iter()
+            .find(|record| record.description == marker)
+            .unwrap();
+        assert!(delete_standalone_record(&db_path, commission.id).is_err());
+
+        assert!(delete_transfer(&db_path, transfer.id).unwrap());
+        let rows = record_list_rows(&db_path).unwrap();
+        assert!(!rows.iter().any(|record| record.description == marker));
 
         let _ = fs::remove_file(path);
         remove_test_db(&db_path);
