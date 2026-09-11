@@ -199,6 +199,7 @@ data class FullBackupResult(
     val path: String,
     val importedRows: Long,
     val budgetRows: Long,
+    val checksum: String,
 )
 
 data class DebtItem(

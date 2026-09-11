@@ -792,7 +792,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         MandatoryExportResult(exportedRows = exportedRows, path = path)
 
     private fun FullBackupResultDto.toModel(): FullBackupResult =
-        FullBackupResult(path = path, importedRows = importedRows, budgetRows = budgetRows)
+        FullBackupResult(path = path, importedRows = importedRows, budgetRows = budgetRows, checksum = checksum)
 }
 
 private fun ReportFilters.toNative() = NativeReportFiltersDto(

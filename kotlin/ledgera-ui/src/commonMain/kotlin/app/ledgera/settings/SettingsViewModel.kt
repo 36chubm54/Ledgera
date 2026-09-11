@@ -25,6 +25,7 @@ data class SettingsUiState(
     val notice: String? = null,
     val backupPreview: FullBackupResult? = null,
     val backupPath: String? = null,
+    val restoreVersion: Long = 0,
 )
 
 class SettingsViewModel(
@@ -93,6 +94,7 @@ class SettingsViewModel(
                     baseCurrency = data.first,
                     backupPreview = null,
                     backupPath = null,
+                    restoreVersion = mutableState.value.restoreVersion + 1,
                     notice = "Backup restored: ${result.importedRows} rows, ${result.budgetRows} budgets",
                 )
             }.onFailure(::showError)

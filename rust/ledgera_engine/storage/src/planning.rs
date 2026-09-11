@@ -1,6 +1,7 @@
 use crate::{
-    StorageResult, minor_amount_expr, normalize_record_ids_in_tx, signed_minor_amount_expr,
-    sqlite_err, storage_clear_read_connection_cache, with_cached_read_connection,
+    StorageResult, minor_amount_expr, normalize_record_ids_in_tx, normalize_tag_name,
+    signed_minor_amount_expr, sqlite_err, storage_clear_read_connection_cache,
+    with_cached_read_connection,
 };
 use ledgera_engine_core::{minor_to_money_value, normalize_currency_code, to_minor_units};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
@@ -369,7 +370,11 @@ fn normalize_budget_fields(
         return Err("scope_type must be 'category' or 'tag'".to_owned());
     }
     let normalized_category = category.trim().to_owned();
-    let normalized_scope_value = scope_value.trim().to_owned();
+    let normalized_scope_value = if scope_type == "tag" {
+        normalize_tag_name(scope_value)
+    } else {
+        scope_value.trim().to_owned()
+    };
     if normalized_category.is_empty() || normalized_scope_value.is_empty() {
         return Err("scope_value is required".to_owned());
     }

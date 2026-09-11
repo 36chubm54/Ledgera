@@ -6055,7 +6055,7 @@ fn normalize_tag_names(values: &[String]) -> Vec<String> {
     normalized
 }
 
-fn normalize_tag_name(value: &str) -> String {
+pub(crate) fn normalize_tag_name(value: &str) -> String {
     let stripped = value.trim().replace('#', "");
     let cleaned: String = stripped
         .chars()
@@ -6442,6 +6442,7 @@ mod tests {
 
         let exported = export_full_backup_json(&db_path, backup_path.to_str().unwrap()).unwrap();
         assert_eq!(exported.budget_rows, 1);
+        assert!(exported.checksum.starts_with("sha256:"));
         assert_eq!(
             preview_full_backup_json(&db_path, backup_path.to_str().unwrap())
                 .unwrap()
@@ -6460,6 +6461,7 @@ mod tests {
         let budget = payload["budgets"][0].as_object_mut().unwrap();
         budget.remove("scope_type");
         budget.remove("scope_value");
+        payload.as_object_mut().unwrap().remove("checksum");
         fs::write(&legacy_path, serde_json::to_vec(&payload).unwrap()).unwrap();
         assert_eq!(
             preview_full_backup_json(&db_path, legacy_path.to_str().unwrap())
@@ -6468,8 +6470,35 @@ mod tests {
             1
         );
 
+        let invalid_money_path = temp_test_path("ledgera_invalid_money_backup", "json");
+        let mut invalid_money =
+            serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&backup_path).unwrap())
+                .unwrap();
+        invalid_money["budgets"][0]["limit_base_minor"] = serde_json::json!(10001);
+        invalid_money.as_object_mut().unwrap().remove("checksum");
+        fs::write(
+            &invalid_money_path,
+            serde_json::to_vec(&invalid_money).unwrap(),
+        )
+        .unwrap();
+        let error =
+            preview_full_backup_json(&db_path, invalid_money_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("limit_base and limit_base_minor mismatch"));
+
+        let tampered_path = temp_test_path("ledgera_tampered_backup", "json");
+        let mut tampered =
+            serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&backup_path).unwrap())
+                .unwrap();
+        tampered["budgets"][0]["limit_base"] = serde_json::json!(101.0);
+        fs::write(&tampered_path, serde_json::to_vec(&tampered).unwrap()).unwrap();
+        let error =
+            preview_full_backup_json(&db_path, tampered_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("checksum mismatch"));
+
         fs::remove_file(backup_path).ok();
         fs::remove_file(legacy_path).ok();
+        fs::remove_file(invalid_money_path).ok();
+        fs::remove_file(tampered_path).ok();
         remove_test_db(&db_path);
     }
 

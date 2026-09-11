@@ -1,9 +1,10 @@
 use crate::{
-    StorageResult, export_temp_path, replace_export_file, sqlite_err,
+    StorageResult, export_temp_path, normalize_tag_name, replace_export_file, sqlite_err,
     storage_clear_read_connection_cache,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, types::Value};
 use serde_json::{Map, Number, Value as JsonValue};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -29,6 +30,7 @@ pub struct FullBackupResult {
     pub path: String,
     pub imported_rows: i64,
     pub budget_rows: i64,
+    pub checksum: String,
 }
 
 fn table_exists(conn: &Connection, table: &str) -> StorageResult<bool> {
@@ -114,6 +116,38 @@ fn sections(payload: &JsonValue) -> StorageResult<&Map<String, JsonValue>> {
     Ok(object)
 }
 
+fn payload_checksum(payload: &JsonValue) -> StorageResult<String> {
+    let mut object = payload
+        .as_object()
+        .cloned()
+        .ok_or_else(|| "Backup root must be a JSON object".to_owned())?;
+    object.remove("checksum");
+    let canonical = serde_json::to_vec(&JsonValue::Object(object))
+        .map_err(|error| format!("Cannot canonicalize backup: {error}"))?;
+    let digest = Sha256::digest(canonical);
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn verify_checksum(payload: &JsonValue) -> StorageResult<String> {
+    let object = sections(payload)?;
+    let Some(value) = object.get("checksum").and_then(JsonValue::as_str) else {
+        return Ok(String::new());
+    };
+    let actual = payload_checksum(payload)?;
+    let expected = value.strip_prefix("sha256:").unwrap_or(value);
+    if expected.len() != 64
+        || !expected
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err("Invalid backup checksum format".to_owned());
+    }
+    if !expected.eq_ignore_ascii_case(&actual) {
+        return Err("Backup checksum mismatch".to_owned());
+    }
+    Ok(format!("sha256:{actual}"))
+}
+
 fn budget_legacy_row(row: &Map<String, JsonValue>) -> StorageResult<Map<String, JsonValue>> {
     let category = row
         .get("category")
@@ -127,12 +161,17 @@ fn budget_legacy_row(row: &Map<String, JsonValue>) -> StorageResult<Map<String, 
         .unwrap_or("category")
         .trim()
         .to_ascii_lowercase();
-    let scope_value = row
+    let raw_scope_value = row
         .get("scope_value")
         .and_then(JsonValue::as_str)
         .unwrap_or(&category)
         .trim()
         .to_owned();
+    let scope_value = if scope_type == "tag" {
+        normalize_tag_name(&raw_scope_value)
+    } else {
+        raw_scope_value
+    };
     let limit_base = row
         .get("limit_base")
         .or_else(|| row.get("limit_kzt"))
@@ -171,6 +210,10 @@ fn budget_legacy_row(row: &Map<String, JsonValue>) -> StorageResult<Map<String, 
         .ok_or_else(|| "Budget limit_base must be a number".to_owned())?;
     if !limit_value.is_finite() {
         return Err("Budget limit_base must be finite".to_owned());
+    }
+    let expected_minor = (limit_value * 100.0).round();
+    if expected_minor != limit_minor as f64 {
+        return Err("Budget limit_base and limit_base_minor mismatch".to_owned());
     }
     validate_backup_date(start_date, "start_date")?;
     validate_backup_date(end_date, "end_date")?;
@@ -319,6 +362,11 @@ pub fn export_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         }
         object.insert((*table).to_owned(), JsonValue::Array(rows));
     }
+    let checksum = payload_checksum(&JsonValue::Object(object.clone()))?;
+    object.insert(
+        "checksum".to_owned(),
+        JsonValue::String(format!("sha256:{checksum}")),
+    );
     let temp_path = export_temp_path(path)?;
     let bytes =
         serde_json::to_vec_pretty(&JsonValue::Object(object)).map_err(|error| error.to_string())?;
@@ -334,6 +382,7 @@ pub fn export_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         path: path.to_owned(),
         imported_rows: total,
         budget_rows: budgets,
+        checksum: format!("sha256:{checksum}"),
     })
 }
 
@@ -393,6 +442,7 @@ fn insert_table_rows(tx: &Transaction<'_>, table: &str, rows: &[JsonValue]) -> S
 pub fn preview_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullBackupResult> {
     let conn = Connection::open(db_path).map_err(sqlite_err)?;
     let payload = load_json(path)?;
+    let checksum = verify_checksum(&payload)?;
     let budgets = validate_payload(&conn, &payload)?;
     let object = sections(&payload)?;
     let imported_rows = BACKUP_TABLES
@@ -408,6 +458,7 @@ pub fn preview_full_backup_json(db_path: &str, path: &str) -> StorageResult<Full
         path: path.to_owned(),
         imported_rows,
         budget_rows: budgets.len() as i64,
+        checksum,
     })
 }
 
@@ -417,6 +468,7 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(sqlite_err)?;
     let budgets = validate_payload(&conn, &payload)?;
+    let checksum = verify_checksum(&payload)?;
     let object = sections(&payload)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
     tx.execute_batch(
@@ -476,5 +528,6 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         path: path.to_owned(),
         imported_rows,
         budget_rows: budgets.len() as i64,
+        checksum,
     })
 }

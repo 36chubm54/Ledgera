@@ -62,6 +62,7 @@ class ReportsViewModel(
                     wallets = wallets,
                     categories = runCatching { engine.reportCategories() }.getOrDefault(emptyList()),
                     tags = runCatching { engine.reportTags() }.getOrDefault(emptyList()),
+                    result = null,
                 )
             }.onFailure { error ->
                 mutableState.value = mutableState.value.copy(loading = false, error = error.message ?: "Failed to load Reports")

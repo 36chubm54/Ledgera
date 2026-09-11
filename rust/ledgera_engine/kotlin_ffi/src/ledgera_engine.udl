@@ -153,6 +153,7 @@ dictionary FullBackupResultDto {
     string path;
     i64 imported_rows;
     i64 budget_rows;
+    string checksum;
 };
 
 dictionary AddMandatoryToRecordsRequest {

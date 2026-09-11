@@ -214,6 +214,7 @@ pub struct FullBackupResultDto {
     pub path: String,
     pub imported_rows: i64,
     pub budget_rows: i64,
+    pub checksum: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1603,6 +1604,7 @@ fn full_backup_result_to_dto(row: ledgera_engine_storage::FullBackupResult) -> F
         path: row.path,
         imported_rows: row.imported_rows,
         budget_rows: row.budget_rows,
+        checksum: row.checksum,
     }
 }
 

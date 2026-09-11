@@ -100,6 +100,15 @@ fun AppShell(
         viewModel.refreshStatus()
         mandatoryViewModel.applyAutoPaymentsOnStartup()
     }
+    LaunchedEffect(settingsState.restoreVersion) {
+        if (settingsState.restoreVersion > 0) {
+            operationsViewModel.refresh()
+            debtsViewModel.refresh()
+            mandatoryViewModel.refresh()
+            reportsViewModel.refreshLookups()
+            budgetViewModel.refresh()
+        }
+    }
 
     ToastHost(
         message = when (state.selectedSection) {
