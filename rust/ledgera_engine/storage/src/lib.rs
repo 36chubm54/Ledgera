@@ -2928,7 +2928,14 @@ fn parse_positive_rate(
 fn parse_csv_tags(value: &str) -> Vec<String> {
     value
         .split([',', ';'])
-        .map(str::trim)
+        .flat_map(|part| {
+            let tokens = part.split_whitespace().collect::<Vec<_>>();
+            if tokens.len() > 1 && tokens.iter().all(|token| token.starts_with('#')) {
+                tokens
+            } else {
+                vec![part.trim()]
+            }
+        })
         .filter(|tag| !tag.is_empty())
         .map(ToOwned::to_owned)
         .collect()
@@ -10503,6 +10510,18 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
 
         let _ = fs::remove_file(path);
         remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn parse_csv_tags_preserves_whitespace_separated_hash_tags() {
+        assert_eq!(
+            parse_csv_tags("#курсач #лабсапр"),
+            vec!["#курсач".to_owned(), "#лабсапр".to_owned()]
+        );
+        assert_eq!(
+            parse_csv_tags("#one, #two; #three"),
+            vec!["#one".to_owned(), "#two".to_owned(), "#three".to_owned()]
+        );
     }
 
     #[test]
