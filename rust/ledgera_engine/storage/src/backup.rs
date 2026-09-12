@@ -248,7 +248,10 @@ fn validate_scalar_type(
             )
         })?;
         if !(date.is_empty() && !column.not_null && !column.is_primary_key) {
-            validate_backup_date(date, &column.name)?;
+            validate_backup_date(
+                date,
+                &format!("{table} row {row_index} column '{}'", column.name),
+            )?;
         }
     }
     Ok(())
@@ -421,7 +424,74 @@ fn validate_table_rows(conn: &Connection, table: &str, rows: &[JsonValue]) -> St
     Ok(())
 }
 
-fn budget_legacy_row(row: &Map<String, JsonValue>) -> StorageResult<Map<String, JsonValue>> {
+fn normalize_budget_row(row: &Map<String, JsonValue>) -> StorageResult<Map<String, JsonValue>> {
+    if row.contains_key("scope_type")
+        && row.contains_key("scope_value")
+        && row.contains_key("limit_base")
+    {
+        return validate_current_budget_row(row);
+    }
+    normalize_legacy_budget_row(row)
+}
+
+fn validate_current_budget_row(
+    row: &Map<String, JsonValue>,
+) -> StorageResult<Map<String, JsonValue>> {
+    let category = row
+        .get("category")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("")
+        .trim();
+    let scope_type = row
+        .get("scope_type")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    let scope_value = row
+        .get("scope_value")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("")
+        .trim();
+    let start_date = row
+        .get("start_date")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| "Budget start_date is required".to_owned())?;
+    let end_date = row
+        .get("end_date")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| "Budget end_date is required".to_owned())?;
+    let limit_base = row
+        .get("limit_base")
+        .and_then(JsonValue::as_f64)
+        .ok_or_else(|| "Budget limit_base must be a number".to_owned())?;
+    let limit_minor = row
+        .get("limit_base_minor")
+        .and_then(JsonValue::as_i64)
+        .ok_or_else(|| "Budget limit_base_minor must be an integer".to_owned())?;
+    if category.is_empty() || scope_value.is_empty() {
+        return Err("Budget scope_value is required".to_owned());
+    }
+    if scope_type != "category" && scope_type != "tag" {
+        return Err("Budget scope_type must be category or tag".to_owned());
+    }
+    if !limit_base.is_finite() || limit_minor <= 0 {
+        return Err("Budget limit must be positive".to_owned());
+    }
+    if (limit_base * 100.0).round() != limit_minor as f64 {
+        return Err("Budget limit_base and limit_base_minor mismatch".to_owned());
+    }
+    validate_backup_date(start_date, "Budget start_date")?;
+    validate_backup_date(end_date, "Budget end_date")?;
+    if start_date > end_date {
+        return Err("Budget start_date must be <= end_date".to_owned());
+    }
+    Ok(row.clone())
+}
+
+fn normalize_legacy_budget_row(
+    row: &Map<String, JsonValue>,
+) -> StorageResult<Map<String, JsonValue>> {
     let category = row
         .get("category")
         .and_then(JsonValue::as_str)
@@ -488,8 +558,8 @@ fn budget_legacy_row(row: &Map<String, JsonValue>) -> StorageResult<Map<String, 
     if expected_minor != limit_minor as f64 {
         return Err("Budget limit_base and limit_base_minor mismatch".to_owned());
     }
-    validate_backup_date(start_date, "start_date")?;
-    validate_backup_date(end_date, "end_date")?;
+    validate_backup_date(start_date, "Budget start_date")?;
+    validate_backup_date(end_date, "Budget end_date")?;
     if start_date > end_date {
         return Err("Budget start_date must be <= end_date".to_owned());
     }
@@ -516,17 +586,17 @@ fn budget_legacy_row(row: &Map<String, JsonValue>) -> StorageResult<Map<String, 
 fn validate_backup_date(value: &str, field: &str) -> StorageResult<()> {
     let parts: Vec<_> = value.split('-').collect();
     if parts.len() != 3 || parts[0].len() != 4 || parts[1].len() != 2 || parts[2].len() != 2 {
-        return Err(format!("Budget {field} must use YYYY-MM-DD"));
+        return Err(format!("{field} must use YYYY-MM-DD"));
     }
     let year = parts[0]
         .parse::<i32>()
-        .map_err(|_| format!("Budget {field} must use YYYY-MM-DD"))?;
+        .map_err(|_| format!("{field} must use YYYY-MM-DD"))?;
     let month = parts[1]
         .parse::<usize>()
-        .map_err(|_| format!("Budget {field} must use YYYY-MM-DD"))?;
+        .map_err(|_| format!("{field} must use YYYY-MM-DD"))?;
     let day = parts[2]
         .parse::<usize>()
-        .map_err(|_| format!("Budget {field} must use YYYY-MM-DD"))?;
+        .map_err(|_| format!("{field} must use YYYY-MM-DD"))?;
     let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
     let days = [
         31,
@@ -543,7 +613,7 @@ fn validate_backup_date(value: &str, field: &str) -> StorageResult<()> {
         31,
     ];
     if !(1..=12).contains(&month) || day == 0 || day > days[month - 1] {
-        return Err(format!("Budget {field} must use a valid date"));
+        return Err(format!("{field} must use a valid date"));
     }
     Ok(())
 }
@@ -575,7 +645,7 @@ fn validate_payload(conn: &Connection, payload: &JsonValue) -> StorageResult<Vec
         let row = row
             .as_object()
             .ok_or_else(|| format!("budgets row {} must be an object", index + 1))?;
-        budgets.push(JsonValue::Object(budget_legacy_row(row)?));
+        budgets.push(JsonValue::Object(normalize_budget_row(row)?));
     }
     for table in BACKUP_TABLES {
         if *table == "budgets" {
