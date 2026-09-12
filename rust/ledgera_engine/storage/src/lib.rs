@@ -6467,6 +6467,19 @@ mod tests {
             [],
         )
         .unwrap();
+        conn.execute(
+            "INSERT INTO mandatory_expenses (
+                id, wallet_id, amount_original, amount_original_minor, currency,
+                rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor,
+                category, description, period, date, auto_pay
+             ) VALUES (
+                2, 1, 25.0, 2500, 'KZT',
+                1.0, '1.000000', 25.0, 2500,
+                'Food', 'Manual template', 'monthly', '', 0
+             )",
+            [],
+        )
+        .unwrap();
         drop(conn);
 
         let exported = export_full_backup_json(&db_path, backup_path.to_str().unwrap()).unwrap();

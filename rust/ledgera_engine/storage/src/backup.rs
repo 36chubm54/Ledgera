@@ -241,15 +241,15 @@ fn validate_scalar_type(
     if ["date", "start_date", "end_date", "payment_date"].contains(&column.name.as_str())
         && !value.is_null()
     {
-        validate_backup_date(
-            value.as_str().ok_or_else(|| {
-                format!(
-                    "{table} row {row_index} column '{}' must be text",
-                    column.name
-                )
-            })?,
-            &column.name,
-        )?;
+        let date = value.as_str().ok_or_else(|| {
+            format!(
+                "{table} row {row_index} column '{}' must be text",
+                column.name
+            )
+        })?;
+        if !(date.is_empty() && !column.not_null && !column.is_primary_key) {
+            validate_backup_date(date, &column.name)?;
+        }
     }
     Ok(())
 }
