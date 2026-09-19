@@ -407,6 +407,65 @@ dictionary ReportExportResultDto {
     string path;
 };
 
+dictionary AnalyticsFiltersDto {
+    string period_start;
+    string period_end;
+    i64? wallet_id;
+    string category;
+    string tag;
+    string tag_mode;
+    string totals_mode;
+    boolean group_by_category;
+    string breakdown_mode;
+};
+
+dictionary AnalyticsSummaryDto {
+    double net_worth_base;
+    double savings_rate;
+    double burn_rate;
+    double average_monthly_income;
+    double average_monthly_expenses;
+    double year_income;
+    double year_expense;
+};
+
+dictionary AnalyticsCapitalPointDto {
+    string month;
+    double balance_base;
+};
+
+dictionary AnalyticsBreakdownRowDto {
+    string label;
+    double amount_base;
+    i64 record_count;
+    string color;
+    boolean is_other;
+};
+
+dictionary AnalyticsMonthlyRowDto {
+    string month;
+    double income_base;
+    double expenses_base;
+    double cashflow_base;
+    double savings_rate;
+};
+
+dictionary AnalyticsDailyRowDto {
+    string day;
+    double income_base;
+    double expenses_base;
+};
+
+dictionary AnalyticsSnapshotDto {
+    AnalyticsSummaryDto summary;
+    sequence<AnalyticsCapitalPointDto> capital;
+    sequence<AnalyticsBreakdownRowDto> categories;
+    sequence<AnalyticsBreakdownRowDto> tags;
+    sequence<AnalyticsMonthlyRowDto> monthly;
+    sequence<AnalyticsDailyRowDto> daily;
+    sequence<AnalyticsMonthlyRowDto> infographic_monthly;
+};
+
 interface LedgeraEngine {
     constructor(string db_path);
 
@@ -419,6 +478,12 @@ interface LedgeraEngine {
     ReportExportResultDto export_report_xlsx(ReportFiltersDto filters, string path);
     [Throws=LedgeraEngineError]
     ReportExportResultDto export_report_pdf(ReportFiltersDto filters, string path);
+    [Throws=LedgeraEngineError]
+    AnalyticsSnapshotDto generate_analytics_snapshot(AnalyticsFiltersDto filters);
+    [Throws=LedgeraEngineError]
+    sequence<string> list_analytics_categories(string period_start, string period_end);
+    [Throws=LedgeraEngineError]
+    sequence<string> list_analytics_tags(string period_start, string period_end);
     [Throws=LedgeraEngineError]
     string base_currency();
     [Throws=LedgeraEngineError]

@@ -15,6 +15,7 @@ import app.ledgera.engine.OperationExportResultDto
 import app.ledgera.engine.OperationImportResultDto
 import app.ledgera.engine.RecordFilterDto
 import app.ledgera.engine.ReportFiltersDto as NativeReportFiltersDto
+import app.ledgera.engine.AnalyticsFiltersDto as NativeAnalyticsFiltersDto
 import app.ledgera.engine.ReportExportResultDto
 import app.ledgera.engine.RegisterDebtPaymentRequest as NativeRegisterDebtPaymentRequest
 import app.ledgera.engine.UpdateMandatoryTemplateRequest as NativeUpdateMandatoryTemplateRequest
@@ -64,6 +65,13 @@ import app.ledgera.model.ReportResult
 import app.ledgera.model.ReportExportResult
 import app.ledgera.model.ReportSummary
 import app.ledgera.model.ReportTagRow
+import app.ledgera.model.AnalyticsFilters
+import app.ledgera.model.AnalyticsSnapshot
+import app.ledgera.model.AnalyticsSummary
+import app.ledgera.model.AnalyticsCapitalPoint
+import app.ledgera.model.AnalyticsBreakdownRow
+import app.ledgera.model.AnalyticsMonthlyRow
+import app.ledgera.model.AnalyticsDailyRow
 import app.ledgera.model.ReportFilters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -134,6 +142,50 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 debts = dto.debts.map { value -> ReportDebtRow(value.contactName, value.kind, value.status, value.createdAt, value.closedAt, value.currency, value.totalAmount, value.remainingAmount, value.settledAmount, value.progressPercent) },
             )
         }
+    }
+
+    override suspend fun generateAnalyticsSnapshot(filters: AnalyticsFilters): AnalyticsSnapshot = withContext(Dispatchers.IO) {
+        engine.generateAnalyticsSnapshot(
+            NativeAnalyticsFiltersDto(
+                filters.periodStart,
+                filters.periodEnd,
+                filters.walletId,
+                filters.category,
+                filters.tag,
+                filters.tagMode,
+                filters.totalsMode,
+                filters.groupByCategory,
+                filters.breakdownMode,
+            ),
+        ).let { dto ->
+            AnalyticsSnapshot(
+                summary = dto.summary.let { value ->
+                    AnalyticsSummary(
+                        netWorthBase = value.netWorthBase,
+                        savingsRate = value.savingsRate,
+                        burnRate = value.burnRate,
+                        averageMonthlyIncome = value.averageMonthlyIncome,
+                        averageMonthlyExpenses = value.averageMonthlyExpenses,
+                        yearIncome = value.yearIncome,
+                        yearExpense = value.yearExpense,
+                    )
+                },
+                capital = dto.capital.map { AnalyticsCapitalPoint(it.month, it.balanceBase) },
+                categories = dto.categories.map { AnalyticsBreakdownRow(it.label, it.amountBase, it.recordCount, it.color, it.isOther) },
+                tags = dto.tags.map { AnalyticsBreakdownRow(it.label, it.amountBase, it.recordCount, it.color, it.isOther) },
+                monthly = dto.monthly.map { AnalyticsMonthlyRow(it.month, it.incomeBase, it.expensesBase, it.cashflowBase, it.savingsRate) },
+                daily = dto.daily.map { AnalyticsDailyRow(it.day, it.incomeBase, it.expensesBase) },
+                infographicMonthly = dto.infographicMonthly.map { AnalyticsMonthlyRow(it.month, it.incomeBase, it.expensesBase, it.cashflowBase, it.savingsRate) },
+            )
+        }
+    }
+
+    override suspend fun listAnalyticsCategories(periodStart: String, periodEnd: String): List<String> = withContext(Dispatchers.IO) {
+        engine.listAnalyticsCategories(periodStart, periodEnd)
+    }
+
+    override suspend fun listAnalyticsTags(periodStart: String, periodEnd: String): List<String> = withContext(Dispatchers.IO) {
+        engine.listAnalyticsTags(periodStart, periodEnd)
     }
 
     override suspend fun reportWallets(): List<WalletOption> = listWallets()

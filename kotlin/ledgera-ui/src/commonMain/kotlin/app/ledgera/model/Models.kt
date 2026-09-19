@@ -453,3 +453,59 @@ data class ReportResult(
 )
 
 data class ReportExportResult(val exportedRows: Long, val path: String)
+
+data class AnalyticsFilters(
+    val periodStart: String,
+    val periodEnd: String,
+    val walletId: Long? = null,
+    val category: String = "",
+    val tag: String = "",
+    val tagMode: String = "or",
+    val totalsMode: String = "fixed",
+    val groupByCategory: Boolean = false,
+    val breakdownMode: String = "category",
+)
+
+data class AnalyticsSummary(
+    val netWorthBase: Double,
+    val savingsRate: Double,
+    val burnRate: Double,
+    val averageMonthlyIncome: Double,
+    val averageMonthlyExpenses: Double,
+    val yearIncome: Double,
+    val yearExpense: Double,
+)
+
+data class AnalyticsCapitalPoint(val month: String, val balanceBase: Double)
+
+data class AnalyticsBreakdownRow(
+    val label: String,
+    val amountBase: Double,
+    val recordCount: Long,
+    val color: String,
+    val isOther: Boolean,
+)
+
+data class AnalyticsMonthlyRow(
+    val month: String,
+    val incomeBase: Double,
+    val expensesBase: Double,
+    val cashflowBase: Double,
+    val savingsRate: Double,
+)
+
+data class AnalyticsDailyRow(
+    val day: String,
+    val incomeBase: Double,
+    val expensesBase: Double,
+)
+
+data class AnalyticsSnapshot(
+    val summary: AnalyticsSummary,
+    val capital: List<AnalyticsCapitalPoint>,
+    val categories: List<AnalyticsBreakdownRow>,
+    val tags: List<AnalyticsBreakdownRow>,
+    val monthly: List<AnalyticsMonthlyRow>,
+    val daily: List<AnalyticsDailyRow>,
+    val infographicMonthly: List<AnalyticsMonthlyRow>,
+)

@@ -9,6 +9,7 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import app.ledgera.bridge.RustEngineAdapter
+import app.ledgera.analytics.AnalyticsViewModel
 import app.ledgera.budget.BudgetViewModel
 import app.ledgera.debts.DebtsViewModel
 import app.ledgera.mandatory.MandatoryViewModel
@@ -74,6 +75,7 @@ private fun runApplication(args: Array<String>) = application {
                         settingsViewModel = SettingsViewModel(engine),
                         reportsViewModel = ReportsViewModel(engine),
                         budgetViewModel = BudgetViewModel(engine),
+                        analyticsViewModel = AnalyticsViewModel(engine),
                         operationsFileActions = DesktopOperationsFileActions(window),
                         mandatoryFileActions = DesktopMandatoryFileActions(window),
                         reportsFileActions = DesktopReportsFileActions(window),

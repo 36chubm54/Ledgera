@@ -316,12 +316,80 @@ pub struct MetricsRefreshSnapshot {
     pub monthly_summary: Vec<MonthlySummaryRow>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsFilters {
+    pub period_start: String,
+    pub period_end: String,
+    pub wallet_id: Option<i64>,
+    pub category: String,
+    pub tag: String,
+    pub tag_mode: String,
+    pub totals_mode: String,
+    pub group_by_category: bool,
+    pub breakdown_mode: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsSummary {
+    pub net_worth_base: f64,
+    pub savings_rate: f64,
+    pub burn_rate: f64,
+    pub average_monthly_income: f64,
+    pub average_monthly_expenses: f64,
+    pub year_income: f64,
+    pub year_expense: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsCapitalPoint {
+    pub month: String,
+    pub balance_base: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsBreakdownRow {
+    pub label: String,
+    pub amount_base: f64,
+    pub record_count: i64,
+    pub color: String,
+    pub is_other: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsMonthlyRow {
+    pub month: String,
+    pub income_base: f64,
+    pub expenses_base: f64,
+    pub cashflow_base: f64,
+    pub savings_rate: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsDailyRow {
+    pub day: String,
+    pub income_base: f64,
+    pub expenses_base: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsSnapshot {
+    pub summary: AnalyticsSummary,
+    pub capital: Vec<AnalyticsCapitalPoint>,
+    pub categories: Vec<AnalyticsBreakdownRow>,
+    pub tags: Vec<AnalyticsBreakdownRow>,
+    pub monthly: Vec<AnalyticsMonthlyRow>,
+    pub daily: Vec<AnalyticsDailyRow>,
+    pub infographic_monthly: Vec<AnalyticsMonthlyRow>,
+}
+
+mod analytics;
 mod audit;
 mod metrics;
 mod planning;
 mod reporting;
 mod timeline;
 
+pub use analytics::{analytics_generate, analytics_list_categories, analytics_list_tags};
 pub use audit::{AuditFindingRow, audit_run, audit_run_for_date};
 pub use metrics::{
     metrics_burn_rate, metrics_income_by_category, metrics_monthly_summary,

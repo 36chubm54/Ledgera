@@ -33,6 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.ledgera.debts.DebtsScreen
 import app.ledgera.debts.DebtsViewModel
+import app.ledgera.analytics.AnalyticsScreen
+import app.ledgera.analytics.AnalyticsViewModel
 import app.ledgera.budget.BudgetScreen
 import app.ledgera.budget.BudgetViewModel
 import app.ledgera.mandatory.MandatoryFileActions
@@ -83,6 +85,7 @@ fun AppShell(
     settingsViewModel: SettingsViewModel,
     reportsViewModel: ReportsViewModel,
     budgetViewModel: BudgetViewModel,
+    analyticsViewModel: AnalyticsViewModel,
     modifier: Modifier = Modifier,
     operationsFileActions: OperationsFileActions = NoOperationsFileActions,
     mandatoryFileActions: MandatoryFileActions = NoMandatoryFileActions,
@@ -107,6 +110,7 @@ fun AppShell(
             mandatoryViewModel.refresh()
             reportsViewModel.refreshLookups()
             budgetViewModel.refresh()
+            analyticsViewModel.generate()
         }
     }
 
@@ -171,7 +175,7 @@ fun AppShell(
                             fileActions = operationsFileActions,
                         )
                         DesktopSection.Reports -> ReportsScreen(reportsViewModel, reportsFileActions)
-                        DesktopSection.Analytics -> PendingSection(state.selectedSection)
+                        DesktopSection.Analytics -> AnalyticsScreen(analyticsViewModel)
                         DesktopSection.Dashboard -> PendingSection(state.selectedSection)
                         DesktopSection.Budget -> BudgetScreen(budgetViewModel)
                         DesktopSection.Debts -> DebtsScreen(debtsViewModel)

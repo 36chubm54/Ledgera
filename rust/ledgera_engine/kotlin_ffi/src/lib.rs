@@ -1,6 +1,7 @@
 use ledgera_engine_storage::{
-    AuditFindingRow, BudgetCreatePayload, BudgetPayload, BudgetResultPayload, DebtCreatePayload,
-    DebtPayload, DebtPaymentPayload, DebtPaymentRequestPayload, MandatoryAddToRecordsPayload,
+    AnalyticsBreakdownRow, AnalyticsFilters, AnalyticsSnapshot, AuditFindingRow,
+    BudgetCreatePayload, BudgetPayload, BudgetResultPayload, DebtCreatePayload, DebtPayload,
+    DebtPaymentPayload, DebtPaymentRequestPayload, MandatoryAddToRecordsPayload,
     MandatoryAutoPayResult, MandatoryExpenseRow, MandatoryExportResult, MandatoryImportResult,
     MandatoryTemplateCreatePayload, MandatoryTemplateUpdatePayload, OperationDeleteResult,
     OperationExportResult, OperationImportResult, RecordFilterPayload, RecordRow,
@@ -8,15 +9,16 @@ use ledgera_engine_storage::{
     ReportOperationRow, ReportResult, ReportTagRow, StandaloneRecordCreatePayload,
     StandaloneRecordUpdatePayload, TagColorAssignment as StorageTagColorAssignment,
     TransferCreatePayload, TransferRow, TransferUpdatePayload, WalletBalanceRow,
-    WalletCreatePayload, WalletRow, audit_run_for_date, base_currency_code, budget_create,
-    budget_delete, budget_results, budget_rows, budget_update_limit,
-    create_standalone_record_with_tag_colors, create_transfer, create_wallet, current_local_date,
-    debt_close_validated, debt_create, debt_delete, debt_delete_payment, debt_payment_rows,
-    debt_register_payment_validated, debt_register_write_off_validated, debt_rows,
-    delete_all_operations, delete_operations_selection, delete_standalone_record, delete_transfer,
-    delete_wallet, distinct_record_categories, distinct_record_descriptions,
-    export_full_backup_json, export_mandatory_csv, export_mandatory_xlsx, export_records_csv,
-    export_records_xlsx, filtered_record_list_rows, import_full_backup_json, import_mandatory_csv,
+    WalletCreatePayload, WalletRow, analytics_generate, analytics_list_categories,
+    analytics_list_tags, audit_run_for_date, base_currency_code, budget_create, budget_delete,
+    budget_results, budget_rows, budget_update_limit, create_standalone_record_with_tag_colors,
+    create_transfer, create_wallet, current_local_date, debt_close_validated, debt_create,
+    debt_delete, debt_delete_payment, debt_payment_rows, debt_register_payment_validated,
+    debt_register_write_off_validated, debt_rows, delete_all_operations,
+    delete_operations_selection, delete_standalone_record, delete_transfer, delete_wallet,
+    distinct_record_categories, distinct_record_descriptions, export_full_backup_json,
+    export_mandatory_csv, export_mandatory_xlsx, export_records_csv, export_records_xlsx,
+    filtered_record_list_rows, import_full_backup_json, import_mandatory_csv,
     import_mandatory_xlsx, import_records_csv, import_records_xlsx, mandatory_add_to_records,
     mandatory_apply_auto_payments, mandatory_expense_row, mandatory_expense_rows,
     mandatory_template_create, mandatory_template_delete, mandatory_template_delete_all,
@@ -476,6 +478,72 @@ pub struct ReportExportResultDto {
     pub path: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsFiltersDto {
+    pub period_start: String,
+    pub period_end: String,
+    pub wallet_id: Option<i64>,
+    pub category: String,
+    pub tag: String,
+    pub tag_mode: String,
+    pub totals_mode: String,
+    pub group_by_category: bool,
+    pub breakdown_mode: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsSummaryDto {
+    pub net_worth_base: f64,
+    pub savings_rate: f64,
+    pub burn_rate: f64,
+    pub average_monthly_income: f64,
+    pub average_monthly_expenses: f64,
+    pub year_income: f64,
+    pub year_expense: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsCapitalPointDto {
+    pub month: String,
+    pub balance_base: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsBreakdownRowDto {
+    pub label: String,
+    pub amount_base: f64,
+    pub record_count: i64,
+    pub color: String,
+    pub is_other: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsMonthlyRowDto {
+    pub month: String,
+    pub income_base: f64,
+    pub expenses_base: f64,
+    pub cashflow_base: f64,
+    pub savings_rate: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsDailyRowDto {
+    pub day: String,
+    pub income_base: f64,
+    pub expenses_base: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsSnapshotDto {
+    pub summary: AnalyticsSummaryDto,
+    pub capital: Vec<AnalyticsCapitalPointDto>,
+    pub categories: Vec<AnalyticsBreakdownRowDto>,
+    pub tags: Vec<AnalyticsBreakdownRowDto>,
+    pub monthly: Vec<AnalyticsMonthlyRowDto>,
+    pub daily: Vec<AnalyticsDailyRowDto>,
+    pub infographic_monthly: Vec<AnalyticsMonthlyRowDto>,
+}
+
 #[derive(Debug)]
 pub enum LedgeraEngineError {
     Validation { message: String },
@@ -535,6 +603,44 @@ impl LedgeraEngine {
         )
         .map(report_to_dto)
         .map_err(storage_error)
+    }
+
+    pub fn generate_analytics_snapshot(
+        &self,
+        filters: AnalyticsFiltersDto,
+    ) -> Result<AnalyticsSnapshotDto, LedgeraEngineError> {
+        analytics_generate(
+            &self.db_path,
+            &AnalyticsFilters {
+                period_start: filters.period_start,
+                period_end: filters.period_end,
+                wallet_id: filters.wallet_id,
+                category: filters.category,
+                tag: filters.tag,
+                tag_mode: filters.tag_mode,
+                totals_mode: filters.totals_mode,
+                group_by_category: filters.group_by_category,
+                breakdown_mode: filters.breakdown_mode,
+            },
+        )
+        .map(analytics_to_dto)
+        .map_err(storage_error)
+    }
+
+    pub fn list_analytics_categories(
+        &self,
+        period_start: String,
+        period_end: String,
+    ) -> Result<Vec<String>, LedgeraEngineError> {
+        analytics_list_categories(&self.db_path, &period_start, &period_end).map_err(storage_error)
+    }
+
+    pub fn list_analytics_tags(
+        &self,
+        period_start: String,
+        period_end: String,
+    ) -> Result<Vec<String>, LedgeraEngineError> {
+        analytics_list_tags(&self.db_path, &period_start, &period_end).map_err(storage_error)
     }
 
     pub fn export_report_csv(
@@ -1350,6 +1456,79 @@ fn report_to_dto(result: ReportResult) -> ReportResultDto {
             .collect(),
         tags: result.tags.into_iter().map(report_tag_to_dto).collect(),
         debts: result.debts.into_iter().map(report_debt_to_dto).collect(),
+    }
+}
+
+fn analytics_to_dto(result: AnalyticsSnapshot) -> AnalyticsSnapshotDto {
+    AnalyticsSnapshotDto {
+        summary: AnalyticsSummaryDto {
+            net_worth_base: result.summary.net_worth_base,
+            savings_rate: result.summary.savings_rate,
+            burn_rate: result.summary.burn_rate,
+            average_monthly_income: result.summary.average_monthly_income,
+            average_monthly_expenses: result.summary.average_monthly_expenses,
+            year_income: result.summary.year_income,
+            year_expense: result.summary.year_expense,
+        },
+        capital: result
+            .capital
+            .into_iter()
+            .map(|row| AnalyticsCapitalPointDto {
+                month: row.month,
+                balance_base: row.balance_base,
+            })
+            .collect(),
+        categories: result
+            .categories
+            .into_iter()
+            .map(analytics_breakdown_to_dto)
+            .collect(),
+        tags: result
+            .tags
+            .into_iter()
+            .map(analytics_breakdown_to_dto)
+            .collect(),
+        monthly: result
+            .monthly
+            .into_iter()
+            .map(analytics_monthly_to_dto)
+            .collect(),
+        daily: result
+            .daily
+            .into_iter()
+            .map(|row| AnalyticsDailyRowDto {
+                day: row.day,
+                income_base: row.income_base,
+                expenses_base: row.expenses_base,
+            })
+            .collect(),
+        infographic_monthly: result
+            .infographic_monthly
+            .into_iter()
+            .map(analytics_monthly_to_dto)
+            .collect(),
+    }
+}
+
+fn analytics_breakdown_to_dto(row: AnalyticsBreakdownRow) -> AnalyticsBreakdownRowDto {
+    AnalyticsBreakdownRowDto {
+        label: row.label,
+        amount_base: row.amount_base,
+        record_count: row.record_count,
+        color: row.color,
+        is_other: row.is_other,
+    }
+}
+
+fn analytics_monthly_to_dto(
+    row: ledgera_engine_storage::AnalyticsMonthlyRow,
+) -> AnalyticsMonthlyRowDto {
+    AnalyticsMonthlyRowDto {
+        month: row.month,
+        income_base: row.income_base,
+        expenses_base: row.expenses_base,
+        cashflow_base: row.cashflow_base,
+        savings_rate: row.savings_rate,
     }
 }
 
