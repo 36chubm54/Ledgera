@@ -1,9 +1,23 @@
 package app.ledgera
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
@@ -19,6 +33,8 @@ import app.ledgera.operations.OperationsViewModel
 import app.ledgera.operations.OperationsFileActions
 import app.ledgera.settings.SettingsViewModel
 import app.ledgera.settings.SettingsFileActions
+import app.ledgera.bridge.SettingsEngine
+import app.ledgera.ui.ToastHost
 import app.ledgera.reports.ReportsViewModel
 import app.ledgera.reports.ReportsFileActions
 import app.ledgera.shell.AppShell
@@ -32,6 +48,7 @@ import java.io.File
 import java.io.FilenameFilter
 import javax.swing.SwingUtilities
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 fun main(args: Array<String>) {
     val singleInstance = SingleInstanceSupport.acquire()
@@ -58,31 +75,94 @@ private fun runApplication(args: Array<String>) = application {
                 if (dbPath.isNullOrBlank()) {
                     Text("Start with --db-path <ledger.db>.")
                 } else {
+                    val newDatabase = !File(dbPath).exists()
                     val engine = RustEngineAdapter(dbPath)
-                    AppShell(
-                        viewModel = AppShellViewModel(engine),
-                        operationsViewModel = OperationsViewModel(
-                            engine,
-                            importFileSnapshotProvider = DesktopImportFileSnapshotProvider,
-                        ),
-                        debtsViewModel = DebtsViewModel(engine),
-                        mandatoryViewModel = MandatoryViewModel(
-                            engine,
-                            importFileSnapshotProvider = DesktopImportFileSnapshotProvider,
-                        ),
-                        settingsViewModel = SettingsViewModel(engine),
-                        reportsViewModel = ReportsViewModel(engine),
-                        budgetViewModel = BudgetViewModel(engine),
-                        analyticsViewModel = AnalyticsViewModel(engine),
-                        operationsFileActions = DesktopOperationsFileActions(window),
-                        mandatoryFileActions = DesktopMandatoryFileActions(window),
-                        reportsFileActions = DesktopReportsFileActions(window),
-                        settingsFileActions = DesktopSettingsFileActions(window),
-                    )
+                    var showInitialBalanceDialog by remember { mutableStateOf(newDatabase) }
+                    var startupNotice by remember { mutableStateOf<String?>(null) }
+                    ToastHost(
+                        message = startupNotice,
+                        onDismiss = { startupNotice = null },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Box(Modifier.fillMaxSize()) {
+                            AppShell(
+                            viewModel = AppShellViewModel(engine),
+                            operationsViewModel = OperationsViewModel(
+                                engine,
+                                importFileSnapshotProvider = DesktopImportFileSnapshotProvider,
+                            ),
+                            debtsViewModel = DebtsViewModel(engine),
+                            mandatoryViewModel = MandatoryViewModel(
+                                engine,
+                                importFileSnapshotProvider = DesktopImportFileSnapshotProvider,
+                            ),
+                            settingsViewModel = SettingsViewModel(engine),
+                            reportsViewModel = ReportsViewModel(engine),
+                            budgetViewModel = BudgetViewModel(engine),
+                            analyticsViewModel = AnalyticsViewModel(engine),
+                            operationsFileActions = DesktopOperationsFileActions(window),
+                            mandatoryFileActions = DesktopMandatoryFileActions(window),
+                            reportsFileActions = DesktopReportsFileActions(window),
+                            settingsFileActions = DesktopSettingsFileActions(window),
+                            )
+                            if (showInitialBalanceDialog) {
+                                InitialBalanceDialog(engine) {
+                                    showInitialBalanceDialog = false
+                                    startupNotice = "Initial balance saved"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun InitialBalanceDialog(engine: SettingsEngine, onCompleted: () -> Unit) {
+    var value by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var submitting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Initial system wallet balance") },
+        text = {
+            Column {
+                Text("Enter the starting balance for the system wallet.")
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it; error = null },
+                    label = { Text("Balance") },
+                    singleLine = true,
+                    isError = error != null,
+                    supportingText = { error?.let { Text(it) } },
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !submitting,
+                onClick = {
+                    val number = value.trim().toBigDecimalOrNull()
+                    if (number == null || number < java.math.BigDecimal.ZERO) {
+                        error = "Enter a valid non-negative number"
+                        return@Button
+                    }
+                    submitting = true
+                    scope.launch {
+                        runCatching { engine.setSystemWalletInitialBalance(value.trim()) }
+                            .onSuccess { onCompleted() }
+                            .onFailure { failure ->
+                                submitting = false
+                                error = failure.message ?: "Unable to save balance"
+                            }
+                    }
+                },
+            ) { Text("Continue") }
+        },
+    )
 }
 
 private class DesktopOperationsFileActions(private val owner: AwtWindow) : OperationsFileActions {

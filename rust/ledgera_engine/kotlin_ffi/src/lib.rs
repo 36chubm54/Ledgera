@@ -26,9 +26,9 @@ use ledgera_engine_storage::{
     operation_suggestions, preview_full_backup_json, preview_import_mandatory_csv,
     preview_import_mandatory_xlsx, preview_import_records_csv, preview_import_records_xlsx,
     report_export_csv, report_export_pdf, report_export_xlsx, report_generate,
-    standalone_record_get_row, tag_color_palette, tag_color_rows, tag_names, transfer_get_row,
-    update_standalone_record_with_tag_colors, update_transfer, wallet_balance_row,
-    wallet_balance_rows, wallet_list_rows,
+    set_system_wallet_initial_balance, standalone_record_get_row, tag_color_palette,
+    tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
+    update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
 };
 use std::fmt;
 use std::path::Path;
@@ -956,6 +956,15 @@ impl LedgeraEngine {
     pub fn list_wallets(&self) -> Result<Vec<WalletDto>, LedgeraEngineError> {
         wallet_list_rows(&self.db_path)
             .map(|rows| rows.into_iter().map(wallet_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn set_system_wallet_initial_balance(
+        &self,
+        initial_balance: String,
+    ) -> Result<WalletDto, LedgeraEngineError> {
+        set_system_wallet_initial_balance(&self.db_path, &initial_balance)
+            .map(wallet_to_dto)
             .map_err(storage_error)
     }
 
@@ -2057,6 +2066,13 @@ mod tests {
         assert!(status.ok);
         assert_eq!(engine.list_wallets().unwrap().len(), 1);
         assert_eq!(engine.list_wallets().unwrap()[0].name, "Main Wallet");
+        assert_eq!(
+            engine
+                .set_system_wallet_initial_balance("123.45".to_owned())
+                .unwrap()
+                .initial_balance,
+            "123.45"
+        );
 
         fs::remove_file(path).ok();
     }

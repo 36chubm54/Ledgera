@@ -834,6 +834,51 @@ pub fn create_wallet(db_path: &str, payload: &WalletCreatePayload) -> StorageRes
         .ok_or_else(|| format!("Wallet not found: {wallet_id}"))
 }
 
+pub fn set_system_wallet_initial_balance(
+    db_path: &str,
+    initial_balance_text: &str,
+) -> StorageResult<WalletRow> {
+    let initial_balance_minor = to_minor_units(initial_balance_text)?;
+    if initial_balance_minor < 0 {
+        return Err("Initial balance must be zero or a positive number".to_owned());
+    }
+    let initial_balance = quantize_money_text(initial_balance_text)?
+        .parse::<f64>()
+        .map_err(|_| "invalid initial_balance".to_owned())?;
+    let mut conn = open_sqlite_connection(db_path)?;
+    conn.pragma_update(None, "foreign_keys", "ON")
+        .map_err(sqlite_err)?;
+    let tx = conn.transaction().map_err(sqlite_err)?;
+    let wallet_id: i64 = tx
+        .query_row(
+            "SELECT id FROM wallets WHERE system = 1 OR id = 1 ORDER BY system DESC, id LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(sqlite_err)?;
+    let history_count: i64 = tx
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM records) + (SELECT COUNT(*) FROM transfers)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(sqlite_err)?;
+    if history_count > 0 {
+        return Err("System wallet balance can only be set before operations exist".to_owned());
+    }
+    tx.execute(
+        "UPDATE wallets SET initial_balance = ?1, initial_balance_minor = ?2 WHERE id = ?3",
+        (initial_balance, initial_balance_minor, wallet_id),
+    )
+    .map_err(sqlite_err)?;
+    tx.commit().map_err(sqlite_err)?;
+    storage_clear_read_connection_cache();
+    wallet_list_rows(db_path)?
+        .into_iter()
+        .find(|row| row.id == wallet_id)
+        .ok_or_else(|| format!("Wallet not found: {wallet_id}"))
+}
+
 fn wallet_name_exists_in_tx(tx: &rusqlite::Transaction<'_>, name: &str) -> StorageResult<bool> {
     tx.query_row(
         "SELECT 1 FROM wallets WHERE LOWER(TRIM(name)) = LOWER(?1) LIMIT 1",
