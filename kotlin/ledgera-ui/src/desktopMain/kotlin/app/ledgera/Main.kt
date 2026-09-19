@@ -56,9 +56,7 @@ private fun runApplication(args: Array<String>) = application {
         LedgeraTheme {
             Surface {
                 if (dbPath.isNullOrBlank()) {
-                    Text("Start with --db-path <ledger.db>. Kotlin beta.1 will not create a production DB implicitly.")
-                } else if (!File(dbPath).isFile) {
-                    Text("Database file not found: $dbPath. Create a test DB or pass a copy of an existing ledger.db.")
+                    Text("Start with --db-path <ledger.db>.")
                 } else {
                     val engine = RustEngineAdapter(dbPath)
                     AppShell(

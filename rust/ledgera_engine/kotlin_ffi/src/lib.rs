@@ -19,15 +19,16 @@ use ledgera_engine_storage::{
     distinct_record_categories, distinct_record_descriptions, export_full_backup_json,
     export_mandatory_csv, export_mandatory_xlsx, export_records_csv, export_records_xlsx,
     filtered_record_list_rows, import_full_backup_json, import_mandatory_csv,
-    import_mandatory_xlsx, import_records_csv, import_records_xlsx, mandatory_add_to_records,
-    mandatory_apply_auto_payments, mandatory_expense_row, mandatory_expense_rows,
-    mandatory_template_create, mandatory_template_delete, mandatory_template_delete_all,
-    mandatory_template_update, normalize_tag_colors, operation_suggestions,
-    preview_full_backup_json, preview_import_mandatory_csv, preview_import_mandatory_xlsx,
-    preview_import_records_csv, preview_import_records_xlsx, report_export_csv, report_export_pdf,
-    report_export_xlsx, report_generate, standalone_record_get_row, tag_color_palette,
-    tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
-    update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
+    import_mandatory_xlsx, import_records_csv, import_records_xlsx, initialize_database,
+    mandatory_add_to_records, mandatory_apply_auto_payments, mandatory_expense_row,
+    mandatory_expense_rows, mandatory_template_create, mandatory_template_delete,
+    mandatory_template_delete_all, mandatory_template_update, normalize_tag_colors,
+    operation_suggestions, preview_full_backup_json, preview_import_mandatory_csv,
+    preview_import_mandatory_xlsx, preview_import_records_csv, preview_import_records_xlsx,
+    report_export_csv, report_export_pdf, report_export_xlsx, report_generate,
+    standalone_record_get_row, tag_color_palette, tag_color_rows, tag_names, transfer_get_row,
+    update_standalone_record_with_tag_colors, update_transfer, wallet_balance_row,
+    wallet_balance_rows, wallet_list_rows,
 };
 use std::fmt;
 use std::path::Path;
@@ -568,6 +569,7 @@ pub struct LedgeraEngine {
 
 impl LedgeraEngine {
     pub fn new(db_path: String) -> Self {
+        let _ = initialize_database(&db_path);
         Self { db_path }
     }
 
@@ -2038,6 +2040,25 @@ mod tests {
         )
         .unwrap();
         path.to_string_lossy().to_string()
+    }
+
+    #[test]
+    fn engine_creates_missing_database_with_system_wallet() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("ledgera_kotlin_ffi_missing_{unique}.db"));
+        let db_path = path.to_string_lossy().into_owned();
+        fs::remove_file(&path).ok();
+
+        let engine = LedgeraEngine::new(db_path.clone());
+        let status = engine.engine_status();
+        assert!(status.ok);
+        assert_eq!(engine.list_wallets().unwrap().len(), 1);
+        assert_eq!(engine.list_wallets().unwrap()[0].name, "Main Wallet");
+
+        fs::remove_file(path).ok();
     }
 
     #[test]

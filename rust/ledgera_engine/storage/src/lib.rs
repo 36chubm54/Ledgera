@@ -435,6 +435,35 @@ fn open_sqlite_connection(db_path: &str) -> StorageResult<Connection> {
     Connection::open(db_path).map_err(sqlite_err)
 }
 
+const INITIAL_SCHEMA: &str = include_str!("../../../../db/schema.sql");
+
+/// Create a missing database and initialize the current base schema.
+pub fn initialize_database(db_path: &str) -> StorageResult<()> {
+    let conn = open_sqlite_connection(db_path)?;
+    conn.execute_batch(INITIAL_SCHEMA).map_err(sqlite_err)?;
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('base_currency', 'KZT')",
+        [],
+    )
+    .map_err(sqlite_err)?;
+    let has_system_wallet: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM wallets WHERE system = 1 OR id = 1)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(sqlite_err)?;
+    if !has_system_wallet {
+        conn.execute(
+            "INSERT INTO wallets (id, name, currency, initial_balance, initial_balance_minor, system, allow_negative, is_active)
+             VALUES (1, 'Main Wallet', 'KZT', 0, 0, 1, 0, 1)",
+            [],
+        )
+        .map_err(sqlite_err)?;
+    }
+    Ok(())
+}
+
 thread_local! {
     static READ_CONNECTIONS: RefCell<HashMap<String, Connection>> = RefCell::new(HashMap::new());
 }
