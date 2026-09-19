@@ -3382,12 +3382,12 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
     #[test]
     fn engine_marks_first_created_wallet_as_system() {
         let db_path = fixture_db();
+        let engine = LedgeraEngine::new(db_path.clone());
         let conn = Connection::open(&db_path).unwrap();
         conn.execute("DELETE FROM wallets", []).unwrap();
         conn.execute("DELETE FROM sqlite_sequence WHERE name = 'wallets'", [])
             .unwrap();
         drop(conn);
-        let engine = LedgeraEngine::new(db_path.clone());
 
         let first = engine
             .create_wallet(CreateWalletRequest {

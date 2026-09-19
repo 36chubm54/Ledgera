@@ -118,9 +118,9 @@ fn breakdown_rows(
     let amount = minor_amount_expr("amount_base");
     let (predicate, params) = record_predicate(filters, "");
     let sql = format!(
-        "SELECT category, COALESCE(SUM({amount}), 0), COUNT(*)\
-         FROM records WHERE {record_type} AND transfer_id IS NULL\
-         AND category <> 'Transfer' AND {predicate}\
+        "SELECT category, COALESCE(SUM({amount}), 0), COUNT(*) \
+         FROM records WHERE {record_type} AND transfer_id IS NULL \
+         AND category <> 'Transfer' AND {predicate} \
          GROUP BY category ORDER BY 2 DESC, category COLLATE NOCASE, category"
     );
     let mut statement = conn.prepare(&sql).map_err(sqlite_err)?;
@@ -146,10 +146,10 @@ fn tag_rows(
     let amount = minor_amount_expr("r.amount_base");
     let (predicate, params) = record_predicate(filters, "r.");
     let sql = format!(
-        "SELECT t.name, COALESCE(t.color, ''), COALESCE(SUM({amount}), 0), COUNT(DISTINCT r.id)\
-         FROM records r JOIN record_tags rt ON rt.record_id = r.id JOIN tags t ON t.id = rt.tag_id\
-         WHERE r.type IN ('expense', 'mandatory_expense') AND r.transfer_id IS NULL\
-         AND r.category <> 'Transfer' AND {predicate}\
+        "SELECT t.name, COALESCE(t.color, ''), COALESCE(SUM({amount}), 0), COUNT(DISTINCT r.id) \
+         FROM records r JOIN record_tags rt ON rt.record_id = r.id JOIN tags t ON t.id = rt.tag_id \
+         WHERE r.type IN ('expense', 'mandatory_expense') AND r.transfer_id IS NULL \
+         AND r.category <> 'Transfer' AND {predicate} \
          GROUP BY t.id, t.name, t.color ORDER BY 3 DESC, t.name COLLATE NOCASE, t.name"
     );
     let mut statement = conn.prepare(&sql).map_err(sqlite_err)?;
@@ -175,11 +175,11 @@ fn monthly_rows(
     let amount = minor_amount_expr("amount_base");
     let (predicate, params) = record_predicate(filters, "");
     let sql = format!(
-        "SELECT substr(date, 1, 7),\
-         COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0),\
-         COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense') THEN {amount} ELSE 0 END), 0)\
-         FROM records WHERE transfer_id IS NULL AND category <> 'Transfer'\
-         AND type IN ('income', 'expense', 'mandatory_expense')\
+        "SELECT substr(date, 1, 7), \
+         COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0), \
+         COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense') THEN {amount} ELSE 0 END), 0) \
+         FROM records WHERE transfer_id IS NULL AND category <> 'Transfer' \
+         AND type IN ('income', 'expense', 'mandatory_expense') \
          AND {predicate} GROUP BY substr(date, 1, 7) ORDER BY 1"
     );
     let mut statement = conn.prepare(&sql).map_err(sqlite_err)?;
@@ -211,10 +211,10 @@ fn daily_rows(
     let amount = minor_amount_expr("amount_base");
     let (predicate, params) = record_predicate(filters, "");
     let sql = format!(
-        "SELECT date, COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0),\
-         COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense') THEN {amount} ELSE 0 END), 0)\
-         FROM records WHERE transfer_id IS NULL AND category <> 'Transfer'\
-         AND type IN ('income', 'expense', 'mandatory_expense')\
+        "SELECT date, COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0), \
+         COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense') THEN {amount} ELSE 0 END), 0) \
+         FROM records WHERE transfer_id IS NULL AND category <> 'Transfer' \
+         AND type IN ('income', 'expense', 'mandatory_expense') \
          AND {predicate} GROUP BY date ORDER BY date"
     );
     let mut statement = conn.prepare(&sql).map_err(sqlite_err)?;
@@ -233,8 +233,8 @@ fn daily_rows(
 fn capital_rows(conn: &Connection) -> StorageResult<Vec<(String, i64)>> {
     let signed = signed_minor_amount_expr("amount_base", "type");
     let sql = format!(
-        "SELECT month, SUM(monthly_delta) OVER (ORDER BY month ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\
-         FROM (SELECT substr(date, 1, 7) AS month, COALESCE(SUM({signed}), 0) AS monthly_delta\
+        "SELECT month, SUM(monthly_delta) OVER (ORDER BY month ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) \
+         FROM (SELECT substr(date, 1, 7) AS month, COALESCE(SUM({signed}), 0) AS monthly_delta \
          FROM records GROUP BY substr(date, 1, 7) ORDER BY month)"
     );
     let mut statement = conn.prepare(&sql).map_err(sqlite_err)?;
@@ -383,8 +383,9 @@ pub fn analytics_list_tags(db_path: &str, start: &str, end: &str) -> StorageResu
 
 #[cfg(test)]
 mod tests {
-    use super::{group_other, validate_period};
-    use crate::AnalyticsBreakdownRow;
+    use super::{analytics_generate, group_other, validate_period};
+    use crate::{AnalyticsBreakdownRow, AnalyticsFilters, storage_clear_read_connection_cache};
+    use rusqlite::Connection;
 
     #[test]
     fn rejects_impossible_calendar_dates() {
@@ -409,5 +410,61 @@ mod tests {
         assert_eq!(grouped[9].label, "Other");
         assert!(grouped[9].is_other);
         assert_eq!(grouped[9].amount_base, 2.0);
+    }
+
+    #[test]
+    fn generates_category_breakdown_with_valid_sql_spacing() {
+        let path = std::env::temp_dir().join(format!(
+            "ledgera_analytics_sql_{}_{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock before unix epoch")
+                .as_nanos()
+        ));
+        let path_text = path.to_string_lossy().into_owned();
+        let connection = Connection::open(&path).expect("open test database");
+        connection
+            .execute_batch(include_str!("../../../../db/schema.sql"))
+            .expect("create test schema");
+        connection
+            .execute(
+                "INSERT INTO wallets (name, currency, initial_balance, initial_balance_minor, system, allow_negative, is_active)
+                 VALUES ('Main Wallet', 'KZT', 0, 0, 1, 0, 1)",
+                [],
+            )
+            .expect("insert wallet");
+        connection
+            .execute(
+                "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, currency,
+                 rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, description)
+                 VALUES ('expense', '2026-01-10', 1, 12.34, 1234, 'KZT', 1, '1', 12.34, 1234, 'Food', '')",
+                [],
+            )
+            .expect("insert record");
+        drop(connection);
+
+        let snapshot = analytics_generate(
+            &path_text,
+            &AnalyticsFilters {
+                period_start: "2026-01-01".to_owned(),
+                period_end: "2026-01-31".to_owned(),
+                wallet_id: None,
+                category: String::new(),
+                tag: String::new(),
+                tag_mode: "or".to_owned(),
+                totals_mode: "fixed".to_owned(),
+                group_by_category: false,
+                breakdown_mode: "category".to_owned(),
+            },
+        )
+        .expect("generate analytics snapshot");
+
+        assert_eq!(snapshot.categories.len(), 1);
+        assert_eq!(snapshot.categories[0].label, "Food");
+        assert_eq!(snapshot.categories[0].amount_base, 12.34);
+        assert_eq!(snapshot.summary.year_expense, 12.34);
+        storage_clear_read_connection_cache();
+        std::fs::remove_file(path).expect("remove test database");
     }
 }
