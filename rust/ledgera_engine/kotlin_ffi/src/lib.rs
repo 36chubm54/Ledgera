@@ -10,15 +10,15 @@ use ledgera_engine_storage::{
     StandaloneRecordUpdatePayload, TagColorAssignment as StorageTagColorAssignment,
     TransferCreatePayload, TransferRow, TransferUpdatePayload, WalletBalanceRow,
     WalletCreatePayload, WalletRow, analytics_generate, analytics_list_categories,
-    analytics_list_tags, audit_run_for_date, base_currency_code, budget_create, budget_delete,
-    budget_results, budget_rows, budget_update_limit, create_standalone_record_with_tag_colors,
-    create_transfer, create_wallet, current_local_date, debt_close_validated, debt_create,
-    debt_delete, debt_delete_payment, debt_payment_rows, debt_register_payment_validated,
-    debt_register_write_off_validated, debt_rows, delete_all_operations,
-    delete_operations_selection, delete_standalone_record, delete_transfer, delete_wallet,
-    distinct_record_categories, distinct_record_descriptions, export_full_backup_json,
-    export_mandatory_csv, export_mandatory_xlsx, export_records_csv, export_records_xlsx,
-    filtered_record_list_rows, import_full_backup_json, import_mandatory_csv,
+    analytics_list_months, analytics_list_tags, analytics_list_years, audit_run_for_date,
+    base_currency_code, budget_create, budget_delete, budget_results, budget_rows,
+    budget_update_limit, create_standalone_record_with_tag_colors, create_transfer, create_wallet,
+    current_local_date, debt_close_validated, debt_create, debt_delete, debt_delete_payment,
+    debt_payment_rows, debt_register_payment_validated, debt_register_write_off_validated,
+    debt_rows, delete_all_operations, delete_operations_selection, delete_standalone_record,
+    delete_transfer, delete_wallet, distinct_record_categories, distinct_record_descriptions,
+    export_full_backup_json, export_mandatory_csv, export_mandatory_xlsx, export_records_csv,
+    export_records_xlsx, filtered_record_list_rows, import_full_backup_json, import_mandatory_csv,
     import_mandatory_xlsx, import_records_csv, import_records_xlsx, initialize_database,
     mandatory_add_to_records, mandatory_apply_auto_payments, mandatory_expense_row,
     mandatory_expense_rows, mandatory_template_create, mandatory_template_delete,
@@ -490,6 +490,9 @@ pub struct AnalyticsFiltersDto {
     pub totals_mode: String,
     pub group_by_category: bool,
     pub breakdown_mode: String,
+    pub pie_period: String,
+    pub daily_month: String,
+    pub monthly_year: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -516,6 +519,14 @@ pub struct AnalyticsBreakdownRowDto {
     pub record_count: i64,
     pub color: String,
     pub is_other: bool,
+    pub details: Vec<AnalyticsBreakdownDetailDto>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsBreakdownDetailDto {
+    pub label: String,
+    pub amount_base: f64,
+    pub record_count: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -539,10 +550,13 @@ pub struct AnalyticsSnapshotDto {
     pub summary: AnalyticsSummaryDto,
     pub capital: Vec<AnalyticsCapitalPointDto>,
     pub categories: Vec<AnalyticsBreakdownRowDto>,
+    pub grouped_categories: Vec<AnalyticsBreakdownRowDto>,
     pub tags: Vec<AnalyticsBreakdownRowDto>,
+    pub infographic_categories: Vec<AnalyticsBreakdownRowDto>,
     pub monthly: Vec<AnalyticsMonthlyRowDto>,
     pub daily: Vec<AnalyticsDailyRowDto>,
     pub infographic_monthly: Vec<AnalyticsMonthlyRowDto>,
+    pub infographic_daily: Vec<AnalyticsDailyRowDto>,
 }
 
 #[derive(Debug)]
@@ -623,6 +637,9 @@ impl LedgeraEngine {
                 totals_mode: filters.totals_mode,
                 group_by_category: filters.group_by_category,
                 breakdown_mode: filters.breakdown_mode,
+                pie_period: filters.pie_period,
+                daily_month: filters.daily_month,
+                monthly_year: filters.monthly_year,
             },
         )
         .map(analytics_to_dto)
@@ -643,6 +660,14 @@ impl LedgeraEngine {
         period_end: String,
     ) -> Result<Vec<String>, LedgeraEngineError> {
         analytics_list_tags(&self.db_path, &period_start, &period_end).map_err(storage_error)
+    }
+
+    pub fn list_analytics_months(&self) -> Result<Vec<String>, LedgeraEngineError> {
+        analytics_list_months(&self.db_path).map_err(storage_error)
+    }
+
+    pub fn list_analytics_years(&self) -> Result<Vec<String>, LedgeraEngineError> {
+        analytics_list_years(&self.db_path).map_err(storage_error)
     }
 
     pub fn export_report_csv(
@@ -1494,8 +1519,18 @@ fn analytics_to_dto(result: AnalyticsSnapshot) -> AnalyticsSnapshotDto {
             .into_iter()
             .map(analytics_breakdown_to_dto)
             .collect(),
+        grouped_categories: result
+            .grouped_categories
+            .into_iter()
+            .map(analytics_breakdown_to_dto)
+            .collect(),
         tags: result
             .tags
+            .into_iter()
+            .map(analytics_breakdown_to_dto)
+            .collect(),
+        infographic_categories: result
+            .infographic_categories
             .into_iter()
             .map(analytics_breakdown_to_dto)
             .collect(),
@@ -1518,6 +1553,15 @@ fn analytics_to_dto(result: AnalyticsSnapshot) -> AnalyticsSnapshotDto {
             .into_iter()
             .map(analytics_monthly_to_dto)
             .collect(),
+        infographic_daily: result
+            .infographic_daily
+            .into_iter()
+            .map(|row| AnalyticsDailyRowDto {
+                day: row.day,
+                income_base: row.income_base,
+                expenses_base: row.expenses_base,
+            })
+            .collect(),
     }
 }
 
@@ -1528,6 +1572,15 @@ fn analytics_breakdown_to_dto(row: AnalyticsBreakdownRow) -> AnalyticsBreakdownR
         record_count: row.record_count,
         color: row.color,
         is_other: row.is_other,
+        details: row
+            .details
+            .into_iter()
+            .map(|detail| AnalyticsBreakdownDetailDto {
+                label: detail.label,
+                amount_base: detail.amount_base,
+                record_count: detail.record_count,
+            })
+            .collect(),
     }
 }
 

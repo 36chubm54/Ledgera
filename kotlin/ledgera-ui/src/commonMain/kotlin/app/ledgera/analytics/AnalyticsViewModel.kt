@@ -6,7 +6,9 @@ import app.ledgera.model.AnalyticsSnapshot
 import app.ledgera.validation.DateValidation
 import app.ledgera.validation.currentLedgerDate
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,9 +27,22 @@ data class AnalyticsUiState(
     val categories: List<String> = emptyList(),
     val tags: List<String> = emptyList(),
     val breakdownMode: String = "category",
+    val piePeriod: String = "all_time",
+    val dailyMonth: String = "",
+    val monthlyYear: String = "",
+    val infographicMonths: List<String> = emptyList(),
+    val infographicYears: List<String> = emptyList(),
     val snapshot: AnalyticsSnapshot? = null,
     val loading: Boolean = false,
     val error: String? = null,
+)
+
+private data class AnalyticsRefreshPayload(
+    val snapshot: AnalyticsSnapshot,
+    val categories: List<String>,
+    val tags: List<String>,
+    val months: List<String>,
+    val years: List<String>,
 )
 
 class AnalyticsViewModel(
@@ -35,6 +50,7 @@ class AnalyticsViewModel(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
 ) {
     private val mutableState = MutableStateFlow(AnalyticsUiState())
+    private var refreshJob: Job? = null
     val state: StateFlow<AnalyticsUiState> = mutableState.asStateFlow()
 
     init { generate() }
@@ -47,8 +63,12 @@ class AnalyticsViewModel(
     fun updateTotalsMode(value: String) = mutableState.update { it.copy(totalsMode = value, error = null) }
     fun updateGrouping(value: Boolean) = mutableState.update { it.copy(groupByCategory = value, error = null) }
     fun updateBreakdownMode(value: String) = mutableState.update { it.copy(breakdownMode = value, error = null) }
+    fun updatePiePeriod(value: String) = mutableState.update { it.copy(piePeriod = value, error = null) }
+    fun updateDailyMonth(value: String) = mutableState.update { it.copy(dailyMonth = value, error = null) }
+    fun updateMonthlyYear(value: String) = mutableState.update { it.copy(monthlyYear = value, error = null) }
 
     fun generate() {
+        refreshJob?.cancel()
         val current = mutableState.value
         val start = DateValidation.formatGuiDateToYmd(current.periodStart)
         val end = DateValidation.formatGuiDateToYmd(current.periodEnd)
@@ -61,7 +81,7 @@ class AnalyticsViewModel(
             return
         }
         mutableState.value = current.copy(loading = true, error = null)
-        scope.launch {
+        refreshJob = scope.launch {
             runCatching {
                 val filters = AnalyticsFilters(
                     periodStart = start,
@@ -72,15 +92,33 @@ class AnalyticsViewModel(
                     totalsMode = current.totalsMode,
                     groupByCategory = current.groupByCategory,
                     breakdownMode = current.breakdownMode,
+                    piePeriod = current.piePeriod,
+                    dailyMonth = current.dailyMonth,
+                    monthlyYear = current.monthlyYear,
                 )
                 val snapshot = engine.generateAnalyticsSnapshot(filters)
                 val categories = engine.listAnalyticsCategories(start, end)
                 val tags = engine.listAnalyticsTags(start, end)
-                Triple(snapshot, categories, tags)
-            }.onSuccess { (snapshot, categories, tags) ->
-                mutableState.value = mutableState.value.copy(loading = false, snapshot = snapshot, categories = categories, tags = tags, error = null)
+                val months = engine.listAnalyticsMonths()
+                val years = engine.listAnalyticsYears()
+                AnalyticsRefreshPayload(snapshot, categories, tags, months, years)
+            }.onSuccess { payload ->
+                mutableState.value = mutableState.value.copy(
+                    loading = false,
+                    snapshot = payload.snapshot,
+                    categories = payload.categories,
+                    tags = payload.tags,
+                    infographicMonths = payload.months,
+                    infographicYears = payload.years,
+                    error = null,
+                )
             }.onFailure { error ->
-                mutableState.value = mutableState.value.copy(loading = false, error = error.message ?: "Failed to generate Analytics")
+                if (error !is CancellationException) {
+                    mutableState.value = mutableState.value.copy(
+                        loading = false,
+                        error = error.message ?: "Failed to generate Analytics",
+                    )
+                }
             }
         }
     }

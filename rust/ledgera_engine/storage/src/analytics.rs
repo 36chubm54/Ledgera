@@ -1,8 +1,9 @@
+use std::{collections::HashMap, fs, path::Path};
+
 use crate::{
-    AnalyticsBreakdownRow, AnalyticsCapitalPoint, AnalyticsDailyRow, AnalyticsFilters,
-    AnalyticsMonthlyRow, AnalyticsSnapshot, AnalyticsSummary, StorageResult, minor_amount_expr,
-    minor_to_money_value, round_money, signed_minor_amount_expr, sqlite_err,
-    with_cached_read_connection,
+    AnalyticsBreakdownDetail, AnalyticsBreakdownRow, AnalyticsCapitalPoint, AnalyticsDailyRow,
+    AnalyticsFilters, AnalyticsMonthlyRow, AnalyticsSnapshot, AnalyticsSummary, StorageResult,
+    minor_amount_expr, minor_to_money_value, round_money, sqlite_err, with_cached_read_connection,
 };
 use rusqlite::{Connection, params_from_iter, types::Value};
 
@@ -55,14 +56,160 @@ fn group_other(mut rows: Vec<AnalyticsBreakdownRow>) -> Vec<AnalyticsBreakdownRo
     let tail = rows.split_off(MAX_SLICES - 1);
     let amount_base = tail.iter().map(|row| row.amount_base).sum();
     let record_count = tail.iter().map(|row| row.record_count).sum();
+    let details = tail
+        .iter()
+        .map(|row| AnalyticsBreakdownDetail {
+            label: row.label.clone(),
+            amount_base: row.amount_base,
+            record_count: row.record_count,
+        })
+        .collect();
     rows.push(AnalyticsBreakdownRow {
         label: "Other".to_owned(),
         amount_base: round_money(amount_base),
         record_count,
         color: String::new(),
         is_other: true,
+        details,
     });
     rows
+}
+
+fn current_rate_case(column: &str, rates: &HashMap<String, f64>) -> String {
+    let mut cases = String::new();
+    for (currency, rate) in rates {
+        cases.push_str(&format!(
+            " WHEN '{}' THEN {rate:.12}",
+            currency.replace('\'', "''")
+        ));
+    }
+    format!("CASE UPPER({column}){cases} ELSE NULL END")
+}
+
+fn amount_expression(
+    filters: &AnalyticsFilters,
+    prefix: &str,
+    current_rates: Option<&HashMap<String, f64>>,
+) -> String {
+    if filters.totals_mode == "current" {
+        format!(
+            "CAST(ROUND({prefix}amount_original * 100.0 * {}) AS INTEGER)",
+            current_rate_case(
+                &format!("{prefix}currency"),
+                current_rates.expect("current rates are validated before analytics queries"),
+            )
+        )
+    } else {
+        minor_amount_expr(&format!("{prefix}amount_base"))
+    }
+}
+
+fn signed_amount_expression(
+    filters: &AnalyticsFilters,
+    prefix: &str,
+    current_rates: Option<&HashMap<String, f64>>,
+) -> String {
+    let amount = amount_expression(filters, prefix, current_rates);
+    format!("CASE WHEN {prefix}type = 'income' THEN {amount} ELSE -{amount} END")
+}
+
+fn period_for(value: &str) -> (String, String) {
+    if value.is_empty() || value.eq_ignore_ascii_case("all_time") {
+        return ("0000-01-01".to_owned(), "9999-12-31".to_owned());
+    }
+    if value.len() == 7 {
+        let year = value
+            .get(0..4)
+            .and_then(|year| year.parse::<i32>().ok())
+            .unwrap_or(0);
+        let month = value
+            .get(5..7)
+            .and_then(|month| month.parse::<u32>().ok())
+            .unwrap_or(1);
+        let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+        let end_day = match month {
+            2 if leap => 29,
+            2 => 28,
+            4 | 6 | 9 | 11 => 30,
+            _ => 31,
+        };
+        return (format!("{value}-01"), format!("{value}-{end_day:02}"));
+    }
+    (format!("{value}-01-01"), format!("{value}-12-31"))
+}
+
+fn validate_infographic_periods(filters: &AnalyticsFilters) -> StorageResult<()> {
+    let pie = filters.pie_period.trim();
+    if !pie.is_empty() && !pie.eq_ignore_ascii_case("all_time") {
+        if pie.len() != 7 {
+            return Err("Analytics pie period must use YYYY-MM or all_time".to_owned());
+        }
+        let range = period_for(pie);
+        validate_period(&range.0, &range.1)?;
+    }
+    let daily = filters.daily_month.trim();
+    if !daily.is_empty() {
+        if daily.len() != 7 {
+            return Err("Analytics daily month must use YYYY-MM".to_owned());
+        }
+        let range = period_for(daily);
+        validate_period(&range.0, &range.1)?;
+    }
+    let yearly = filters.monthly_year.trim();
+    if !yearly.is_empty() {
+        if yearly.len() != 4 {
+            return Err("Analytics monthly year must use YYYY".to_owned());
+        }
+        let range = period_for(yearly);
+        validate_period(&range.0, &range.1)?;
+    }
+    Ok(())
+}
+
+fn with_period(filters: &AnalyticsFilters, start: String, end: String) -> AnalyticsFilters {
+    let mut copy = filters.clone();
+    copy.period_start = start;
+    copy.period_end = end;
+    copy.category.clear();
+    copy.tag.clear();
+    copy.wallet_id = None;
+    copy
+}
+
+fn load_current_rates(db_path: &str, conn: &Connection) -> StorageResult<HashMap<String, f64>> {
+    let mut rates = HashMap::new();
+    let path = Path::new(db_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("currency_rates.json");
+    if path.is_file() {
+        let text = fs::read_to_string(&path)
+            .map_err(|err| format!("Failed to read current currency rates: {err}"))?;
+        let configured: HashMap<String, f64> = serde_json::from_str(&text)
+            .map_err(|err| format!("Invalid current currency rates: {err}"))?;
+        for (currency, rate) in configured {
+            if rate.is_finite() && rate > 0.0 {
+                rates.insert(currency.trim().to_uppercase(), rate);
+            }
+        }
+    }
+    let base = crate::base_currency_code(db_path)?;
+    rates.insert(base.to_uppercase(), 1.0);
+    let mut statement = conn
+        .prepare("SELECT DISTINCT UPPER(currency) FROM records WHERE trim(currency) <> ''")
+        .map_err(sqlite_err)?;
+    let currencies = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(sqlite_err)?;
+    for currency in currencies {
+        let currency = currency.map_err(sqlite_err)?;
+        if !rates.contains_key(&currency) {
+            return Err(format!(
+                "Current-rate analytics has no usable rate for currency {currency}"
+            ));
+        }
+    }
+    Ok(rates)
 }
 
 fn record_predicate(filters: &AnalyticsFilters, alias: &str) -> (String, Vec<Value>) {
@@ -114,8 +261,9 @@ fn breakdown_rows(
     conn: &Connection,
     filters: &AnalyticsFilters,
     record_type: &str,
+    current_rates: Option<&HashMap<String, f64>>,
 ) -> StorageResult<Vec<AnalyticsBreakdownRow>> {
-    let amount = minor_amount_expr("amount_base");
+    let amount = amount_expression(filters, "", current_rates);
     let (predicate, params) = record_predicate(filters, "");
     let sql = format!(
         "SELECT category, COALESCE(SUM({amount}), 0), COUNT(*) \
@@ -133,6 +281,7 @@ fn breakdown_rows(
                 record_count: row.get(2)?,
                 color: String::new(),
                 is_other: false,
+                details: Vec::new(),
             })
         })
         .map_err(sqlite_err)?;
@@ -142,8 +291,9 @@ fn breakdown_rows(
 fn tag_rows(
     conn: &Connection,
     filters: &AnalyticsFilters,
+    current_rates: Option<&HashMap<String, f64>>,
 ) -> StorageResult<Vec<AnalyticsBreakdownRow>> {
-    let amount = minor_amount_expr("r.amount_base");
+    let amount = amount_expression(filters, "r.", current_rates);
     let (predicate, params) = record_predicate(filters, "r.");
     let sql = format!(
         "SELECT t.name, COALESCE(t.color, ''), COALESCE(SUM({amount}), 0), COUNT(DISTINCT r.id) \
@@ -162,6 +312,7 @@ fn tag_rows(
                 record_count: row.get(3)?,
                 color: row.get(1)?,
                 is_other: false,
+                details: Vec::new(),
             })
         })
         .map_err(sqlite_err)?;
@@ -171,16 +322,29 @@ fn tag_rows(
 fn monthly_rows(
     conn: &Connection,
     filters: &AnalyticsFilters,
+    current_rates: Option<&HashMap<String, f64>>,
 ) -> StorageResult<Vec<AnalyticsMonthlyRow>> {
-    let amount = minor_amount_expr("amount_base");
+    let amount = amount_expression(filters, "", current_rates);
     let (predicate, params) = record_predicate(filters, "");
     let sql = format!(
-        "SELECT substr(date, 1, 7), \
-         COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0), \
-         COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense') THEN {amount} ELSE 0 END), 0) \
-         FROM records WHERE transfer_id IS NULL AND category <> 'Transfer' \
-         AND type IN ('income', 'expense', 'mandatory_expense') \
-         AND {predicate} GROUP BY substr(date, 1, 7) ORDER BY 1"
+        r#"WITH RECURSIVE months(month_start) AS (
+             SELECT date(?1, 'start of month')
+             UNION ALL
+             SELECT date(month_start, '+1 month') FROM months
+             WHERE month_start < date(?2, 'start of month')
+         ), aggregated AS (
+             SELECT substr(date, 1, 7) AS month,
+             COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0) AS income,
+             COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense') THEN {amount} ELSE 0 END), 0) AS expenses
+             FROM records WHERE transfer_id IS NULL AND category <> 'Transfer'
+             AND type IN ('income', 'expense', 'mandatory_expense')
+             AND {predicate} GROUP BY substr(date, 1, 7)
+         )
+         SELECT strftime('%Y-%m', months.month_start),
+         COALESCE(aggregated.income, 0), COALESCE(aggregated.expenses, 0)
+         FROM months LEFT JOIN aggregated
+         ON aggregated.month = strftime('%Y-%m', months.month_start)
+         ORDER BY months.month_start"#
     );
     let mut statement = conn.prepare(&sql).map_err(sqlite_err)?;
     let rows = statement
@@ -207,15 +371,26 @@ fn monthly_rows(
 fn daily_rows(
     conn: &Connection,
     filters: &AnalyticsFilters,
+    current_rates: Option<&HashMap<String, f64>>,
 ) -> StorageResult<Vec<AnalyticsDailyRow>> {
-    let amount = minor_amount_expr("amount_base");
+    let amount = amount_expression(filters, "", current_rates);
     let (predicate, params) = record_predicate(filters, "");
     let sql = format!(
-        "SELECT date, COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0), \
-         COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense') THEN {amount} ELSE 0 END), 0) \
-         FROM records WHERE transfer_id IS NULL AND category <> 'Transfer' \
-         AND type IN ('income', 'expense', 'mandatory_expense') \
-         AND {predicate} GROUP BY date ORDER BY date"
+        r#"WITH RECURSIVE days(day) AS (
+             SELECT ?1
+             UNION ALL
+             SELECT date(day, '+1 day') FROM days WHERE day < ?2
+         ), aggregated AS (
+             SELECT date,
+             COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0) AS income,
+             COALESCE(SUM(CASE WHEN type IN ('expense', 'mandatory_expense') THEN {amount} ELSE 0 END), 0) AS expenses
+             FROM records WHERE transfer_id IS NULL AND category <> 'Transfer'
+             AND type IN ('income', 'expense', 'mandatory_expense')
+             AND {predicate} GROUP BY date
+         )
+         SELECT days.day, COALESCE(aggregated.income, 0), COALESCE(aggregated.expenses, 0)
+         FROM days LEFT JOIN aggregated ON aggregated.date = days.day
+         ORDER BY days.day"#
     );
     let mut statement = conn.prepare(&sql).map_err(sqlite_err)?;
     let rows = statement
@@ -230,16 +405,24 @@ fn daily_rows(
     rows.map(|row| row.map_err(sqlite_err)).collect()
 }
 
-fn capital_rows(conn: &Connection) -> StorageResult<Vec<(String, i64)>> {
-    let signed = signed_minor_amount_expr("amount_base", "type");
+fn capital_rows(
+    conn: &Connection,
+    filters: &AnalyticsFilters,
+    current_rates: Option<&HashMap<String, f64>>,
+) -> StorageResult<Vec<(String, i64)>> {
+    let signed = signed_amount_expression(filters, "", current_rates);
     let sql = format!(
         "SELECT month, SUM(monthly_delta) OVER (ORDER BY month ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) \
          FROM (SELECT substr(date, 1, 7) AS month, COALESCE(SUM({signed}), 0) AS monthly_delta \
-         FROM records GROUP BY substr(date, 1, 7) ORDER BY month)"
+         FROM records WHERE date <= ?2 GROUP BY substr(date, 1, 7) ORDER BY month) \
+         WHERE month >= substr(?1, 1, 7)"
     );
     let mut statement = conn.prepare(&sql).map_err(sqlite_err)?;
     let rows = statement
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .query_map(
+            (filters.period_start.as_str(), filters.period_end.as_str()),
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
         .map_err(sqlite_err)?;
     rows.map(|row| row.map_err(sqlite_err)).collect()
 }
@@ -248,8 +431,9 @@ fn summary(
     conn: &Connection,
     filters: &AnalyticsFilters,
     monthly: &[AnalyticsMonthlyRow],
+    current_rates: Option<&HashMap<String, f64>>,
 ) -> StorageResult<AnalyticsSummary> {
-    let amount = minor_amount_expr("amount_base");
+    let amount = amount_expression(filters, "", current_rates);
     let (predicate, params) = record_predicate(filters, "");
     let (income_minor, expense_minor): (i64, i64) = conn
         .query_row(
@@ -270,7 +454,7 @@ fn summary(
     let initial_minor: i64 = conn
         .query_row("SELECT COALESCE(SUM(COALESCE(initial_balance_minor, CAST(ROUND(initial_balance * 100.0) AS INTEGER), 0)), 0) FROM wallets WHERE is_active = 1", [], |row| row.get(0))
         .map_err(sqlite_err)?;
-    let signed = crate::signed_minor_amount_expr("r.amount_base", "r.type");
+    let signed = signed_amount_expression(filters, "r.", current_rates);
     let delta_minor: i64 = conn
         .query_row(
             &format!("SELECT COALESCE(SUM({signed}), 0) FROM records r WHERE r.date <= ?1"),
@@ -320,15 +504,54 @@ pub fn analytics_generate(
     if !matches!(filters.breakdown_mode.as_str(), "category" | "tag") {
         return Err("Analytics breakdown mode must be category or tag".to_owned());
     }
+    if !matches!(filters.totals_mode.as_str(), "fixed" | "current") {
+        return Err("Analytics totals mode must be fixed or current".to_owned());
+    }
+    validate_infographic_periods(filters)?;
     with_cached_read_connection(db_path, |conn| {
-        let monthly = monthly_rows(conn, filters)?;
-        let categories = group_other(breakdown_rows(
+        let current_rates = if filters.totals_mode == "current" {
+            Some(load_current_rates(db_path, conn)?)
+        } else {
+            None
+        };
+        let rates = current_rates.as_ref();
+        let monthly = monthly_rows(conn, filters, rates)?;
+        let category_rows = breakdown_rows(
             conn,
             filters,
             "type IN ('expense', 'mandatory_expense')",
+            rates,
+        )?;
+        let grouped_categories = group_other(category_rows.clone());
+        let tags = group_other(tag_rows(conn, filters, rates)?);
+        let pie_range = period_for(filters.pie_period.trim());
+        let pie_filters = with_period(filters, pie_range.0, pie_range.1);
+        let infographic_categories = group_other(breakdown_rows(
+            conn,
+            &pie_filters,
+            "type IN ('expense', 'mandatory_expense')",
+            rates,
         )?);
-        let tags = group_other(tag_rows(conn, filters)?);
-        let infographic_monthly = monthly.clone();
+        let daily_month = if filters.daily_month.trim().is_empty() {
+            filters
+                .period_start
+                .get(0..7)
+                .unwrap_or("0000-01")
+                .to_owned()
+        } else {
+            filters.daily_month.trim().to_owned()
+        };
+        let daily_range = period_for(&daily_month);
+        let daily_filters = with_period(filters, daily_range.0, daily_range.1);
+        let monthly_year = if filters.monthly_year.trim().is_empty() {
+            filters.period_end.get(0..4).unwrap_or("0000").to_owned()
+        } else {
+            filters.monthly_year.trim().to_owned()
+        };
+        let monthly_range = period_for(&monthly_year);
+        let monthly_filters = with_period(filters, monthly_range.0, monthly_range.1);
+        let infographic_daily = daily_rows(conn, &daily_filters, rates)?;
+        let infographic_monthly = monthly_rows(conn, &monthly_filters, rates)?;
         let initial_minor: i64 = conn
             .query_row(
                 "SELECT COALESCE(SUM(COALESCE(initial_balance_minor, CAST(ROUND(initial_balance * 100.0) AS INTEGER), 0)), 0) FROM wallets WHERE is_active = 1",
@@ -336,7 +559,7 @@ pub fn analytics_generate(
                 |row| row.get(0),
             )
             .map_err(sqlite_err)?;
-        let capital = capital_rows(conn)?
+        let capital = capital_rows(conn, filters, rates)?
             .into_iter()
             .map(|row| AnalyticsCapitalPoint {
                 month: row.0,
@@ -344,13 +567,16 @@ pub fn analytics_generate(
             })
             .collect();
         Ok(AnalyticsSnapshot {
-            summary: summary(conn, filters, &monthly)?,
+            summary: summary(conn, filters, &monthly, rates)?,
             capital,
-            categories,
+            categories: category_rows,
+            grouped_categories,
             tags,
+            infographic_categories,
             monthly,
-            daily: daily_rows(conn, filters)?,
+            daily: daily_rows(conn, filters, rates)?,
             infographic_monthly,
+            infographic_daily,
         })
     })
 }
@@ -381,9 +607,33 @@ pub fn analytics_list_tags(db_path: &str, start: &str, end: &str) -> StorageResu
     })
 }
 
+pub fn analytics_list_months(db_path: &str) -> StorageResult<Vec<String>> {
+    with_cached_read_connection(db_path, |conn| {
+        let mut statement = conn
+            .prepare("SELECT DISTINCT substr(date, 1, 7) FROM records ORDER BY 1")
+            .map_err(sqlite_err)?;
+        let rows = statement
+            .query_map([], |row| row.get(0))
+            .map_err(sqlite_err)?;
+        rows.map(|row| row.map_err(sqlite_err)).collect()
+    })
+}
+
+pub fn analytics_list_years(db_path: &str) -> StorageResult<Vec<String>> {
+    with_cached_read_connection(db_path, |conn| {
+        let mut statement = conn
+            .prepare("SELECT DISTINCT substr(date, 1, 4) FROM records ORDER BY 1")
+            .map_err(sqlite_err)?;
+        let rows = statement
+            .query_map([], |row| row.get(0))
+            .map_err(sqlite_err)?;
+        rows.map(|row| row.map_err(sqlite_err)).collect()
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{analytics_generate, group_other, validate_period};
+    use super::{analytics_generate, group_other, period_for, validate_period};
     use crate::{AnalyticsBreakdownRow, AnalyticsFilters, storage_clear_read_connection_cache};
     use rusqlite::Connection;
 
@@ -395,6 +645,12 @@ mod tests {
     }
 
     #[test]
+    fn uses_leap_day_for_february_infographic_period() {
+        assert_eq!(period_for("2024-02").1, "2024-02-29");
+        assert_eq!(period_for("2023-02").1, "2023-02-28");
+    }
+
+    #[test]
     fn groups_breakdown_after_nine_rows() {
         let rows = (0..11)
             .map(|index| AnalyticsBreakdownRow {
@@ -403,6 +659,7 @@ mod tests {
                 record_count: 1,
                 color: String::new(),
                 is_other: false,
+                details: Vec::new(),
             })
             .collect();
         let grouped = group_other(rows);
@@ -410,6 +667,8 @@ mod tests {
         assert_eq!(grouped[9].label, "Other");
         assert!(grouped[9].is_other);
         assert_eq!(grouped[9].amount_base, 2.0);
+        assert_eq!(grouped[9].details.len(), 2);
+        assert_eq!(grouped[9].details[0].label, "Category 9");
     }
 
     #[test]
@@ -456,6 +715,9 @@ mod tests {
                 totals_mode: "fixed".to_owned(),
                 group_by_category: false,
                 breakdown_mode: "category".to_owned(),
+                pie_period: "all_time".to_owned(),
+                daily_month: "2026-01".to_owned(),
+                monthly_year: "2026".to_owned(),
             },
         )
         .expect("generate analytics snapshot");
@@ -464,6 +726,39 @@ mod tests {
         assert_eq!(snapshot.categories[0].label, "Food");
         assert_eq!(snapshot.categories[0].amount_base, 12.34);
         assert_eq!(snapshot.summary.year_expense, 12.34);
+        storage_clear_read_connection_cache();
+        let connection = Connection::open(&path).expect("reopen test database");
+        connection
+            .execute(
+                "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, currency,
+                 rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, description)
+                 VALUES ('expense', '2026-01-11', 1, 1.00, 100, 'USD', 450, '450', 4.50, 450, 'Foreign', '')",
+                [],
+            )
+            .expect("insert unsupported current-rate record");
+        drop(connection);
+        let current_error = analytics_generate(
+            &path_text,
+            &AnalyticsFilters {
+                totals_mode: "current".to_owned(),
+                ..AnalyticsFilters {
+                    period_start: "2026-01-01".to_owned(),
+                    period_end: "2026-01-31".to_owned(),
+                    wallet_id: None,
+                    category: String::new(),
+                    tag: String::new(),
+                    tag_mode: "or".to_owned(),
+                    totals_mode: "fixed".to_owned(),
+                    group_by_category: false,
+                    breakdown_mode: "category".to_owned(),
+                    pie_period: "all_time".to_owned(),
+                    daily_month: "2026-01".to_owned(),
+                    monthly_year: "2026".to_owned(),
+                }
+            },
+        )
+        .expect_err("current totals must fail without a usable rate");
+        assert!(current_error.contains("no usable rate for currency USD"));
         storage_clear_read_connection_cache();
         std::fs::remove_file(path).expect("remove test database");
     }

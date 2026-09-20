@@ -60,6 +60,8 @@ interface AnalyticsEngine {
         error("Analytics generation is unavailable")
     suspend fun listAnalyticsCategories(periodStart: String, periodEnd: String): List<String> = emptyList()
     suspend fun listAnalyticsTags(periodStart: String, periodEnd: String): List<String> = emptyList()
+    suspend fun listAnalyticsMonths(): List<String> = emptyList()
+    suspend fun listAnalyticsYears(): List<String> = emptyList()
 }
 
 interface OperationsEngine {

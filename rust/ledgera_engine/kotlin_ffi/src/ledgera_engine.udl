@@ -417,6 +417,9 @@ dictionary AnalyticsFiltersDto {
     string totals_mode;
     boolean group_by_category;
     string breakdown_mode;
+    string pie_period;
+    string daily_month;
+    string monthly_year;
 };
 
 dictionary AnalyticsSummaryDto {
@@ -440,6 +443,13 @@ dictionary AnalyticsBreakdownRowDto {
     i64 record_count;
     string color;
     boolean is_other;
+    sequence<AnalyticsBreakdownDetailDto> details;
+};
+
+dictionary AnalyticsBreakdownDetailDto {
+    string label;
+    double amount_base;
+    i64 record_count;
 };
 
 dictionary AnalyticsMonthlyRowDto {
@@ -460,10 +470,13 @@ dictionary AnalyticsSnapshotDto {
     AnalyticsSummaryDto summary;
     sequence<AnalyticsCapitalPointDto> capital;
     sequence<AnalyticsBreakdownRowDto> categories;
+    sequence<AnalyticsBreakdownRowDto> grouped_categories;
     sequence<AnalyticsBreakdownRowDto> tags;
+    sequence<AnalyticsBreakdownRowDto> infographic_categories;
     sequence<AnalyticsMonthlyRowDto> monthly;
     sequence<AnalyticsDailyRowDto> daily;
     sequence<AnalyticsMonthlyRowDto> infographic_monthly;
+    sequence<AnalyticsDailyRowDto> infographic_daily;
 };
 
 interface LedgeraEngine {
@@ -484,6 +497,10 @@ interface LedgeraEngine {
     sequence<string> list_analytics_categories(string period_start, string period_end);
     [Throws=LedgeraEngineError]
     sequence<string> list_analytics_tags(string period_start, string period_end);
+    [Throws=LedgeraEngineError]
+    sequence<string> list_analytics_months();
+    [Throws=LedgeraEngineError]
+    sequence<string> list_analytics_years();
     [Throws=LedgeraEngineError]
     string base_currency();
     [Throws=LedgeraEngineError]

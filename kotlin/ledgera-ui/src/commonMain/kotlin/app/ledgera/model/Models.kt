@@ -464,6 +464,9 @@ data class AnalyticsFilters(
     val totalsMode: String = "fixed",
     val groupByCategory: Boolean = false,
     val breakdownMode: String = "category",
+    val piePeriod: String = "all_time",
+    val dailyMonth: String = "",
+    val monthlyYear: String = "",
 )
 
 data class AnalyticsSummary(
@@ -484,6 +487,13 @@ data class AnalyticsBreakdownRow(
     val recordCount: Long,
     val color: String,
     val isOther: Boolean,
+    val details: List<AnalyticsBreakdownDetail> = emptyList(),
+)
+
+data class AnalyticsBreakdownDetail(
+    val label: String,
+    val amountBase: Double,
+    val recordCount: Long,
 )
 
 data class AnalyticsMonthlyRow(
@@ -504,8 +514,11 @@ data class AnalyticsSnapshot(
     val summary: AnalyticsSummary,
     val capital: List<AnalyticsCapitalPoint>,
     val categories: List<AnalyticsBreakdownRow>,
+    val groupedCategories: List<AnalyticsBreakdownRow> = emptyList(),
     val tags: List<AnalyticsBreakdownRow>,
+    val infographicCategories: List<AnalyticsBreakdownRow> = emptyList(),
     val monthly: List<AnalyticsMonthlyRow>,
     val daily: List<AnalyticsDailyRow>,
     val infographicMonthly: List<AnalyticsMonthlyRow>,
+    val infographicDaily: List<AnalyticsDailyRow> = emptyList(),
 )

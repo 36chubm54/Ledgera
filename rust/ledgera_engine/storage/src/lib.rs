@@ -327,6 +327,9 @@ pub struct AnalyticsFilters {
     pub totals_mode: String,
     pub group_by_category: bool,
     pub breakdown_mode: String,
+    pub pie_period: String,
+    pub daily_month: String,
+    pub monthly_year: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -353,6 +356,14 @@ pub struct AnalyticsBreakdownRow {
     pub record_count: i64,
     pub color: String,
     pub is_other: bool,
+    pub details: Vec<AnalyticsBreakdownDetail>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticsBreakdownDetail {
+    pub label: String,
+    pub amount_base: f64,
+    pub record_count: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -376,10 +387,13 @@ pub struct AnalyticsSnapshot {
     pub summary: AnalyticsSummary,
     pub capital: Vec<AnalyticsCapitalPoint>,
     pub categories: Vec<AnalyticsBreakdownRow>,
+    pub grouped_categories: Vec<AnalyticsBreakdownRow>,
     pub tags: Vec<AnalyticsBreakdownRow>,
+    pub infographic_categories: Vec<AnalyticsBreakdownRow>,
     pub monthly: Vec<AnalyticsMonthlyRow>,
     pub daily: Vec<AnalyticsDailyRow>,
     pub infographic_monthly: Vec<AnalyticsMonthlyRow>,
+    pub infographic_daily: Vec<AnalyticsDailyRow>,
 }
 
 mod analytics;
@@ -389,7 +403,10 @@ mod planning;
 mod reporting;
 mod timeline;
 
-pub use analytics::{analytics_generate, analytics_list_categories, analytics_list_tags};
+pub use analytics::{
+    analytics_generate, analytics_list_categories, analytics_list_months, analytics_list_tags,
+    analytics_list_years,
+};
 pub use audit::{AuditFindingRow, audit_run, audit_run_for_date};
 pub use metrics::{
     metrics_burn_rate, metrics_income_by_category, metrics_monthly_summary,

@@ -156,6 +156,9 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 filters.totalsMode,
                 filters.groupByCategory,
                 filters.breakdownMode,
+                filters.piePeriod,
+                filters.dailyMonth,
+                filters.monthlyYear,
             ),
         ).let { dto ->
             AnalyticsSnapshot(
@@ -171,14 +174,27 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                     )
                 },
                 capital = dto.capital.map { AnalyticsCapitalPoint(it.month, it.balanceBase) },
-                categories = dto.categories.map { AnalyticsBreakdownRow(it.label, it.amountBase, it.recordCount, it.color, it.isOther) },
-                tags = dto.tags.map { AnalyticsBreakdownRow(it.label, it.amountBase, it.recordCount, it.color, it.isOther) },
+                categories = dto.categories.map { it.toAnalyticsBreakdownRow() },
+                groupedCategories = dto.groupedCategories.map { it.toAnalyticsBreakdownRow() },
+                tags = dto.tags.map { it.toAnalyticsBreakdownRow() },
+                infographicCategories = dto.infographicCategories.map { it.toAnalyticsBreakdownRow() },
                 monthly = dto.monthly.map { AnalyticsMonthlyRow(it.month, it.incomeBase, it.expensesBase, it.cashflowBase, it.savingsRate) },
                 daily = dto.daily.map { AnalyticsDailyRow(it.day, it.incomeBase, it.expensesBase) },
                 infographicMonthly = dto.infographicMonthly.map { AnalyticsMonthlyRow(it.month, it.incomeBase, it.expensesBase, it.cashflowBase, it.savingsRate) },
+                infographicDaily = dto.infographicDaily.map { AnalyticsDailyRow(it.day, it.incomeBase, it.expensesBase) },
             )
         }
     }
+
+    private fun app.ledgera.engine.AnalyticsBreakdownRowDto.toAnalyticsBreakdownRow(): AnalyticsBreakdownRow =
+        AnalyticsBreakdownRow(
+            label = label,
+            amountBase = amountBase,
+            recordCount = recordCount,
+            color = color,
+            isOther = isOther,
+            details = details.map { app.ledgera.model.AnalyticsBreakdownDetail(it.label, it.amountBase, it.recordCount) },
+        )
 
     override suspend fun listAnalyticsCategories(periodStart: String, periodEnd: String): List<String> = withContext(Dispatchers.IO) {
         engine.listAnalyticsCategories(periodStart, periodEnd)
@@ -186,6 +202,14 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
 
     override suspend fun listAnalyticsTags(periodStart: String, periodEnd: String): List<String> = withContext(Dispatchers.IO) {
         engine.listAnalyticsTags(periodStart, periodEnd)
+    }
+
+    override suspend fun listAnalyticsMonths(): List<String> = withContext(Dispatchers.IO) {
+        engine.listAnalyticsMonths()
+    }
+
+    override suspend fun listAnalyticsYears(): List<String> = withContext(Dispatchers.IO) {
+        engine.listAnalyticsYears()
     }
 
     override suspend fun reportWallets(): List<WalletOption> = listWallets()
