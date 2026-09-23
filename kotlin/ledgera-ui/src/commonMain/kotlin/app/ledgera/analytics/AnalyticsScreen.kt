@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -16,14 +18,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,10 +36,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.animateFloatAsState
 import app.ledgera.model.AnalyticsBreakdownRow
@@ -123,14 +133,26 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel, modifier: Modifier = Modifier
 
 @Composable
 private fun BreakdownSummaryCard(title: String, rows: List<AnalyticsBreakdownRow>) {
-    Card {
+    Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             if (rows.isEmpty()) {
                 Text("No breakdown data", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                rows.forEach { row ->
-                    Text("${row.label}: ${"%.2f".format(row.amountBase)} (${row.recordCount})")
+                rows.chunked(4).forEach { rowGroup ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        rowGroup.forEach { row ->
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(row.label, maxLines = 1)
+                                Text(
+                                    "${"%.2f".format(row.amountBase)} (${row.recordCount})",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        repeat(4 - rowGroup.size) { Spacer(Modifier.weight(1f)) }
+                    }
                 }
             }
         }
@@ -139,7 +161,7 @@ private fun BreakdownSummaryCard(title: String, rows: List<AnalyticsBreakdownRow
 
 @Composable
 private fun SummaryCard(summary: app.ledgera.model.AnalyticsSummary) {
-    Card { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Summary", style = MaterialTheme.typography.titleLarge)
         Text("Net worth: %.2f".format(summary.netWorthBase))
         Text("Savings rate: %.2f%%".format(summary.savingsRate))
@@ -153,9 +175,24 @@ private fun SummaryCard(summary: app.ledgera.model.AnalyticsSummary) {
 
 @Composable
 private fun MonthlyCard(rows: List<AnalyticsMonthlyRow>) {
-    Card { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Monthly report", style = MaterialTheme.typography.titleLarge)
-        rows.forEach { row -> Text("${row.month}: income ${"%.2f".format(row.incomeBase)}, expenses ${"%.2f".format(row.expensesBase)}, cashflow ${"%.2f".format(row.cashflowBase)}") }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+            Text("Month", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+            Text("Income", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+            Text("Expenses", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+            Text("Cashflow", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+            Text("Savings %", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+        }
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+                Text(row.month, Modifier.weight(1f))
+                Text("%.2f".format(row.incomeBase), Modifier.weight(1f))
+                Text("%.2f".format(row.expensesBase), Modifier.weight(1f))
+                Text("%.2f".format(row.cashflowBase), Modifier.weight(1f))
+                Text("%.1f%%".format(row.savingsRate), Modifier.weight(1f))
+            }
+        }
     } }
 }
 
@@ -163,7 +200,7 @@ private fun MonthlyCard(rows: List<AnalyticsMonthlyRow>) {
 private fun ChartCard(title: String, content: @Composable () -> Unit) {
     Card { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.titleLarge)
-        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).height(220.dp)) { content() }
+        Box(Modifier.fillMaxWidth().height(340.dp)) { content() }
     } }
 }
 
@@ -193,19 +230,19 @@ private fun InfographicsSection(
                     }
                     InfographicCard("Daily cashflow") {
                         SelectorRow("Month", dailyMonth.ifEmpty { months.lastOrNull().orEmpty() }, months, onDailyMonthChange, onRefresh)
-                        CashflowChart(daily, labelStep = 3)
+                        CashflowChart(daily, labelStep = 3, chartHeight = 320.dp)
                     }
                 }
             } else {
                 Row(
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth().height(420.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    InfographicCard("Expenses by category", Modifier.weight(1f)) {
+                    InfographicCard("Expenses by category", Modifier.weight(1f).fillMaxHeight()) {
                         SelectorRow("Period", if (piePeriod == "all_time") "All time" else piePeriod, listOf("all_time") + months, onPiePeriodChange, onRefresh)
                         CategoryChart(breakdown)
                     }
-                    InfographicCard("Daily cashflow", Modifier.weight(1f)) {
+                    InfographicCard("Daily cashflow", Modifier.weight(1f).fillMaxHeight()) {
                         SelectorRow("Month", dailyMonth.ifEmpty { months.lastOrNull().orEmpty() }, months, onDailyMonthChange, onRefresh)
                         CashflowChart(daily, labelStep = 3)
                     }
@@ -214,7 +251,7 @@ private fun InfographicsSection(
         }
         InfographicCard("Monthly cashflow", Modifier.fillMaxWidth()) {
             SelectorRow("Year", monthlyYear.ifEmpty { years.lastOrNull().orEmpty() }, years, onMonthlyYearChange, onRefresh)
-            CashflowChart(monthly, labelStep = 1)
+            CashflowChart(monthly, labelStep = 1, stretchToWidth = true)
         }
     }
 }
@@ -274,86 +311,126 @@ private fun CategoryChart(rows: List<AnalyticsBreakdownRow>) {
         Text("No category data", color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        var selected by remember(rows) { mutableStateOf<AnalyticsBreakdownRow?>(null) }
-        Column(Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            InteractivePieChart(rows, Modifier.size(220.dp)) { selected = it }
+    var selected by remember(rows) { mutableStateOf<AnalyticsBreakdownRow?>(null) }
+    var showOtherDialog by remember(rows) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+        Box(Modifier.size(290.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            InteractiveDonutChart(rows, selected?.label, Modifier.fillMaxSize()) { selected = it }
             selected?.let { row ->
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)) {
-                    Column(Modifier.padding(8.dp)) {
-                        Text(row.label, style = MaterialTheme.typography.labelLarge)
-                        Text("%.2f (%.1f%%)".format(row.amountBase, row.amountBase / total * 100.0))
-                        if (row.isOther && row.details.isNotEmpty()) {
-                            row.details.forEach { detail ->
-                                Text(
-                                    "${detail.label}: %.2f".format(detail.amountBase),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Column(
-            Modifier.height(220.dp).weight(1f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            rows.forEachIndexed { index, row ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Column(
+                    Modifier.padding(12.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 ) {
-                    Box(
-                        Modifier.size(12.dp),
-                    ) {
-                        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                            drawCircle(paletteColor(index))
-                        }
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(row.label, maxLines = 1)
-                        Text(
-                            "%.2f (%.1f%%)".format(row.amountBase, row.amountBase / total * 100.0),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    Text(row.label, style = MaterialTheme.typography.labelLarge, maxLines = 2)
+                    Text("%.2f".format(row.amountBase))
+                    Text("%.1f%%".format(row.amountBase / total * 100.0), style = MaterialTheme.typography.bodySmall)
+                    if (row.isOther && row.details.isNotEmpty()) {
+                        Button(onClick = { showOtherDialog = true }) { Text("More...") }
                     }
                 }
             }
         }
+    }
+    if (showOtherDialog && selected?.isOther == true) {
+        AlertDialog(
+            onDismissRequest = { showOtherDialog = false },
+            title = { Text("Other categories") },
+            text = {
+                Column(
+                    Modifier.height(220.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    selected?.details?.forEach { detail ->
+                        Text("${detail.label}: %.2f (%d)".format(detail.amountBase, detail.recordCount))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showOtherDialog = false }) { Text("Close") } },
+        )
     }
 }
 
 @Composable
 private fun LineChart(points: List<Pair<String, Double>>) {
-    if (points.isEmpty()) { Text("No data") ; return }
+    if (points.isEmpty()) {
+        Text("No data")
+        return
+    }
     val lineColor = MaterialTheme.colorScheme.primary
-    Canvas(Modifier.fillMaxWidth().height(210.dp)) {
-        val values = points.map { it.second }
-        val min = values.minOrNull() ?: 0.0
-        val max = values.maxOrNull() ?: 1.0
-        val span = max(max - min, 1.0)
-        val step = size.width / max(1, points.lastIndex).toFloat()
-        val coordinates = values.mapIndexed { index, value -> Offset(index * step, size.height - ((value - min) / span * size.height).toFloat()) }
-        coordinates.zipWithNext().forEach { (a, b) -> drawLine(lineColor, a, b, strokeWidth = 4f) }
-        coordinates.forEach { drawCircle(lineColor, 4f, it) }
+    val axisColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    var selectedIndex by remember(points) { mutableStateOf<Int?>(null) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val chartWidth = maxOf(maxWidth, (points.size * 96).dp)
+        Column(Modifier.width(chartWidth).horizontalScroll(rememberScrollState())) {
+            Box(Modifier.width(chartWidth).height(310.dp)) {
+                Canvas(Modifier.fillMaxSize().pointerInput(points) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val x = awaitPointerEvent().changes.firstOrNull()?.position?.x ?: continue
+                        selectedIndex = if (points.size == 1) 0 else {
+                            (x / size.width * points.size).toInt().coerceIn(0, points.lastIndex)
+                        }
+                    }
+                }
+                }) {
+                val values = points.map { it.second }
+                val dataMin = values.minOrNull() ?: 0.0
+                val dataMax = values.maxOrNull() ?: 0.0
+                val dataSpan = dataMax - dataMin
+                val padding = max(max(dataSpan * 0.12, kotlin.math.abs(dataMax) * 0.02), 1.0)
+                val minValue = dataMin - padding
+                val span = max(dataSpan + padding * 2.0, 1.0)
+                val horizontalInset = 28f
+                val usableWidth = (size.width - horizontalInset * 2f).coerceAtLeast(1f)
+                val coordinates = values.mapIndexed { index, value ->
+                    val x = if (points.size == 1) size.width / 2f
+                    else horizontalInset + index.toFloat() / points.lastIndex * usableWidth
+                    Offset(x, size.height - ((value - minValue) / span * size.height).toFloat())
+                }
+                drawLine(
+                    axisColor,
+                    Offset(horizontalInset, size.height / 2f),
+                    Offset(size.width - horizontalInset, size.height / 2f),
+                    strokeWidth = 1f,
+                )
+                coordinates.zipWithNext().forEach { (a, b) -> drawLine(lineColor, a, b, strokeWidth = 4f) }
+                coordinates.forEach { drawCircle(lineColor, 4f, it) }
+            }
+                ChartLabels(
+                    labels = points.map { it.first },
+                    show = { index -> index == 0 || index == points.lastIndex || points.size <= 8 || index % 2 == 0 },
+                    horizontalInset = 28.dp,
+                    modifier = Modifier.align(Alignment.BottomStart),
+                )
+            }
+            selectedIndex?.let { index ->
+                points.getOrNull(index)?.let { point ->
+                    Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f)) {
+                        Text("${point.first}: %.2f".format(point.second), Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun InteractivePieChart(
+private fun InteractiveDonutChart(
     rows: List<AnalyticsBreakdownRow>,
+    selectedLabel: String?,
     modifier: Modifier,
-    onSelected: (AnalyticsBreakdownRow) -> Unit,
+    onSelected: (AnalyticsBreakdownRow?) -> Unit,
 ) {
     val total = rows.sumOf { it.amountBase }
     val sweeps = rows.mapIndexed { index, row ->
         val targetSweep = (row.amountBase / total * 360.0).toFloat()
         animateFloatAsState(targetSweep, label = "pie-sweep-$index").value
+    }
+    val offsets = rows.mapIndexed { index, row ->
+        animateFloatAsState(
+            if (row.label == selectedLabel) 10f else 0f,
+            label = "donut-offset-$index",
+        ).value
     }
     Canvas(
         modifier.pointerInput(rows) {
@@ -364,7 +441,9 @@ private fun InteractivePieChart(
                     val center = Offset(size.width / 2f, size.height / 2f)
                     val dx = position.x - center.x
                     val dy = position.y - center.y
-                    if (kotlin.math.sqrt(dx * dx + dy * dy) > minOf(size.width, size.height) / 2f) continue
+                    val radius = kotlin.math.sqrt(dx * dx + dy * dy)
+                    val diameter = minOf(size.width, size.height)
+                    if (radius > diameter / 2f || radius < diameter * .18f) continue
                     val angle = (Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())) + 450.0) % 360.0
                     var cursor = 0.0
                     rows.firstOrNull { row ->
@@ -378,17 +457,26 @@ private fun InteractivePieChart(
         },
     ) {
         val diameter = minOf(size.width, size.height)
+        val strokeWidth = 16f
         var start = -90f
         rows.forEachIndexed { index, row ->
             val targetSweep = (row.amountBase / total * 360.0).toFloat()
-            val sweep = sweeps[index]
+            // Round caps extend past the arc endpoints, so leave enough angular room for a visible background gap.
+            val sweep = (sweeps[index] - 8f).coerceAtLeast(0f)
+            val color = if (row.isOther) Color(0xFF858585) else parseHexColor(row.color) ?: paletteColor(index)
+            val midAngle = Math.toRadians((start + targetSweep / 2f).toDouble())
+            val offset = Offset(
+                kotlin.math.cos(midAngle).toFloat() * offsets[index],
+                kotlin.math.sin(midAngle).toFloat() * offsets[index],
+            )
             drawArc(
-                parseHexColor(row.color) ?: paletteColor(index),
+                color,
                 start,
                 sweep,
-                true,
+                false,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
                 size = Size(diameter, diameter),
-                topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f),
+                topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f) + offset,
             )
             start += targetSweep
         }
@@ -405,32 +493,35 @@ private fun parseHexColor(value: String): Color? {
 
 private fun paletteColor(index: Int): Color = Color.hsv(
     hue = (index * 53f) % 360f,
-    saturation = 0.65f,
-    value = 0.85f,
+    saturation = 0.82f,
+    value = 0.96f,
 )
 
 @Composable
 private fun CashflowChart(
     rows: List<Pair<String, Pair<Double, Double>>>,
     labelStep: Int,
+    stretchToWidth: Boolean = false,
+    chartHeight: Dp = 190.dp,
 ) {
     if (rows.isEmpty()) {
         Text("No cashflow data", color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    val chartWidth = max(560, rows.size * 48)
-    val maxValue = rows.maxOf { max(it.second.first, it.second.second) }.coerceAtLeast(1.0)
+    val maxValue = rows.maxOf {
+        max(kotlin.math.abs(it.second.first), kotlin.math.abs(it.second.second))
+    }.coerceAtLeast(1.0)
     val axisColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
     var selectedIndex by remember(rows) { mutableStateOf<Int?>(null) }
     val incomeHeights = rows.mapIndexed { index, row ->
         animateFloatAsState(
-            (row.second.first / maxValue).toFloat(),
+            (kotlin.math.abs(row.second.first) / maxValue).toFloat(),
             label = "income-bar-$index",
         ).value
     }
     val expenseHeights = rows.mapIndexed { index, row ->
         animateFloatAsState(
-            (row.second.second / maxValue).toFloat(),
+            (kotlin.math.abs(row.second.second) / maxValue).toFloat(),
             label = "expense-bar-$index",
         ).value
     }
@@ -439,10 +530,16 @@ private fun CashflowChart(
             LegendDot(Color(0xFF2C7A68), "Income")
             LegendDot(Color(0xFFC94C4C), "Expenses")
         }
-        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            Column(Modifier.width(chartWidth.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val chartWidth = if (stretchToWidth) {
+                maxOf(560.dp, maxWidth, (rows.size * 48).dp)
+            } else {
+                maxOf(560.dp, (rows.size * 48).dp)
+            }
+            Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                Column(Modifier.width(chartWidth)) {
                 Canvas(
-                    Modifier.fillMaxWidth().height(190.dp).pointerInput(rows) {
+                    Modifier.fillMaxWidth().height(chartHeight).pointerInput(rows) {
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
@@ -465,34 +562,71 @@ private fun CashflowChart(
                         val x = group * index + group / 2f
                         val incomeHeight = incomeHeights[index] * (size.height * .42f)
                         val expenseHeight = expenseHeights[index] * (size.height * .42f)
-                        drawRect(Color(0xFF2C7A68), Offset(x - 8f, baseline - incomeHeight), Size(7f, incomeHeight))
-                        drawRect(Color(0xFFC94C4C), Offset(x + 1f, baseline), Size(7f, expenseHeight))
+                        drawRect(Color(0xFF2C7A68), Offset(x - 5f, baseline - incomeHeight), Size(10f, incomeHeight))
+                        drawRect(Color(0xFFC94C4C), Offset(x - 5f, baseline), Size(10f, expenseHeight))
                     }
                 }
-                selectedIndex?.let { index ->
-                    rows.getOrNull(index)?.let { row ->
-                        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)) {
-                            Text(
-                                "${row.first}: income %.2f, expenses %.2f".format(row.second.first, row.second.second),
-                                Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
+                ChartLabels(
+                    labels = rows.map { it.first.takeLast(5) },
+                    show = { index -> index % labelStep == 0 || index == rows.lastIndex },
+                    centerInGroups = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            }
+            selectedIndex?.let { index ->
+                rows.getOrNull(index)?.let { row ->
+                    Text(
+                        "${row.first}: income %.2f, expenses %.2f".format(row.second.first, row.second.second),
+                        Modifier.fillMaxWidth().padding(top = 6.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
-                Row(Modifier.fillMaxWidth()) {
-                    rows.forEachIndexed { index, row ->
-                        Box(Modifier.width((chartWidth / rows.size).dp)) {
-                            if (index % labelStep == 0 || index == rows.lastIndex) {
-                                Text(
-                                    row.first.takeLast(5),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChartLabels(
+    labels: List<String>,
+    show: (Int) -> Boolean,
+    modifier: Modifier = Modifier,
+    horizontalInset: Dp = 0.dp,
+    centerInGroups: Boolean = false,
+) {
+    val visibleLabels = labels.mapIndexedNotNull { index, label ->
+        if (show(index)) index to label else null
+    }
+    Layout(
+        content = {
+            visibleLabels.forEach { (_, label) ->
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        modifier = modifier.height(20.dp).fillMaxWidth(),
+    ) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+        val width = constraints.maxWidth
+        val height = placeables.maxOfOrNull { it.height } ?: 0
+        val inset = horizontalInset.roundToPx()
+        val usableWidth = (width - inset * 2).coerceAtLeast(1)
+        layout(width, height) {
+            placeables.forEachIndexed { childIndex, placeable ->
+                val dataIndex = visibleLabels[childIndex].first
+                val targetX = if (labels.size == 1) {
+                    width / 2
+                } else if (centerInGroups) {
+                    ((dataIndex + 0.5f) / labels.size * width).toInt()
+                } else {
+                    inset + (dataIndex.toFloat() / labels.lastIndex * usableWidth).toInt()
                 }
+                val x = (targetX - placeable.width / 2).coerceIn(0, width - placeable.width)
+                placeable.place(x, 0)
             }
         }
     }
