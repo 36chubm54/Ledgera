@@ -477,6 +477,10 @@ dictionary AnalyticsSnapshotDto {
     sequence<AnalyticsDailyRowDto> daily;
     sequence<AnalyticsMonthlyRowDto> infographic_monthly;
     sequence<AnalyticsDailyRowDto> infographic_daily;
+    sequence<string> suggested_categories;
+    sequence<string> suggested_tags;
+    sequence<string> infographic_months;
+    sequence<string> infographic_years;
 };
 
 interface LedgeraEngine {

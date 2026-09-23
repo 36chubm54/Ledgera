@@ -1,11 +1,11 @@
 use std::{collections::HashMap, fs, path::Path};
 
 use crate::{
+    minor_amount_expr, minor_to_money_value, round_money, sqlite_err, with_cached_read_connection,
     AnalyticsBreakdownDetail, AnalyticsBreakdownRow, AnalyticsCapitalPoint, AnalyticsDailyRow,
     AnalyticsFilters, AnalyticsMonthlyRow, AnalyticsSnapshot, AnalyticsSummary, StorageResult,
-    minor_amount_expr, minor_to_money_value, round_money, sqlite_err, with_cached_read_connection,
 };
-use rusqlite::{Connection, params_from_iter, types::Value};
+use rusqlite::{params_from_iter, types::Value, Connection};
 
 fn validate_period(start: &str, end: &str) -> StorageResult<()> {
     fn valid_date(value: &str) -> bool {
@@ -176,7 +176,47 @@ fn with_period(filters: &AnalyticsFilters, start: String, end: String) -> Analyt
     copy
 }
 
-fn load_current_rates(db_path: &str, conn: &Connection) -> StorageResult<HashMap<String, f64>> {
+fn categories_from_conn(conn: &Connection, start: &str, end: &str) -> StorageResult<Vec<String>> {
+    let mut statement = conn.prepare("SELECT DISTINCT category FROM records WHERE type IN ('income', 'expense', 'mandatory_expense') AND transfer_id IS NULL AND category <> 'Transfer' AND date >= ?1 AND date <= ?2 AND trim(category) <> '' ORDER BY category COLLATE NOCASE, category").map_err(sqlite_err)?;
+    let rows = statement
+        .query_map((start, end), |row| row.get(0))
+        .map_err(sqlite_err)?;
+    rows.map(|row| row.map_err(sqlite_err)).collect()
+}
+
+fn tags_from_conn(conn: &Connection, start: &str, end: &str) -> StorageResult<Vec<String>> {
+    let mut statement = conn.prepare("SELECT DISTINCT t.name FROM tags t JOIN record_tags rt ON rt.tag_id = t.id JOIN records r ON r.id = rt.record_id WHERE r.type IN ('expense', 'mandatory_expense') AND r.transfer_id IS NULL AND r.category <> 'Transfer' AND r.date >= ?1 AND r.date <= ?2 AND trim(t.name) <> '' ORDER BY t.name COLLATE NOCASE, t.name").map_err(sqlite_err)?;
+    let rows = statement
+        .query_map((start, end), |row| row.get(0))
+        .map_err(sqlite_err)?;
+    rows.map(|row| row.map_err(sqlite_err)).collect()
+}
+
+fn months_from_conn(conn: &Connection) -> StorageResult<Vec<String>> {
+    let mut statement = conn
+        .prepare("SELECT DISTINCT substr(date, 1, 7) FROM records ORDER BY 1")
+        .map_err(sqlite_err)?;
+    let rows = statement
+        .query_map([], |row| row.get(0))
+        .map_err(sqlite_err)?;
+    rows.map(|row| row.map_err(sqlite_err)).collect()
+}
+
+fn years_from_conn(conn: &Connection) -> StorageResult<Vec<String>> {
+    let mut statement = conn
+        .prepare("SELECT DISTINCT substr(date, 1, 4) FROM records ORDER BY 1")
+        .map_err(sqlite_err)?;
+    let rows = statement
+        .query_map([], |row| row.get(0))
+        .map_err(sqlite_err)?;
+    rows.map(|row| row.map_err(sqlite_err)).collect()
+}
+
+fn load_current_rates(
+    db_path: &str,
+    conn: &Connection,
+    filters: &AnalyticsFilters,
+) -> StorageResult<HashMap<String, f64>> {
     let mut rates = HashMap::new();
     let path = Path::new(db_path)
         .parent()
@@ -196,10 +236,10 @@ fn load_current_rates(db_path: &str, conn: &Connection) -> StorageResult<HashMap
     let base = crate::base_currency_code(db_path)?;
     rates.insert(base.to_uppercase(), 1.0);
     let mut statement = conn
-        .prepare("SELECT DISTINCT UPPER(currency) FROM records WHERE trim(currency) <> ''")
+        .prepare("SELECT DISTINCT UPPER(currency) FROM records WHERE trim(currency) <> '' AND date <= ?1")
         .map_err(sqlite_err)?;
     let currencies = statement
-        .query_map([], |row| row.get::<_, String>(0))
+        .query_map([filters.period_end.as_str()], |row| row.get::<_, String>(0))
         .map_err(sqlite_err)?;
     for currency in currencies {
         let currency = currency.map_err(sqlite_err)?;
@@ -463,8 +503,8 @@ fn summary(
         )
         .map_err(sqlite_err)?;
     let year = filters.period_end.get(0..4).unwrap_or("");
-    let year_income: i64 = conn.query_row(&format!("SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0) FROM records WHERE transfer_id IS NULL AND category <> 'Transfer' AND substr(date,1,4)=?1"), [year], |row| row.get(0)).map_err(sqlite_err)?;
-    let year_expense: i64 = conn.query_row(&format!("SELECT COALESCE(SUM(CASE WHEN type IN ('expense','mandatory_expense') THEN {amount} ELSE 0 END), 0) FROM records WHERE transfer_id IS NULL AND category <> 'Transfer' AND substr(date,1,4)=?1"), [year], |row| row.get(0)).map_err(sqlite_err)?;
+    let year_income: i64 = conn.query_row(&format!("SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN {amount} ELSE 0 END), 0) FROM records WHERE transfer_id IS NULL AND category <> 'Transfer' AND substr(date,1,4)=?1 AND date <= ?2"), (year, filters.period_end.as_str()), |row| row.get(0)).map_err(sqlite_err)?;
+    let year_expense: i64 = conn.query_row(&format!("SELECT COALESCE(SUM(CASE WHEN type IN ('expense','mandatory_expense') THEN {amount} ELSE 0 END), 0) FROM records WHERE transfer_id IS NULL AND category <> 'Transfer' AND substr(date,1,4)=?1 AND date <= ?2"), (year, filters.period_end.as_str()), |row| row.get(0)).map_err(sqlite_err)?;
     Ok(AnalyticsSummary {
         net_worth_base: minor_to_money_value(initial_minor + delta_minor),
         savings_rate: if income > 0.0 {
@@ -510,7 +550,7 @@ pub fn analytics_generate(
     validate_infographic_periods(filters)?;
     with_cached_read_connection(db_path, |conn| {
         let current_rates = if filters.totals_mode == "current" {
-            Some(load_current_rates(db_path, conn)?)
+            Some(load_current_rates(db_path, conn, filters)?)
         } else {
             None
         };
@@ -566,6 +606,11 @@ pub fn analytics_generate(
                 balance_base: minor_to_money_value(initial_minor + row.1),
             })
             .collect();
+        let suggested_categories =
+            categories_from_conn(conn, &filters.period_start, &filters.period_end)?;
+        let suggested_tags = tags_from_conn(conn, &filters.period_start, &filters.period_end)?;
+        let infographic_months = months_from_conn(conn)?;
+        let infographic_years = years_from_conn(conn)?;
         Ok(AnalyticsSnapshot {
             summary: summary(conn, filters, &monthly, rates)?,
             capital,
@@ -577,6 +622,10 @@ pub fn analytics_generate(
             daily: daily_rows(conn, filters, rates)?,
             infographic_monthly,
             infographic_daily,
+            suggested_categories,
+            suggested_tags,
+            infographic_months,
+            infographic_years,
         })
     })
 }
@@ -587,54 +636,26 @@ pub fn analytics_list_categories(
     end: &str,
 ) -> StorageResult<Vec<String>> {
     validate_period(start, end)?;
-    with_cached_read_connection(db_path, |conn| {
-        let mut statement = conn.prepare("SELECT DISTINCT category FROM records WHERE type IN ('income', 'expense', 'mandatory_expense') AND transfer_id IS NULL AND category <> 'Transfer' AND date >= ?1 AND date <= ?2 AND trim(category) <> '' ORDER BY category COLLATE NOCASE, category").map_err(sqlite_err)?;
-        let rows = statement
-            .query_map((start, end), |row| row.get(0))
-            .map_err(sqlite_err)?;
-        rows.map(|row| row.map_err(sqlite_err)).collect()
-    })
+    with_cached_read_connection(db_path, |conn| categories_from_conn(conn, start, end))
 }
 
 pub fn analytics_list_tags(db_path: &str, start: &str, end: &str) -> StorageResult<Vec<String>> {
     validate_period(start, end)?;
-    with_cached_read_connection(db_path, |conn| {
-        let mut statement = conn.prepare("SELECT DISTINCT t.name FROM tags t JOIN record_tags rt ON rt.tag_id = t.id JOIN records r ON r.id = rt.record_id WHERE r.type IN ('expense', 'mandatory_expense') AND r.transfer_id IS NULL AND r.category <> 'Transfer' AND r.date >= ?1 AND r.date <= ?2 AND trim(t.name) <> '' ORDER BY t.name COLLATE NOCASE, t.name").map_err(sqlite_err)?;
-        let rows = statement
-            .query_map((start, end), |row| row.get(0))
-            .map_err(sqlite_err)?;
-        rows.map(|row| row.map_err(sqlite_err)).collect()
-    })
+    with_cached_read_connection(db_path, |conn| tags_from_conn(conn, start, end))
 }
 
 pub fn analytics_list_months(db_path: &str) -> StorageResult<Vec<String>> {
-    with_cached_read_connection(db_path, |conn| {
-        let mut statement = conn
-            .prepare("SELECT DISTINCT substr(date, 1, 7) FROM records ORDER BY 1")
-            .map_err(sqlite_err)?;
-        let rows = statement
-            .query_map([], |row| row.get(0))
-            .map_err(sqlite_err)?;
-        rows.map(|row| row.map_err(sqlite_err)).collect()
-    })
+    with_cached_read_connection(db_path, months_from_conn)
 }
 
 pub fn analytics_list_years(db_path: &str) -> StorageResult<Vec<String>> {
-    with_cached_read_connection(db_path, |conn| {
-        let mut statement = conn
-            .prepare("SELECT DISTINCT substr(date, 1, 4) FROM records ORDER BY 1")
-            .map_err(sqlite_err)?;
-        let rows = statement
-            .query_map([], |row| row.get(0))
-            .map_err(sqlite_err)?;
-        rows.map(|row| row.map_err(sqlite_err)).collect()
-    })
+    with_cached_read_connection(db_path, years_from_conn)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{analytics_generate, group_other, period_for, validate_period};
-    use crate::{AnalyticsBreakdownRow, AnalyticsFilters, storage_clear_read_connection_cache};
+    use crate::{storage_clear_read_connection_cache, AnalyticsBreakdownRow, AnalyticsFilters};
     use rusqlite::Connection;
 
     #[test]

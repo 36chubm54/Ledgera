@@ -51,6 +51,7 @@ class AnalyticsViewModel(
 ) {
     private val mutableState = MutableStateFlow(AnalyticsUiState())
     private var refreshJob: Job? = null
+    private var refreshGeneration = 0L
     val state: StateFlow<AnalyticsUiState> = mutableState.asStateFlow()
 
     init { generate() }
@@ -69,6 +70,7 @@ class AnalyticsViewModel(
 
     fun generate() {
         refreshJob?.cancel()
+        val generation = ++refreshGeneration
         val current = mutableState.value
         val start = DateValidation.formatGuiDateToYmd(current.periodStart)
         val end = DateValidation.formatGuiDateToYmd(current.periodEnd)
@@ -97,23 +99,27 @@ class AnalyticsViewModel(
                     monthlyYear = current.monthlyYear,
                 )
                 val snapshot = engine.generateAnalyticsSnapshot(filters)
-                val categories = engine.listAnalyticsCategories(start, end)
-                val tags = engine.listAnalyticsTags(start, end)
-                val months = engine.listAnalyticsMonths()
-                val years = engine.listAnalyticsYears()
-                AnalyticsRefreshPayload(snapshot, categories, tags, months, years)
-            }.onSuccess { payload ->
-                mutableState.value = mutableState.value.copy(
-                    loading = false,
-                    snapshot = payload.snapshot,
-                    categories = payload.categories,
-                    tags = payload.tags,
-                    infographicMonths = payload.months,
-                    infographicYears = payload.years,
-                    error = null,
+                AnalyticsRefreshPayload(
+                    snapshot,
+                    snapshot.suggestedCategories,
+                    snapshot.suggestedTags,
+                    snapshot.infographicMonths,
+                    snapshot.infographicYears,
                 )
+            }.onSuccess { payload ->
+                if (generation == refreshGeneration) {
+                    mutableState.value = mutableState.value.copy(
+                        loading = false,
+                        snapshot = payload.snapshot,
+                        categories = payload.categories,
+                        tags = payload.tags,
+                        infographicMonths = payload.months,
+                        infographicYears = payload.years,
+                        error = null,
+                    )
+                }
             }.onFailure { error ->
-                if (error !is CancellationException) {
+                if (generation == refreshGeneration && error !is CancellationException) {
                     mutableState.value = mutableState.value.copy(
                         loading = false,
                         error = error.message ?: "Failed to generate Analytics",

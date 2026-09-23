@@ -394,6 +394,10 @@ pub struct AnalyticsSnapshot {
     pub daily: Vec<AnalyticsDailyRow>,
     pub infographic_monthly: Vec<AnalyticsMonthlyRow>,
     pub infographic_daily: Vec<AnalyticsDailyRow>,
+    pub suggested_categories: Vec<String>,
+    pub suggested_tags: Vec<String>,
+    pub infographic_months: Vec<String>,
+    pub infographic_years: Vec<String>,
 }
 
 mod analytics;

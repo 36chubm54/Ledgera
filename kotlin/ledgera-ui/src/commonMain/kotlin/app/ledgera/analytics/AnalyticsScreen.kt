@@ -61,9 +61,9 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel, modifier: Modifier = Modifier
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Analytics", style = MaterialTheme.typography.headlineLarge)
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Card {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LedgerDateField(state.periodStart, viewModel::updatePeriodStart, "From", Modifier.weight(1f), required = true)
                     LedgerDateField(state.periodEnd, viewModel::updatePeriodEnd, "To", Modifier.weight(1f), required = true)
@@ -127,6 +127,15 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel, modifier: Modifier = Modifier
                 onMonthlyYearChange = viewModel::updateMonthlyYear,
                 onRefresh = viewModel::generate,
             )
+            if (snapshot.capital.isEmpty() && snapshot.categories.isEmpty() && snapshot.monthly.isEmpty()) {
+                Card(Modifier.fillMaxWidth()) {
+                    Text(
+                        "No analytics data for the selected period",
+                        Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
@@ -244,7 +253,7 @@ private fun InfographicsSection(
                     }
                     InfographicCard("Daily cashflow", Modifier.weight(1f).fillMaxHeight()) {
                         SelectorRow("Month", dailyMonth.ifEmpty { months.lastOrNull().orEmpty() }, months, onDailyMonthChange, onRefresh)
-                        CashflowChart(daily, labelStep = 3)
+                        CashflowChart(daily, labelStep = 3, chartHeight = 320.dp)
                     }
                 }
             }

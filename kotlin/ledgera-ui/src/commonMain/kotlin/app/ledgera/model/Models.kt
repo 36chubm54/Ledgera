@@ -521,4 +521,8 @@ data class AnalyticsSnapshot(
     val daily: List<AnalyticsDailyRow>,
     val infographicMonthly: List<AnalyticsMonthlyRow>,
     val infographicDaily: List<AnalyticsDailyRow> = emptyList(),
+    val suggestedCategories: List<String> = emptyList(),
+    val suggestedTags: List<String> = emptyList(),
+    val infographicMonths: List<String> = emptyList(),
+    val infographicYears: List<String> = emptyList(),
 )

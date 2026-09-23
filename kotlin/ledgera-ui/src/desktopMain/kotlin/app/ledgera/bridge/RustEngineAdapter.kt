@@ -182,6 +182,10 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 daily = dto.daily.map { AnalyticsDailyRow(it.day, it.incomeBase, it.expensesBase) },
                 infographicMonthly = dto.infographicMonthly.map { AnalyticsMonthlyRow(it.month, it.incomeBase, it.expensesBase, it.cashflowBase, it.savingsRate) },
                 infographicDaily = dto.infographicDaily.map { AnalyticsDailyRow(it.day, it.incomeBase, it.expensesBase) },
+                suggestedCategories = dto.suggestedCategories,
+                suggestedTags = dto.suggestedTags,
+                infographicMonths = dto.infographicMonths,
+                infographicYears = dto.infographicYears,
             )
         }
     }
