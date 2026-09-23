@@ -53,7 +53,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import app.ledgera.model.AnalyticsBreakdownRow
 import app.ledgera.model.AnalyticsMonthlyRow
 import app.ledgera.ui.LedgerDateField
-import app.ledgera.ui.AutocompleteTextField
 import kotlin.math.max
 
 @Composable
@@ -68,36 +67,12 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel, modifier: Modifier = Modifier
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LedgerDateField(state.periodStart, viewModel::updatePeriodStart, "From", Modifier.weight(1f), required = true)
-                    LedgerDateField(state.periodEnd, viewModel::updatePeriodEnd, "To", Modifier.weight(1f), required = true)
+                    LedgerDateField(state.periodStart, { value -> viewModel.updatePeriodStart(value); viewModel.generate() }, "From", Modifier.weight(1f), required = true)
+                    LedgerDateField(state.periodEnd, { value -> viewModel.updatePeriodEnd(value); viewModel.generate() }, "To", Modifier.weight(1f), required = true)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(state.breakdownMode == "category", { viewModel.updateBreakdownMode("category"); viewModel.generate() }, label = { Text("Category") })
                     FilterChip(state.breakdownMode == "tag", { viewModel.updateBreakdownMode("tag"); viewModel.generate() }, label = { Text("Tag") })
-                    FilterChip(state.tagMode == "or", { viewModel.updateTagMode("or"); viewModel.generate() }, label = { Text("Tags OR") })
-                    FilterChip(state.tagMode == "and", { viewModel.updateTagMode("and"); viewModel.generate() }, label = { Text("Tags AND") })
-                    FilterChip(state.totalsMode == "fixed", { viewModel.updateTotalsMode("fixed"); viewModel.generate() }, label = { Text("Fixed") })
-                    FilterChip(state.totalsMode == "current", { viewModel.updateTotalsMode("current"); viewModel.generate() }, label = { Text("Current") })
-                    FilterChip(state.groupByCategory, { viewModel.updateGrouping(!state.groupByCategory); viewModel.generate() }, label = { Text("Group by category") })
-                }
-                AutocompleteTextField(
-                    value = state.category,
-                    onValueChange = viewModel::updateCategory,
-                    label = "Category",
-                    suggestions = state.categories,
-                    modifier = Modifier.fillMaxWidth(),
-                    showSuggestionsOnBlank = false,
-                )
-                AutocompleteTextField(
-                    value = state.tag,
-                    onValueChange = viewModel::updateTag,
-                    label = "Tags",
-                    suggestions = state.tags,
-                    modifier = Modifier.fillMaxWidth(),
-                    showSuggestionsOnBlank = false,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = viewModel::generate, enabled = !state.loading) { Text("Generate") }
                 }
                 if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
@@ -278,7 +253,7 @@ private fun InfographicsSection(
                     }
                     InfographicCard("Daily cashflow", Modifier.weight(1f).fillMaxHeight()) {
                         SelectorRow("Month", dailyMonth.ifEmpty { months.lastOrNull().orEmpty() }, months, onDailyMonthChange, onRefresh)
-                        CashflowChart(daily, labelStep = 3, chartHeight = 320.dp)
+                        CashflowChart(daily, labelStep = 3, chartHeight = 260.dp)
                     }
                 }
             }
@@ -631,6 +606,28 @@ private fun ChartLabels(
 ) {
     val visibleLabels = labels.mapIndexedNotNull { index, label ->
         if (show(index)) index to label else null
+    }
+    if (centerInGroups) {
+        Row(
+            modifier = modifier.height(24.dp),
+            horizontalArrangement = Arrangement.Start,
+        ) {
+            labels.forEachIndexed { index, label ->
+                Box(
+                    Modifier.weight(1f).fillMaxHeight(),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    if (show(index)) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+        return
     }
     Layout(
         content = {
