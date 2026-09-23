@@ -529,6 +529,22 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
             }
         }
 
+    override suspend fun setSystemWalletDetails(name: String, initialBalance: String): WalletSettingsItem =
+        withContext(Dispatchers.IO) {
+            engine.setSystemWalletDetails(name, initialBalance).let { wallet ->
+                WalletSettingsItem(
+                    id = wallet.id,
+                    name = wallet.name,
+                    currency = wallet.currency,
+                    initialBalance = wallet.initialBalance,
+                    balance = wallet.initialBalance,
+                    system = wallet.system,
+                    allowNegative = wallet.allowNegative,
+                    active = wallet.isActive,
+                )
+            }
+        }
+
     override suspend fun deleteWallet(walletId: Long): WalletDeleteResult = withContext(Dispatchers.IO) {
         val result = engine.deleteWallet(walletId)
         WalletDeleteResult(
@@ -563,20 +579,6 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 forecastStatusKey = result.forecastStatusKey,
                 forecastStatusParams = result.forecastStatusParams,
             )
-        }
-
-    override suspend fun setSystemWalletDetails(name: String, initialBalance: String): WalletSettingsItem =
-        withContext(Dispatchers.IO) {
-            engine.setSystemWalletDetails(name, initialBalance).let { wallet ->
-                WalletSettingsItem(
-                    id = wallet.id,
-                    name = wallet.name,
-                    currency = wallet.currency,
-                    initialBalance = wallet.initialBalance,
-                    balance = wallet.initialBalance,
-                    system = wallet.system,
-                )
-            }
         }
     }
 

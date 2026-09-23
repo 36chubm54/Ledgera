@@ -3642,6 +3642,19 @@ pub fn mandatory_template_update(
     let amount_base = quantize_money_text(&payload.amount_base)?
         .parse::<f64>()
         .map_err(|_| "invalid mandatory amount_base".to_owned())?;
+    let base_currency = base_currency_code_in_tx(&tx)?;
+    let (currency, existing_amount_original, existing_amount_original_minor): (String, f64, i64) = tx
+        .query_row(
+            "SELECT currency, amount_original, COALESCE(amount_original_minor, CAST(ROUND(amount_original * 100.0) AS INTEGER)) FROM mandatory_expenses WHERE id = ?1",
+            [template_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(sqlite_err)?;
+    let (amount_original, amount_original_minor) = if currency == base_currency {
+        (amount_base, amount_base_minor)
+    } else {
+        (existing_amount_original, existing_amount_original_minor)
+    };
     let normalized_date = payload.date.trim();
     let auto_pay = !normalized_date.is_empty();
     let period = payload.period.trim().to_lowercase();
@@ -3649,14 +3662,18 @@ pub fn mandatory_template_update(
     tx.execute(
         "UPDATE mandatory_expenses
          SET wallet_id = ?1,
-             amount_base = ?2,
-             amount_base_minor = ?3,
-             period = ?4,
-             date = ?5,
-             auto_pay = ?6
-         WHERE id = ?7",
+             amount_original = ?2,
+             amount_original_minor = ?3,
+             amount_base = ?4,
+             amount_base_minor = ?5,
+             period = ?6,
+             date = ?7,
+             auto_pay = ?8
+         WHERE id = ?9",
         (
             payload.wallet_id,
+            amount_original,
+            amount_original_minor,
             amount_base,
             amount_base_minor,
             period.as_str(),
@@ -4045,12 +4062,17 @@ pub fn create_standalone_record_with_tag_colors(
     if amount_original_minor <= 0 || amount_base_minor <= 0 {
         return Err("Record amount must be positive".to_owned());
     }
-    let amount_original = quantize_money_text(&payload.amount_original)?
+    let requested_amount_original = quantize_money_text(&payload.amount_original)?
         .parse::<f64>()
         .map_err(|_| "invalid amount_original".to_owned())?;
-    let amount_base = quantize_money_text(&payload.amount_base)?
+    let requested_amount_base = quantize_money_text(&payload.amount_base)?
         .parse::<f64>()
         .map_err(|_| "invalid amount_base".to_owned())?;
+    let (amount_original, amount_original_minor, amount_base) = if currency == base_currency {
+        (requested_amount_base, amount_base_minor, requested_amount_base)
+    } else {
+        (requested_amount_original, amount_original_minor, requested_amount_base)
+    };
     let rate_at_operation_text = quantize_rate_text(&payload.rate_at_operation)?;
     let rate_at_operation = rate_at_operation_text
         .parse::<f64>()
@@ -4169,12 +4191,17 @@ pub fn update_standalone_record_with_tag_colors(
     if amount_original_minor <= 0 || amount_base_minor <= 0 {
         return Err("Record amount must be positive".to_owned());
     }
-    let amount_original = quantize_money_text(&payload.amount_original)?
+    let requested_amount_original = quantize_money_text(&payload.amount_original)?
         .parse::<f64>()
         .map_err(|_| "invalid amount_original".to_owned())?;
-    let amount_base = quantize_money_text(&payload.amount_base)?
+    let requested_amount_base = quantize_money_text(&payload.amount_base)?
         .parse::<f64>()
         .map_err(|_| "invalid amount_base".to_owned())?;
+    let (amount_original, amount_original_minor, amount_base) = if currency == base_currency {
+        (requested_amount_base, amount_base_minor, requested_amount_base)
+    } else {
+        (requested_amount_original, amount_original_minor, requested_amount_base)
+    };
     let rate_at_operation_text = quantize_rate_text(&payload.rate_at_operation)?;
     let rate_at_operation = rate_at_operation_text
         .parse::<f64>()

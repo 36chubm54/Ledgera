@@ -2351,6 +2351,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(updated.amount_base, "30.13");
+        assert_eq!(updated.amount_original, "30.13");
         assert_eq!(updated.category, "Bonus");
         assert_eq!(updated.tags, vec!["food", "work"]);
         assert_eq!(engine.get_record(created.id).unwrap(), Some(updated));
@@ -3295,6 +3296,8 @@ mod tests {
         assert_eq!(updated.wallet_id, 1);
         assert_eq!(updated.period, "weekly");
         assert!(!updated.auto_pay);
+        assert_eq!(updated.amount_original, "20.00");
+        assert_eq!(updated.amount_base, "20.00");
 
         let record = engine
             .add_mandatory_to_records(AddMandatoryToRecordsRequest {
