@@ -4356,7 +4356,7 @@ pub fn distinct_record_descriptions(
     let sql = if normalized_type.is_some() {
         "SELECT DISTINCT TRIM(description) AS description
          FROM records
-         WHERE type = ?1
+         WHERE (type = ?1 OR (?1 = 'expense' AND type = 'mandatory_expense'))
            AND transfer_id IS NULL
            AND related_debt_id IS NULL
            AND TRIM(description) <> ''
@@ -4364,13 +4364,20 @@ pub fn distinct_record_descriptions(
          ORDER BY description COLLATE NOCASE, description
          LIMIT 200"
     } else {
-        "SELECT DISTINCT TRIM(description) AS description
-         FROM records
-         WHERE type IN ('income', 'expense')
-           AND transfer_id IS NULL
-           AND related_debt_id IS NULL
-           AND TRIM(description) <> ''
-           AND TRIM(description) NOT GLOB '[[]transfer:[0-9]*]'
+        "SELECT description
+         FROM (
+             SELECT DISTINCT TRIM(description) AS description
+             FROM records
+             WHERE type IN ('income', 'expense', 'mandatory_expense')
+               AND transfer_id IS NULL
+               AND related_debt_id IS NULL
+               AND TRIM(description) <> ''
+               AND TRIM(description) NOT GLOB '[[]transfer:[0-9]*]'
+             UNION
+             SELECT DISTINCT TRIM(description) AS description
+             FROM transfers
+             WHERE TRIM(description) <> ''
+         )
          ORDER BY description COLLATE NOCASE, description
          LIMIT 200"
     };
@@ -7857,7 +7864,11 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
 
         assert_eq!(
             distinct_record_descriptions(&db_path, None).unwrap(),
-            vec!["Lunch".to_owned(), "Payroll".to_owned()]
+            vec![
+                "Lunch".to_owned(),
+                "Move to card".to_owned(),
+                "Payroll".to_owned()
+            ]
         );
         assert_eq!(
             distinct_record_descriptions(&db_path, Some("income")).unwrap(),
