@@ -1,6 +1,7 @@
 package app.ledgera.analytics
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -46,6 +48,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.animateFloatAsState
 import app.ledgera.model.AnalyticsBreakdownRow
 import app.ledgera.model.AnalyticsMonthlyRow
@@ -170,16 +173,27 @@ private fun BreakdownSummaryCard(title: String, rows: List<AnalyticsBreakdownRow
 
 @Composable
 private fun SummaryCard(summary: app.ledgera.model.AnalyticsSummary) {
-    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Summary", style = MaterialTheme.typography.titleLarge)
-        Text("Net worth: %.2f".format(summary.netWorthBase))
-        Text("Savings rate: %.2f%%".format(summary.savingsRate))
-        Text("Burn rate: %.2f".format(summary.burnRate))
-        Text("Average monthly income: %.2f".format(summary.averageMonthlyIncome))
-        Text("Average monthly expenses: %.2f".format(summary.averageMonthlyExpenses))
-        Text("Year income: %.2f".format(summary.yearIncome))
-        Text("Year expenses: %.2f".format(summary.yearExpense))
-    } }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Summary", style = MaterialTheme.typography.titleLarge)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Net worth: %.2f".format(summary.netWorthBase))
+                    Text("Savings rate: %.2f%%".format(summary.savingsRate))
+                    Text("Burn rate: %.2f".format(summary.burnRate))
+                    Text("Average monthly income: %.2f".format(summary.averageMonthlyIncome))
+                    Text("Average monthly expenses: %.2f".format(summary.averageMonthlyExpenses))
+                    Text("Year income: %.2f".format(summary.yearIncome))
+                    Text("Year expenses: %.2f".format(summary.yearExpense))
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Day cost: %.2f".format(summary.burnRate))
+                    Text("Hour cost: %.2f".format(summary.burnRate / 24.0))
+                    Text("Minute cost: %.2f".format(summary.burnRate / 1440.0))
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -194,7 +208,18 @@ private fun MonthlyCard(rows: List<AnalyticsMonthlyRow>) {
             Text("Savings %", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
         }
         rows.forEach { row ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+            val rowColor = when {
+                row.cashflowBase > 0.0 -> Color(0xFF2E7D32)
+                row.cashflowBase < 0.0 -> Color(0xFFC62828)
+                else -> Color.Transparent
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(rowColor.copy(alpha = if (rowColor == Color.Transparent) 0f else 0.3f))
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+            ) {
                 Text(row.month, Modifier.weight(1f))
                 Text("%.2f".format(row.incomeBase), Modifier.weight(1f))
                 Text("%.2f".format(row.expensesBase), Modifier.weight(1f))
