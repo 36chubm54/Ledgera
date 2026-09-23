@@ -564,6 +564,20 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 forecastStatusParams = result.forecastStatusParams,
             )
         }
+
+    override suspend fun setSystemWalletDetails(name: String, initialBalance: String): WalletSettingsItem =
+        withContext(Dispatchers.IO) {
+            engine.setSystemWalletDetails(name, initialBalance).let { wallet ->
+                WalletSettingsItem(
+                    id = wallet.id,
+                    name = wallet.name,
+                    currency = wallet.currency,
+                    initialBalance = wallet.initialBalance,
+                    balance = wallet.initialBalance,
+                    system = wallet.system,
+                )
+            }
+        }
     }
 
     override suspend fun createBudget(request: CreateBudgetRequest): BudgetItem = withContext(Dispatchers.IO) {

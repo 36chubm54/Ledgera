@@ -859,6 +859,26 @@ pub fn set_system_wallet_initial_balance(
     db_path: &str,
     initial_balance_text: &str,
 ) -> StorageResult<WalletRow> {
+    let wallet_name = wallet_list_rows(db_path)?
+        .into_iter()
+        .find(|row| row.system)
+        .map(|row| row.name)
+        .unwrap_or_else(|| "Main Wallet".to_owned());
+    set_system_wallet_details(db_path, &wallet_name, initial_balance_text)
+}
+
+pub fn set_system_wallet_details(
+    db_path: &str,
+    wallet_name: &str,
+    initial_balance_text: &str,
+) -> StorageResult<WalletRow> {
+    let wallet_name = wallet_name.trim();
+    if wallet_name.is_empty() {
+        return Err("System wallet name is required".to_owned());
+    }
+    if wallet_name.chars().count() > 100 {
+        return Err("System wallet name must be 100 characters or fewer".to_owned());
+    }
     let initial_balance_minor = to_minor_units(initial_balance_text)?;
     if initial_balance_minor < 0 {
         return Err("Initial balance must be zero or a positive number".to_owned());
@@ -888,8 +908,8 @@ pub fn set_system_wallet_initial_balance(
         return Err("System wallet balance can only be set before operations exist".to_owned());
     }
     tx.execute(
-        "UPDATE wallets SET initial_balance = ?1, initial_balance_minor = ?2 WHERE id = ?3",
-        (initial_balance, initial_balance_minor, wallet_id),
+        "UPDATE wallets SET name = ?1, initial_balance = ?2, initial_balance_minor = ?3 WHERE id = ?4",
+        (wallet_name, initial_balance, initial_balance_minor, wallet_id),
     )
     .map_err(sqlite_err)?;
     tx.commit().map_err(sqlite_err)?;

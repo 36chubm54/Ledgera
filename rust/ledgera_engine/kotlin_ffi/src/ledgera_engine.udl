@@ -563,6 +563,8 @@ interface LedgeraEngine {
     [Throws=LedgeraEngineError]
     WalletDto set_system_wallet_initial_balance(string initial_balance);
     [Throws=LedgeraEngineError]
+    WalletDto set_system_wallet_details(string name, string initial_balance);
+    [Throws=LedgeraEngineError]
     WalletDto create_wallet(CreateWalletRequest request);
     [Throws=LedgeraEngineError]
     WalletDeleteResultDto delete_wallet(i64 wallet_id);

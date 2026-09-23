@@ -16,7 +16,8 @@ use ledgera_engine_storage::{
     operation_suggestions, preview_full_backup_json, preview_import_mandatory_csv,
     preview_import_mandatory_xlsx, preview_import_records_csv, preview_import_records_xlsx,
     report_export_csv, report_export_pdf, report_export_xlsx, report_generate,
-    set_system_wallet_initial_balance, standalone_record_get_row, tag_color_palette,
+    set_system_wallet_details, set_system_wallet_initial_balance, standalone_record_get_row,
+    tag_color_palette,
     tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
     update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
     AnalyticsBreakdownRow, AnalyticsFilters, AnalyticsSnapshot, AuditFindingRow,
@@ -994,6 +995,16 @@ impl LedgeraEngine {
         initial_balance: String,
     ) -> Result<WalletDto, LedgeraEngineError> {
         set_system_wallet_initial_balance(&self.db_path, &initial_balance)
+            .map(wallet_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn set_system_wallet_details(
+        &self,
+        name: String,
+        initial_balance: String,
+    ) -> Result<WalletDto, LedgeraEngineError> {
+        set_system_wallet_details(&self.db_path, &name, &initial_balance)
             .map(wallet_to_dto)
             .map_err(storage_error)
     }
@@ -2128,6 +2139,16 @@ mod tests {
         assert!(status.ok);
         assert_eq!(engine.list_wallets().unwrap().len(), 1);
         assert_eq!(engine.list_wallets().unwrap()[0].name, "Main Wallet");
+        assert_eq!(
+            engine
+                .set_system_wallet_details("Personal wallet".to_owned(), "123.45".to_owned())
+                .unwrap()
+                .name,
+            "Personal wallet"
+        );
+        assert!(engine
+            .set_system_wallet_details("x".repeat(101), "123.45".to_owned())
+            .is_err());
         assert_eq!(
             engine
                 .set_system_wallet_initial_balance("123.45".to_owned())

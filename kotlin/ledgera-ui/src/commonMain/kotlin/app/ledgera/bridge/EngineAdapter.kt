@@ -100,6 +100,7 @@ interface SettingsEngine {
     suspend fun listWalletsForSettings(): List<WalletSettingsItem>
     suspend fun createWallet(request: CreateWalletRequest): WalletSettingsItem
     suspend fun setSystemWalletInitialBalance(initialBalance: String): WalletSettingsItem = error("Initial balance setup is unavailable")
+    suspend fun setSystemWalletDetails(name: String, initialBalance: String): WalletSettingsItem = error("Initial system wallet setup is unavailable")
     suspend fun deleteWallet(walletId: Long): WalletDeleteResult
     suspend fun runAudit(): List<AuditFinding>
     suspend fun previewFullBackup(path: String): FullBackupResult = error("Full backup preview is unavailable")

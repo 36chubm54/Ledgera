@@ -121,6 +121,7 @@ private fun runApplication(args: Array<String>) = application {
 
 @Composable
 private fun InitialBalanceDialog(engine: SettingsEngine, onCompleted: () -> Unit) {
+    var name by remember { mutableStateOf("Main Wallet") }
     var value by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
@@ -131,6 +132,13 @@ private fun InitialBalanceDialog(engine: SettingsEngine, onCompleted: () -> Unit
         text = {
             Column {
                 Text("Enter the starting balance for the system wallet.")
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; error = null },
+                    label = { Text("Wallet name") },
+                    singleLine = true,
+                    isError = error != null && name.trim().isEmpty(),
+                )
                 OutlinedTextField(
                     value = value,
                     onValueChange = { value = it; error = null },
@@ -145,6 +153,10 @@ private fun InitialBalanceDialog(engine: SettingsEngine, onCompleted: () -> Unit
             Button(
                 enabled = !submitting,
                 onClick = {
+                    if (name.trim().isEmpty()) {
+                        error = "Enter a wallet name"
+                        return@Button
+                    }
                     val number = value.trim().toBigDecimalOrNull()
                     if (number == null || number < java.math.BigDecimal.ZERO) {
                         error = "Enter a valid non-negative number"
@@ -152,7 +164,7 @@ private fun InitialBalanceDialog(engine: SettingsEngine, onCompleted: () -> Unit
                     }
                     submitting = true
                     scope.launch {
-                        runCatching { engine.setSystemWalletInitialBalance(value.trim()) }
+                        runCatching { engine.setSystemWalletDetails(name.trim(), value.trim()) }
                             .onSuccess { onCompleted() }
                             .onFailure { failure ->
                                 submitting = false
