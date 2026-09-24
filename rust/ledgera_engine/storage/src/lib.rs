@@ -428,6 +428,7 @@ pub use planning::{
     debt_payment_total_minor, debt_recalculate_payload, debt_register_payment,
     debt_register_payment_validated, debt_register_write_off_validated, debt_replace_rows,
     debt_rows, debt_validate_payment_amount, distribution_available_months,
+    distribution_freeze_closed_months,
     distribution_create_item, distribution_create_subitem, distribution_delete_item,
     distribution_delete_subitem, distribution_frozen_rows, distribution_history_months,
     distribution_is_month_auto_fixed, distribution_is_month_fixed, distribution_item_rows,

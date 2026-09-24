@@ -121,6 +121,71 @@ dictionary CreateBudgetRequest {
     boolean include_mandatory;
 };
 
+dictionary CreateDistributionItemRequest {
+    string name;
+    string group_name;
+    i64 sort_order;
+    double pct;
+};
+
+dictionary CreateDistributionSubitemRequest {
+    i64 item_id;
+    string name;
+    i64 sort_order;
+    double pct;
+};
+
+dictionary DistributionSubitemDto {
+    i64 id;
+    i64 item_id;
+    string name;
+    i64 sort_order;
+    double pct;
+    i64 pct_minor;
+    boolean is_active;
+    string amount_base;
+    i64 amount_minor;
+};
+
+dictionary DistributionItemDto {
+    i64 id;
+    string name;
+    string group_name;
+    i64 sort_order;
+    double pct;
+    i64 pct_minor;
+    boolean is_active;
+    string amount_base;
+    i64 amount_minor;
+    sequence<DistributionSubitemDto> subitems;
+};
+
+dictionary DistributionMonthlyDto {
+    string month;
+    string net_income_base;
+    i64 net_income_minor;
+    boolean is_negative;
+    sequence<DistributionItemDto> items;
+};
+
+dictionary DistributionColumnDto {
+    string key;
+    string label;
+    string value;
+};
+
+dictionary DistributionFrozenRowDto {
+    string month;
+    sequence<DistributionColumnDto> columns;
+    boolean is_negative;
+    boolean auto_fixed;
+};
+
+dictionary DistributionValidationDto {
+    string level;
+    string message;
+};
+
 dictionary BudgetDto {
     i64 id;
     string category;
@@ -153,6 +218,7 @@ dictionary FullBackupResultDto {
     string path;
     i64 imported_rows;
     i64 budget_rows;
+    i64 distribution_rows;
     string checksum;
 };
 
@@ -578,6 +644,50 @@ interface LedgeraEngine {
     BudgetDto update_budget_limit(i64 budget_id, string limit_base);
     [Throws=LedgeraEngineError]
     boolean delete_budget(i64 budget_id);
+    [Throws=LedgeraEngineError]
+    sequence<DistributionItemDto> distribution_items(boolean active_only);
+    [Throws=LedgeraEngineError]
+    sequence<DistributionSubitemDto> distribution_subitems(i64 item_id, boolean active_only);
+    [Throws=LedgeraEngineError]
+    DistributionItemDto distribution_create_item(CreateDistributionItemRequest request);
+    [Throws=LedgeraEngineError]
+    DistributionSubitemDto distribution_create_subitem(CreateDistributionSubitemRequest request);
+    [Throws=LedgeraEngineError]
+    DistributionItemDto distribution_update_item_pct(i64 item_id, double pct);
+    [Throws=LedgeraEngineError]
+    DistributionSubitemDto distribution_update_subitem_pct(i64 subitem_id, double pct);
+    [Throws=LedgeraEngineError]
+    DistributionItemDto distribution_update_item_name(i64 item_id, string name);
+    [Throws=LedgeraEngineError]
+    DistributionSubitemDto distribution_update_subitem_name(i64 subitem_id, string name);
+    [Throws=LedgeraEngineError]
+    void distribution_update_item_order(i64 item_id, i64 sort_order);
+    [Throws=LedgeraEngineError]
+    void distribution_update_subitem_order(i64 subitem_id, i64 sort_order);
+    [Throws=LedgeraEngineError]
+    void distribution_delete_item(i64 item_id);
+    [Throws=LedgeraEngineError]
+    void distribution_delete_subitem(i64 subitem_id);
+    [Throws=LedgeraEngineError]
+    sequence<DistributionValidationDto> distribution_validate();
+    [Throws=LedgeraEngineError]
+    DistributionMonthlyDto distribution_monthly(string month);
+    [Throws=LedgeraEngineError]
+    sequence<DistributionMonthlyDto> distribution_history(string start_month, string end_month);
+    [Throws=LedgeraEngineError]
+    sequence<string> distribution_available_months();
+    [Throws=LedgeraEngineError]
+    sequence<string> distribution_freeze_closed_months(string cutoff_month);
+    [Throws=LedgeraEngineError]
+    boolean distribution_is_month_fixed(string month);
+    [Throws=LedgeraEngineError]
+    boolean distribution_is_month_auto_fixed(string month);
+    [Throws=LedgeraEngineError]
+    DistributionFrozenRowDto distribution_freeze_month(string month, boolean auto_fixed);
+    [Throws=LedgeraEngineError]
+    void distribution_unfreeze_month(string month);
+    [Throws=LedgeraEngineError]
+    sequence<DistributionFrozenRowDto> distribution_frozen_rows(string? start_month, string? end_month);
     [Throws=LedgeraEngineError]
     FullBackupResultDto preview_full_backup_json(string path);
     [Throws=LedgeraEngineError]

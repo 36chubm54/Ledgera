@@ -1,8 +1,8 @@
 use crate::{
-    StorageResult, export_temp_path, normalize_tag_name, replace_export_file, sqlite_err,
-    storage_clear_read_connection_cache,
+    export_temp_path, normalize_tag_name, replace_export_file, sqlite_err,
+    storage_clear_read_connection_cache, StorageResult,
 };
-use rusqlite::{Connection, OptionalExtension, Transaction, types::Value};
+use rusqlite::{types::Value, Connection, OptionalExtension, Transaction};
 use serde_json::{Map, Number, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 const BACKUP_FORMAT: &str = "ledgera.full_backup";
-const BACKUP_VERSION: i64 = 1;
+const BACKUP_VERSION: i64 = 2;
 const MAX_BACKUP_BYTES: u64 = 50 * 1024 * 1024;
 
 const BACKUP_TABLES: &[&str] = &[
@@ -23,6 +23,10 @@ const BACKUP_TABLES: &[&str] = &[
     "debts",
     "debt_payments",
     "budgets",
+    "distribution_items",
+    "distribution_subitems",
+    "distribution_snapshots",
+    "distribution_snapshot_values",
 ];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -30,6 +34,7 @@ pub struct FullBackupResult {
     pub path: String,
     pub imported_rows: i64,
     pub budget_rows: i64,
+    pub distribution_rows: i64,
     pub checksum: String,
 }
 
@@ -137,7 +142,8 @@ fn sections(payload: &JsonValue) -> StorageResult<&Map<String, JsonValue>> {
     if object.get("format").and_then(JsonValue::as_str) != Some(BACKUP_FORMAT) {
         return Err("Unsupported backup format".to_owned());
     }
-    if object.get("version").and_then(JsonValue::as_i64) != Some(BACKUP_VERSION) {
+    let version = object.get("version").and_then(JsonValue::as_i64);
+    if version != Some(1) && version != Some(BACKUP_VERSION) {
         return Err("Unsupported backup version".to_owned());
     }
     Ok(object)
@@ -302,6 +308,59 @@ fn validate_relationships(object: &Map<String, JsonValue>) -> StorageResult<()> 
     let tags = row_id_set("tags", rows("tags"))?;
     let records = row_id_set("records", rows("records"))?;
     let debts = row_id_set("debts", rows("debts"))?;
+    let distribution_items = object
+        .get("distribution_items")
+        .and_then(JsonValue::as_array)
+        .map_or_else(
+            || Ok(HashSet::new()),
+            |rows| row_id_set("distribution_items", rows),
+        )?;
+    let snapshot_months: HashSet<String> = object
+        .get("distribution_snapshots")
+        .and_then(JsonValue::as_array)
+        .map_or_else(HashSet::new, |rows| {
+            rows.iter()
+                .filter_map(|row| row.as_object()?.get("month")?.as_str().map(str::to_owned))
+                .collect()
+        });
+    if let Some(rows) = object
+        .get("distribution_subitems")
+        .and_then(JsonValue::as_array)
+    {
+        for (index, row) in rows.iter().enumerate() {
+            validate_reference(
+                "distribution_subitems",
+                index + 1,
+                "item_id",
+                row.as_object().and_then(|value| value.get("item_id")),
+                &distribution_items,
+            )?;
+        }
+    }
+    if let Some(rows) = object
+        .get("distribution_snapshot_values")
+        .and_then(JsonValue::as_array)
+    {
+        for (index, row) in rows.iter().enumerate() {
+            let snapshot_month = row
+                .as_object()
+                .and_then(|value| value.get("snapshot_month"))
+                .and_then(JsonValue::as_str)
+                .ok_or_else(|| {
+                    format!(
+                        "distribution_snapshot_values row {} must have snapshot_month",
+                        index + 1
+                    )
+                })?;
+            if !snapshot_months.contains(snapshot_month) {
+                return Err(format!(
+                    "distribution_snapshot_values row {} references missing snapshot month {}",
+                    index + 1,
+                    snapshot_month
+                ));
+            }
+        }
+    }
     for (index, row) in rows("transfers").iter().enumerate() {
         let row = row.as_object().unwrap();
         validate_reference(
@@ -621,7 +680,13 @@ fn validate_backup_date(value: &str, field: &str) -> StorageResult<()> {
 fn validate_payload(conn: &Connection, payload: &JsonValue) -> StorageResult<Vec<JsonValue>> {
     let object = sections(payload)?;
     for table in BACKUP_TABLES {
-        if *table == "budgets" && !object.contains_key(*table) {
+        if (*table == "budgets"
+            || *table == "distribution_items"
+            || *table == "distribution_subitems"
+            || *table == "distribution_snapshots"
+            || *table == "distribution_snapshot_values")
+            && !object.contains_key(*table)
+        {
             continue;
         }
         if !object.get(*table).map(JsonValue::is_array).unwrap_or(false) {
@@ -719,8 +784,8 @@ pub fn export_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         JsonValue::String(format!("sha256:{checksum}")),
     );
     let temp_path = export_temp_path(path)?;
-    let bytes =
-        serde_json::to_vec_pretty(&JsonValue::Object(object)).map_err(|error| error.to_string())?;
+    let bytes = serde_json::to_vec_pretty(&JsonValue::Object(object.clone()))
+        .map_err(|error| error.to_string())?;
     if let Err(error) = fs::write(&temp_path, bytes) {
         let _ = fs::remove_file(&temp_path);
         return Err(error.to_string());
@@ -729,10 +794,25 @@ pub fn export_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         let _ = fs::remove_file(&temp_path);
         return Err(error);
     }
+    let distribution_rows = [
+        "distribution_items",
+        "distribution_subitems",
+        "distribution_snapshots",
+        "distribution_snapshot_values",
+    ]
+    .iter()
+    .map(|table| {
+        object
+            .get(*table)
+            .and_then(JsonValue::as_array)
+            .map_or(0, |rows| rows.len() as i64)
+    })
+    .sum();
     Ok(FullBackupResult {
         path: path.to_owned(),
         imported_rows: total,
         budget_rows: budgets,
+        distribution_rows,
         checksum: format!("sha256:{checksum}"),
     })
 }
@@ -805,10 +885,25 @@ pub fn preview_full_backup_json(db_path: &str, path: &str) -> StorageResult<Full
                 .map_or(0, |rows| rows.len() as i64)
         })
         .sum();
+    let distribution_rows = [
+        "distribution_items",
+        "distribution_subitems",
+        "distribution_snapshots",
+        "distribution_snapshot_values",
+    ]
+    .iter()
+    .map(|table| {
+        object
+            .get(*table)
+            .and_then(JsonValue::as_array)
+            .map_or(0, |rows| rows.len() as i64)
+    })
+    .sum();
     Ok(FullBackupResult {
         path: path.to_owned(),
         imported_rows,
         budget_rows: budgets.len() as i64,
+        distribution_rows,
         checksum,
     })
 }
@@ -822,18 +917,26 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
     let budgets = validate_payload(&conn, &payload)?;
     let object = sections(&payload)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
-    tx.execute_batch(
-        "DELETE FROM record_tags;
-         DELETE FROM debt_payments;
-         DELETE FROM records;
-         DELETE FROM transfers;
-         DELETE FROM mandatory_expenses;
-         DELETE FROM budgets;
-         DELETE FROM tags;
-         DELETE FROM debts;
-         DELETE FROM wallets;",
-    )
-    .map_err(sqlite_err)?;
+    for table in [
+        "record_tags",
+        "debt_payments",
+        "records",
+        "transfers",
+        "mandatory_expenses",
+        "budgets",
+        "tags",
+        "debts",
+        "distribution_snapshot_values",
+        "distribution_snapshots",
+        "distribution_subitems",
+        "distribution_items",
+        "wallets",
+    ] {
+        if table_exists(&tx, table)? {
+            tx.execute(&format!("DELETE FROM {table}"), [])
+                .map_err(sqlite_err)?;
+        }
+    }
     let mut imported_rows = 0_i64;
     for table in [
         "wallets",
@@ -842,8 +945,16 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "mandatory_expenses",
         "records",
         "tags",
+        "distribution_items",
+        "distribution_subitems",
+        "distribution_snapshots",
+        "distribution_snapshot_values",
     ] {
-        imported_rows += insert_table_rows(&tx, table, object[table].as_array().unwrap())?;
+        let rows = object
+            .get(table)
+            .and_then(JsonValue::as_array)
+            .map_or(&[][..], Vec::as_slice);
+        imported_rows += insert_table_rows(&tx, table, rows)?;
     }
     imported_rows += insert_table_rows(&tx, "budgets", &budgets)?;
     for table in ["debt_payments", "record_tags"] {
@@ -875,10 +986,25 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
     }
     tx.commit().map_err(sqlite_err)?;
     storage_clear_read_connection_cache();
+    let distribution_rows = [
+        "distribution_items",
+        "distribution_subitems",
+        "distribution_snapshots",
+        "distribution_snapshot_values",
+    ]
+    .iter()
+    .map(|table| {
+        object
+            .get(*table)
+            .and_then(JsonValue::as_array)
+            .map_or(0, |rows| rows.len() as i64)
+    })
+    .sum();
     Ok(FullBackupResult {
         path: path.to_owned(),
         imported_rows,
         budget_rows: budgets.len() as i64,
+        distribution_rows,
         checksum,
     })
 }

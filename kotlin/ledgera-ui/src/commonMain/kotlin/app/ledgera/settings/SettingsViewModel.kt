@@ -95,7 +95,7 @@ class SettingsViewModel(
                     backupPreview = null,
                     backupPath = null,
                     restoreVersion = mutableState.value.restoreVersion + 1,
-                    notice = "Backup restored: ${result.importedRows} rows, ${result.budgetRows} budgets",
+                    notice = "Backup restored: ${result.importedRows} rows, ${result.budgetRows} budgets, ${result.distributionRows} Distribution rows",
                 )
             }.onFailure(::showError)
         }
@@ -110,7 +110,7 @@ class SettingsViewModel(
                 .onSuccess { result ->
                     mutableState.value = mutableState.value.copy(
                         loading = false,
-                        notice = "Backup exported: ${result.importedRows} rows, ${result.budgetRows} budgets",
+                        notice = "Backup exported: ${result.importedRows} rows, ${result.budgetRows} budgets, ${result.distributionRows} Distribution rows",
                     )
                 }.onFailure(::showError)
         }

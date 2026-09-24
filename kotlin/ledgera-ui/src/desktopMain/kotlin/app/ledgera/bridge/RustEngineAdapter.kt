@@ -5,6 +5,8 @@ import app.ledgera.engine.CreateMandatoryTemplateRequest as NativeCreateMandator
 import app.ledgera.engine.CreateRecordRequest as NativeCreateRecordRequest
 import app.ledgera.engine.CreateDebtRequest as NativeCreateDebtRequest
 import app.ledgera.engine.CreateBudgetRequest as NativeCreateBudgetRequest
+import app.ledgera.engine.CreateDistributionItemRequest as NativeCreateDistributionItemRequest
+import app.ledgera.engine.CreateDistributionSubitemRequest as NativeCreateDistributionSubitemRequest
 import app.ledgera.engine.CreateTransferRequest as NativeCreateTransferRequest
 import app.ledgera.engine.CreateWalletRequest as NativeCreateWalletRequest
 import app.ledgera.engine.LedgeraEngine
@@ -28,6 +30,14 @@ import app.ledgera.model.CreateDebtRequest
 import app.ledgera.model.CreateBudgetRequest
 import app.ledgera.model.BudgetItem
 import app.ledgera.model.BudgetResultItem
+import app.ledgera.model.CreateDistributionItemRequest
+import app.ledgera.model.CreateDistributionSubitemRequest
+import app.ledgera.model.DistributionColumn
+import app.ledgera.model.DistributionFrozenRow
+import app.ledgera.model.DistributionItem
+import app.ledgera.model.DistributionMonthlyResult
+import app.ledgera.model.DistributionSubitem
+import app.ledgera.model.DistributionValidationError
 import app.ledgera.model.CreateMandatoryTemplateRequest
 import app.ledgera.model.CreateOperationRequest
 import app.ledgera.model.CreateTransferRequest
@@ -604,6 +614,58 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         engine.deleteBudget(budgetId)
     }
 
+    override suspend fun distributionItems(activeOnly: Boolean): List<DistributionItem> = withContext(Dispatchers.IO) {
+        engine.distributionItems(activeOnly).map(::toDistributionItem)
+    }
+
+    override suspend fun distributionSubitems(itemId: Long, activeOnly: Boolean): List<DistributionSubitem> = withContext(Dispatchers.IO) {
+        engine.distributionSubitems(itemId, activeOnly).map(::toDistributionSubitem)
+    }
+
+    override suspend fun createDistributionItem(request: CreateDistributionItemRequest): DistributionItem = withContext(Dispatchers.IO) {
+        engine.distributionCreateItem(NativeCreateDistributionItemRequest(request.name, request.groupName, request.sortOrder, request.pct)).let(::toDistributionItem)
+    }
+
+    override suspend fun createDistributionSubitem(request: CreateDistributionSubitemRequest): DistributionSubitem = withContext(Dispatchers.IO) {
+        engine.distributionCreateSubitem(NativeCreateDistributionSubitemRequest(request.itemId, request.name, request.sortOrder, request.pct)).let(::toDistributionSubitem)
+    }
+
+    override suspend fun updateDistributionItemPct(itemId: Long, pct: Double): DistributionItem = withContext(Dispatchers.IO) {
+        engine.distributionUpdateItemPct(itemId, pct).let(::toDistributionItem)
+    }
+
+    override suspend fun updateDistributionSubitemPct(subitemId: Long, pct: Double): DistributionSubitem = withContext(Dispatchers.IO) {
+        engine.distributionUpdateSubitemPct(subitemId, pct).let(::toDistributionSubitem)
+    }
+
+    override suspend fun renameDistributionItem(itemId: Long, name: String): DistributionItem = withContext(Dispatchers.IO) {
+        engine.distributionUpdateItemName(itemId, name).let(::toDistributionItem)
+    }
+
+    override suspend fun renameDistributionSubitem(subitemId: Long, name: String): DistributionSubitem = withContext(Dispatchers.IO) {
+        engine.distributionUpdateSubitemName(subitemId, name).let(::toDistributionSubitem)
+    }
+
+    override suspend fun updateDistributionItemOrder(itemId: Long, order: Long) = withContext(Dispatchers.IO) { engine.distributionUpdateItemOrder(itemId, order) }
+    override suspend fun updateDistributionSubitemOrder(subitemId: Long, order: Long) = withContext(Dispatchers.IO) { engine.distributionUpdateSubitemOrder(subitemId, order) }
+    override suspend fun deleteDistributionItem(itemId: Long): Boolean = withContext(Dispatchers.IO) { engine.distributionDeleteItem(itemId); true }
+    override suspend fun deleteDistributionSubitem(subitemId: Long): Boolean = withContext(Dispatchers.IO) { engine.distributionDeleteSubitem(subitemId); true }
+    override suspend fun validateDistribution(): List<DistributionValidationError> = withContext(Dispatchers.IO) {
+        engine.distributionValidate().map { DistributionValidationError(it.level, it.message) }
+    }
+    override suspend fun distributionHistory(startMonth: String, endMonth: String): List<DistributionMonthlyResult> = withContext(Dispatchers.IO) {
+        engine.distributionHistory(startMonth, endMonth).map(::toDistributionMonthly)
+    }
+    override suspend fun distributionAvailableMonths(): List<String> = withContext(Dispatchers.IO) { engine.distributionAvailableMonths() }
+    override suspend fun freezeClosedDistributionMonths(cutoffMonth: String): List<String> = withContext(Dispatchers.IO) { engine.distributionFreezeClosedMonths(cutoffMonth) }
+    override suspend fun isDistributionMonthFixed(month: String): Boolean = withContext(Dispatchers.IO) { engine.distributionIsMonthFixed(month) }
+    override suspend fun isDistributionMonthAutoFixed(month: String): Boolean = withContext(Dispatchers.IO) { engine.distributionIsMonthAutoFixed(month) }
+    override suspend fun freezeDistributionMonth(month: String, autoFixed: Boolean): DistributionFrozenRow = withContext(Dispatchers.IO) { engine.distributionFreezeMonth(month, autoFixed).let(::toDistributionFrozenRow) }
+    override suspend fun unfreezeDistributionMonth(month: String) = withContext(Dispatchers.IO) { engine.distributionUnfreezeMonth(month) }
+    override suspend fun frozenDistributionRows(startMonth: String?, endMonth: String?): List<DistributionFrozenRow> = withContext(Dispatchers.IO) {
+        engine.distributionFrozenRows(startMonth, endMonth).map(::toDistributionFrozenRow)
+    }
+
     override suspend fun listDebts(): List<DebtItem> = withContext(Dispatchers.IO) {
         engine.listDebts().map {
             DebtItem(
@@ -904,7 +966,12 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         MandatoryExportResult(exportedRows = exportedRows, path = path)
 
     private fun FullBackupResultDto.toModel(): FullBackupResult =
-        FullBackupResult(path = path, importedRows = importedRows, budgetRows = budgetRows, checksum = checksum)
+        FullBackupResult(path = path, importedRows = importedRows, budgetRows = budgetRows, distributionRows = distributionRows, checksum = checksum)
+
+    private fun toDistributionSubitem(value: app.ledgera.engine.DistributionSubitemDto) = DistributionSubitem(value.id, value.itemId, value.name, value.sortOrder, value.pct, value.pctMinor, value.isActive, value.amountBase, value.amountMinor)
+    private fun toDistributionItem(value: app.ledgera.engine.DistributionItemDto) = DistributionItem(value.id, value.name, value.groupName, value.sortOrder, value.pct, value.pctMinor, value.isActive, value.amountBase, value.amountMinor, value.subitems.map(::toDistributionSubitem))
+    private fun toDistributionMonthly(value: app.ledgera.engine.DistributionMonthlyDto) = DistributionMonthlyResult(value.month, value.netIncomeBase, value.netIncomeMinor, value.isNegative, value.items.map(::toDistributionItem))
+    private fun toDistributionFrozenRow(value: app.ledgera.engine.DistributionFrozenRowDto) = DistributionFrozenRow(value.month, value.columns.map { DistributionColumn(it.key, it.label, it.value) }, value.isNegative, value.autoFixed)
 }
 
 private fun ReportFilters.toNative() = NativeReportFiltersDto(

@@ -145,8 +145,8 @@ fun SettingsScreen(
             title = { Text("Restore backup?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Current wallets, operations, debts, mandatory templates, tags, and budgets will be replaced.")
-                    Text("Rows: ${preview.importedRows} · Budgets: ${preview.budgetRows}")
+                    Text("Current wallets, operations, debts, mandatory templates, tags, budgets, and Distribution will be replaced.")
+                    Text("Rows: ${preview.importedRows} · Budgets: ${preview.budgetRows} · Distribution: ${preview.distributionRows}")
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },

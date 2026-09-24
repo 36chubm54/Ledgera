@@ -199,7 +199,66 @@ data class FullBackupResult(
     val path: String,
     val importedRows: Long,
     val budgetRows: Long,
+    val distributionRows: Long = 0,
     val checksum: String,
+)
+
+data class DistributionSubitem(
+    val id: Long,
+    val itemId: Long,
+    val name: String,
+    val sortOrder: Long,
+    val pct: Double,
+    val pctMinor: Long,
+    val isActive: Boolean,
+    val amountBase: String,
+    val amountMinor: Long,
+)
+
+data class DistributionItem(
+    val id: Long,
+    val name: String,
+    val groupName: String,
+    val sortOrder: Long,
+    val pct: Double,
+    val pctMinor: Long,
+    val isActive: Boolean,
+    val amountBase: String,
+    val amountMinor: Long,
+    val subitems: List<DistributionSubitem>,
+)
+
+data class DistributionMonthlyResult(
+    val month: String,
+    val netIncomeBase: String,
+    val netIncomeMinor: Long,
+    val isNegative: Boolean,
+    val items: List<DistributionItem>,
+)
+
+data class DistributionColumn(val key: String, val label: String, val value: String)
+
+data class DistributionFrozenRow(
+    val month: String,
+    val columns: List<DistributionColumn>,
+    val isNegative: Boolean,
+    val autoFixed: Boolean,
+)
+
+data class DistributionValidationError(val level: String, val message: String)
+
+data class CreateDistributionItemRequest(
+    val name: String,
+    val groupName: String = "",
+    val sortOrder: Long = 0,
+    val pct: Double,
+)
+
+data class CreateDistributionSubitemRequest(
+    val itemId: Long,
+    val name: String,
+    val sortOrder: Long = 0,
+    val pct: Double,
 )
 
 data class DebtItem(

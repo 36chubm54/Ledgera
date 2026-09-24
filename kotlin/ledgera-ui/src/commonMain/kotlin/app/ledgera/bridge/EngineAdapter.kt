@@ -40,6 +40,13 @@ import app.ledgera.model.UpdateTransferResult
 import app.ledgera.model.WalletOption
 import app.ledgera.model.WalletDeleteResult
 import app.ledgera.model.WalletSettingsItem
+import app.ledgera.model.CreateDistributionItemRequest
+import app.ledgera.model.CreateDistributionSubitemRequest
+import app.ledgera.model.DistributionFrozenRow
+import app.ledgera.model.DistributionItem
+import app.ledgera.model.DistributionMonthlyResult
+import app.ledgera.model.DistributionSubitem
+import app.ledgera.model.DistributionValidationError
 
 interface RuntimeEngine {
     suspend fun status(): EngineStatus
@@ -149,4 +156,28 @@ interface MandatoryEngine {
     suspend fun exportMandatoryXlsx(path: String): MandatoryExportResult
 }
 
-interface EngineAdapter : RuntimeEngine, ReportsEngine, AnalyticsEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine, BudgetEngine
+interface DistributionEngine {
+    suspend fun distributionItems(activeOnly: Boolean = true): List<DistributionItem> = emptyList()
+    suspend fun distributionSubitems(itemId: Long, activeOnly: Boolean = true): List<DistributionSubitem> = emptyList()
+    suspend fun createDistributionItem(request: CreateDistributionItemRequest): DistributionItem = error("Distribution is unavailable")
+    suspend fun createDistributionSubitem(request: CreateDistributionSubitemRequest): DistributionSubitem = error("Distribution is unavailable")
+    suspend fun updateDistributionItemPct(itemId: Long, pct: Double): DistributionItem = error("Distribution is unavailable")
+    suspend fun updateDistributionSubitemPct(subitemId: Long, pct: Double): DistributionSubitem = error("Distribution is unavailable")
+    suspend fun renameDistributionItem(itemId: Long, name: String): DistributionItem = error("Distribution is unavailable")
+    suspend fun renameDistributionSubitem(subitemId: Long, name: String): DistributionSubitem = error("Distribution is unavailable")
+    suspend fun updateDistributionItemOrder(itemId: Long, order: Long) = Unit
+    suspend fun updateDistributionSubitemOrder(subitemId: Long, order: Long) = Unit
+    suspend fun deleteDistributionItem(itemId: Long): Boolean = false
+    suspend fun deleteDistributionSubitem(subitemId: Long): Boolean = false
+    suspend fun validateDistribution(): List<DistributionValidationError> = emptyList()
+    suspend fun distributionHistory(startMonth: String, endMonth: String): List<DistributionMonthlyResult> = emptyList()
+    suspend fun distributionAvailableMonths(): List<String> = emptyList()
+    suspend fun freezeClosedDistributionMonths(cutoffMonth: String): List<String> = emptyList()
+    suspend fun isDistributionMonthFixed(month: String): Boolean = false
+    suspend fun isDistributionMonthAutoFixed(month: String): Boolean = false
+    suspend fun freezeDistributionMonth(month: String, autoFixed: Boolean = false): DistributionFrozenRow = error("Distribution is unavailable")
+    suspend fun unfreezeDistributionMonth(month: String) = Unit
+    suspend fun frozenDistributionRows(startMonth: String? = null, endMonth: String? = null): List<DistributionFrozenRow> = emptyList()
+}
+
+interface EngineAdapter : RuntimeEngine, ReportsEngine, AnalyticsEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine, BudgetEngine, DistributionEngine

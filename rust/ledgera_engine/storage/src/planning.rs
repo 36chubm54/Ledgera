@@ -838,6 +838,51 @@ pub fn distribution_history_months(
     })
 }
 
+pub fn distribution_freeze_closed_months(
+    db_path: &str,
+    cutoff_month: &str,
+) -> StorageResult<Vec<String>> {
+    let months = distribution_available_months(db_path)?;
+    let mut frozen = Vec::new();
+    for month in months.into_iter().filter(|value| value.as_str() < cutoff_month) {
+        if distribution_is_month_fixed(db_path, &month)? {
+            continue;
+        }
+        let parts: Vec<_> = month.split('-').collect();
+        if parts.len() != 2 {
+            return Err(format!("Invalid distribution month: {month}"));
+        }
+        let year = parts[0].parse::<i32>().map_err(|_| format!("Invalid distribution month: {month}"))?;
+        let month_number = parts[1].parse::<u32>().map_err(|_| format!("Invalid distribution month: {month}"))?;
+        let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+        let days = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        if !(1..=12).contains(&month_number) {
+            return Err(format!("Invalid distribution month: {month}"));
+        }
+        let start = format!("{year:04}-{month_number:02}-01");
+        let end = format!("{year:04}-{month_number:02}-{:02}", days[(month_number - 1) as usize]);
+        let distribution = distribution_monthly_payload(db_path, &month, &start, &end)?;
+        let mut column_order = vec!["month".to_owned(), "fixed".to_owned(), "net_income".to_owned()];
+        let mut headings = vec![("month".to_owned(), "Month".to_owned()), ("fixed".to_owned(), "Fixed".to_owned()), ("net_income".to_owned(), "Net income".to_owned())];
+        let mut values = vec![("month".to_owned(), month.clone()), ("fixed".to_owned(), "Yes".to_owned()), ("net_income".to_owned(), format!("{:.2}", distribution.net_income_base))];
+        for item in distribution.items {
+            let key = format!("item_{}", item.id);
+            column_order.push(key.clone());
+            headings.push((key.clone(), item.name));
+            values.push((key, format!("{:.2}", item.amount_base)));
+            for subitem in item.subitems {
+                let key = format!("sub_{}", subitem.id);
+                column_order.push(key.clone());
+                headings.push((key.clone(), subitem.name));
+                values.push((key, format!("{:.2}", subitem.amount_base)));
+            }
+        }
+        distribution_write_frozen_row(db_path, &FrozenDistributionPayload { month: month.clone(), column_order, headings_by_column: headings, values_by_column: values, is_negative: distribution.is_negative, auto_fixed: true })?;
+        frozen.push(month);
+    }
+    Ok(frozen)
+}
+
 pub fn distribution_validate_structure(
     db_path: &str,
 ) -> StorageResult<Vec<DistributionValidationRow>> {

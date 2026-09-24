@@ -6,7 +6,15 @@ use ledgera_engine_storage::{
     debt_delete, debt_delete_payment, debt_payment_rows, debt_register_payment_validated,
     debt_register_write_off_validated, debt_rows, delete_all_operations,
     delete_operations_selection, delete_standalone_record, delete_transfer, delete_wallet,
-    distinct_record_categories, distinct_record_descriptions, export_full_backup_json,
+    distinct_record_categories, distinct_record_descriptions, distribution_available_months,
+    distribution_create_item, distribution_create_subitem, distribution_delete_item,
+    distribution_delete_subitem, distribution_freeze_closed_months, distribution_frozen_rows,
+    distribution_history_months, distribution_is_month_auto_fixed, distribution_is_month_fixed,
+    distribution_item_rows, distribution_monthly_payload, distribution_subitem_rows,
+    distribution_unfreeze_month, distribution_update_item_name, distribution_update_item_order,
+    distribution_update_item_pct, distribution_update_subitem_name,
+    distribution_update_subitem_order, distribution_update_subitem_pct,
+    distribution_validate_structure, distribution_write_frozen_row, export_full_backup_json,
     export_mandatory_csv, export_mandatory_xlsx, export_records_csv, export_records_xlsx,
     filtered_record_list_rows, import_full_backup_json, import_mandatory_csv,
     import_mandatory_xlsx, import_records_csv, import_records_xlsx, initialize_database,
@@ -17,13 +25,14 @@ use ledgera_engine_storage::{
     preview_import_mandatory_xlsx, preview_import_records_csv, preview_import_records_xlsx,
     report_export_csv, report_export_pdf, report_export_xlsx, report_generate,
     set_system_wallet_details, set_system_wallet_initial_balance, standalone_record_get_row,
-    tag_color_palette,
-    tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
-    update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
-    AnalyticsBreakdownRow, AnalyticsFilters, AnalyticsSnapshot, AuditFindingRow,
-    BudgetCreatePayload, BudgetPayload, BudgetResultPayload, DebtCreatePayload, DebtPayload,
-    DebtPaymentPayload, DebtPaymentRequestPayload, MandatoryAddToRecordsPayload,
-    MandatoryAutoPayResult, MandatoryExpenseRow, MandatoryExportResult, MandatoryImportResult,
+    tag_color_palette, tag_color_rows, tag_names, transfer_get_row,
+    update_standalone_record_with_tag_colors, update_transfer, wallet_balance_row,
+    wallet_balance_rows, wallet_list_rows, AnalyticsBreakdownRow, AnalyticsFilters,
+    AnalyticsSnapshot, AuditFindingRow, BudgetCreatePayload, BudgetPayload, BudgetResultPayload,
+    DebtCreatePayload, DebtPayload, DebtPaymentPayload, DebtPaymentRequestPayload,
+    DistributionItemPayload, DistributionMonthlyPayload, DistributionSubitemPayload,
+    FrozenDistributionPayload, MandatoryAddToRecordsPayload, MandatoryAutoPayResult,
+    MandatoryExpenseRow, MandatoryExportResult, MandatoryImportResult,
     MandatoryTemplateCreatePayload, MandatoryTemplateUpdatePayload, OperationDeleteResult,
     OperationExportResult, OperationImportResult, RecordFilterPayload, RecordRow,
     ReportCategoryRow, ReportDebtRow, ReportExportResult, ReportFilters, ReportMonthlyRow,
@@ -219,7 +228,81 @@ pub struct FullBackupResultDto {
     pub path: String,
     pub imported_rows: i64,
     pub budget_rows: i64,
+    pub distribution_rows: i64,
     pub checksum: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DistributionItemDto {
+    pub id: i64,
+    pub name: String,
+    pub group_name: String,
+    pub sort_order: i64,
+    pub pct: f64,
+    pub pct_minor: i64,
+    pub is_active: bool,
+    pub amount_base: String,
+    pub amount_minor: i64,
+    pub subitems: Vec<DistributionSubitemDto>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DistributionSubitemDto {
+    pub id: i64,
+    pub item_id: i64,
+    pub name: String,
+    pub sort_order: i64,
+    pub pct: f64,
+    pub pct_minor: i64,
+    pub is_active: bool,
+    pub amount_base: String,
+    pub amount_minor: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DistributionMonthlyDto {
+    pub month: String,
+    pub net_income_base: String,
+    pub net_income_minor: i64,
+    pub is_negative: bool,
+    pub items: Vec<DistributionItemDto>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DistributionColumnDto {
+    pub key: String,
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DistributionFrozenRowDto {
+    pub month: String,
+    pub columns: Vec<DistributionColumnDto>,
+    pub is_negative: bool,
+    pub auto_fixed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DistributionValidationDto {
+    pub level: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateDistributionItemRequest {
+    pub name: String,
+    pub group_name: String,
+    pub sort_order: i64,
+    pub pct: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateDistributionSubitemRequest {
+    pub item_id: i64,
+    pub name: String,
+    pub sort_order: i64,
+    pub pct: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1097,6 +1180,271 @@ impl LedgeraEngine {
             .map_err(storage_error)
     }
 
+    pub fn distribution_items(
+        &self,
+        active_only: bool,
+    ) -> Result<Vec<DistributionItemDto>, LedgeraEngineError> {
+        distribution_item_rows(&self.db_path, active_only)
+            .map(|rows| rows.into_iter().map(distribution_item_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn distribution_subitems(
+        &self,
+        item_id: i64,
+        active_only: bool,
+    ) -> Result<Vec<DistributionSubitemDto>, LedgeraEngineError> {
+        distribution_subitem_rows(&self.db_path, item_id, active_only)
+            .map(|rows| rows.into_iter().map(distribution_subitem_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn distribution_create_item(
+        &self,
+        request: CreateDistributionItemRequest,
+    ) -> Result<DistributionItemDto, LedgeraEngineError> {
+        let pct_minor = (request.pct * 100.0).round() as i64;
+        distribution_create_item(
+            &self.db_path,
+            &request.name,
+            &request.group_name,
+            request.sort_order,
+            request.pct,
+            pct_minor,
+        )
+        .map(distribution_item_to_dto)
+        .map_err(storage_error)
+    }
+
+    pub fn distribution_create_subitem(
+        &self,
+        request: CreateDistributionSubitemRequest,
+    ) -> Result<DistributionSubitemDto, LedgeraEngineError> {
+        let pct_minor = (request.pct * 100.0).round() as i64;
+        distribution_create_subitem(
+            &self.db_path,
+            request.item_id,
+            &request.name,
+            request.sort_order,
+            request.pct,
+            pct_minor,
+        )
+        .map(distribution_subitem_to_dto)
+        .map_err(storage_error)
+    }
+
+    pub fn distribution_update_item_pct(
+        &self,
+        item_id: i64,
+        pct: f64,
+    ) -> Result<DistributionItemDto, LedgeraEngineError> {
+        distribution_update_item_pct(&self.db_path, item_id, pct, (pct * 100.0).round() as i64)
+            .map(distribution_item_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn distribution_update_subitem_pct(
+        &self,
+        subitem_id: i64,
+        pct: f64,
+    ) -> Result<DistributionSubitemDto, LedgeraEngineError> {
+        distribution_update_subitem_pct(
+            &self.db_path,
+            subitem_id,
+            pct,
+            (pct * 100.0).round() as i64,
+        )
+        .map(distribution_subitem_to_dto)
+        .map_err(storage_error)
+    }
+
+    pub fn distribution_update_item_name(
+        &self,
+        item_id: i64,
+        name: String,
+    ) -> Result<DistributionItemDto, LedgeraEngineError> {
+        distribution_update_item_name(&self.db_path, item_id, &name)
+            .map(distribution_item_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn distribution_update_subitem_name(
+        &self,
+        subitem_id: i64,
+        name: String,
+    ) -> Result<DistributionSubitemDto, LedgeraEngineError> {
+        distribution_update_subitem_name(&self.db_path, subitem_id, &name)
+            .map(distribution_subitem_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn distribution_update_item_order(
+        &self,
+        item_id: i64,
+        sort_order: i64,
+    ) -> Result<(), LedgeraEngineError> {
+        distribution_update_item_order(&self.db_path, item_id, sort_order).map_err(storage_error)
+    }
+
+    pub fn distribution_update_subitem_order(
+        &self,
+        subitem_id: i64,
+        sort_order: i64,
+    ) -> Result<(), LedgeraEngineError> {
+        distribution_update_subitem_order(&self.db_path, subitem_id, sort_order)
+            .map_err(storage_error)
+    }
+
+    pub fn distribution_delete_item(&self, item_id: i64) -> Result<(), LedgeraEngineError> {
+        distribution_delete_item(&self.db_path, item_id).map_err(storage_error)
+    }
+
+    pub fn distribution_delete_subitem(&self, subitem_id: i64) -> Result<(), LedgeraEngineError> {
+        distribution_delete_subitem(&self.db_path, subitem_id).map_err(storage_error)
+    }
+
+    pub fn distribution_validate(
+        &self,
+    ) -> Result<Vec<DistributionValidationDto>, LedgeraEngineError> {
+        distribution_validate_structure(&self.db_path)
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| DistributionValidationDto {
+                        level: row.level,
+                        message: row.message,
+                    })
+                    .collect()
+            })
+            .map_err(storage_error)
+    }
+
+    pub fn distribution_monthly(
+        &self,
+        month: String,
+    ) -> Result<DistributionMonthlyDto, LedgeraEngineError> {
+        let (start, end) = distribution_month_bounds(&month)?;
+        distribution_monthly_payload(&self.db_path, &month, &start, &end)
+            .map(distribution_monthly_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn distribution_history(
+        &self,
+        start_month: String,
+        end_month: String,
+    ) -> Result<Vec<DistributionMonthlyDto>, LedgeraEngineError> {
+        distribution_history_months(&self.db_path, &start_month, &end_month)
+            .map_err(storage_error)?
+            .into_iter()
+            .map(|month| self.distribution_monthly(month))
+            .collect()
+    }
+
+    pub fn distribution_available_months(&self) -> Result<Vec<String>, LedgeraEngineError> {
+        distribution_available_months(&self.db_path).map_err(storage_error)
+    }
+
+    pub fn distribution_freeze_closed_months(
+        &self,
+        cutoff_month: String,
+    ) -> Result<Vec<String>, LedgeraEngineError> {
+        distribution_freeze_closed_months(&self.db_path, &cutoff_month).map_err(storage_error)
+    }
+
+    pub fn distribution_is_month_fixed(&self, month: String) -> Result<bool, LedgeraEngineError> {
+        distribution_is_month_fixed(&self.db_path, &month).map_err(storage_error)
+    }
+
+    pub fn distribution_is_month_auto_fixed(
+        &self,
+        month: String,
+    ) -> Result<bool, LedgeraEngineError> {
+        distribution_is_month_auto_fixed(&self.db_path, &month).map_err(storage_error)
+    }
+
+    pub fn distribution_freeze_month(
+        &self,
+        month: String,
+        auto_fixed: bool,
+    ) -> Result<DistributionFrozenRowDto, LedgeraEngineError> {
+        let distribution = self.distribution_monthly(month.clone())?;
+        let mut columns = vec![
+            DistributionColumnDto {
+                key: "month".to_owned(),
+                label: "Month".to_owned(),
+                value: month.clone(),
+            },
+            DistributionColumnDto {
+                key: "fixed".to_owned(),
+                label: "Fixed".to_owned(),
+                value: "Yes".to_owned(),
+            },
+            DistributionColumnDto {
+                key: "net_income".to_owned(),
+                label: "Net income".to_owned(),
+                value: distribution.net_income_base.clone(),
+            },
+        ];
+        for item in &distribution.items {
+            columns.push(DistributionColumnDto {
+                key: format!("item_{}", item.id),
+                label: item.name.clone(),
+                value: item.amount_base.clone(),
+            });
+            for subitem in &item.subitems {
+                columns.push(DistributionColumnDto {
+                    key: format!("sub_{}", subitem.id),
+                    label: subitem.name.clone(),
+                    value: subitem.amount_base.clone(),
+                });
+            }
+        }
+        let row = DistributionFrozenRowDto {
+            month,
+            columns,
+            is_negative: distribution.is_negative,
+            auto_fixed,
+        };
+        let headings: Vec<(String, String)> = row
+            .columns
+            .iter()
+            .map(|column| (column.key.clone(), column.label.clone()))
+            .collect();
+        let values: Vec<(String, String)> = row
+            .columns
+            .iter()
+            .map(|column| (column.key.clone(), column.value.clone()))
+            .collect();
+        let payload = FrozenDistributionPayload {
+            month: row.month.clone(),
+            column_order: row
+                .columns
+                .iter()
+                .map(|column| column.key.clone())
+                .collect(),
+            headings_by_column: headings,
+            values_by_column: values,
+            is_negative: row.is_negative,
+            auto_fixed: row.auto_fixed,
+        };
+        distribution_write_frozen_row(&self.db_path, &payload).map_err(storage_error)?;
+        Ok(row)
+    }
+
+    pub fn distribution_unfreeze_month(&self, month: String) -> Result<(), LedgeraEngineError> {
+        distribution_unfreeze_month(&self.db_path, &month).map_err(storage_error)
+    }
+
+    pub fn distribution_frozen_rows(
+        &self,
+        start_month: Option<String>,
+        end_month: Option<String>,
+    ) -> Result<Vec<DistributionFrozenRowDto>, LedgeraEngineError> {
+        distribution_frozen_rows(&self.db_path, start_month.as_deref(), end_month.as_deref())
+            .map(|rows| rows.into_iter().map(distribution_frozen_to_dto).collect())
+            .map_err(storage_error)
+    }
+
     pub fn preview_full_backup_json(
         &self,
         path: String,
@@ -1867,7 +2215,118 @@ fn full_backup_result_to_dto(row: ledgera_engine_storage::FullBackupResult) -> F
         path: row.path,
         imported_rows: row.imported_rows,
         budget_rows: row.budget_rows,
+        distribution_rows: row.distribution_rows,
         checksum: row.checksum,
+    }
+}
+
+fn distribution_month_bounds(month: &str) -> Result<(String, String), LedgeraEngineError> {
+    let parts: Vec<&str> = month.split('-').collect();
+    if parts.len() != 2 || parts[0].len() != 4 || parts[1].len() != 2 {
+        return Err(validation_error("Distribution month must use YYYY-MM"));
+    }
+    let year = parts[0]
+        .parse::<i32>()
+        .map_err(|_| validation_error("Distribution month must use YYYY-MM"))?;
+    let month_number = parts[1]
+        .parse::<u32>()
+        .map_err(|_| validation_error("Distribution month must use YYYY-MM"))?;
+    if !(1..=12).contains(&month_number) {
+        return Err(validation_error("Distribution month must use YYYY-MM"));
+    }
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    Ok((
+        format!("{year:04}-{month_number:02}-01"),
+        format!(
+            "{year:04}-{month_number:02}-{:02}",
+            days[(month_number - 1) as usize]
+        ),
+    ))
+}
+
+fn distribution_subitem_to_dto(row: DistributionSubitemPayload) -> DistributionSubitemDto {
+    DistributionSubitemDto {
+        id: row.id,
+        item_id: row.item_id,
+        name: row.name,
+        sort_order: row.sort_order,
+        pct: row.pct,
+        pct_minor: row.pct_minor,
+        is_active: row.is_active,
+        amount_base: format_money(row.amount_base),
+        amount_minor: row.amount_minor,
+    }
+}
+
+fn distribution_item_to_dto(row: DistributionItemPayload) -> DistributionItemDto {
+    DistributionItemDto {
+        id: row.id,
+        name: row.name,
+        group_name: row.group_name,
+        sort_order: row.sort_order,
+        pct: row.pct,
+        pct_minor: row.pct_minor,
+        is_active: row.is_active,
+        amount_base: format_money(row.amount_base),
+        amount_minor: row.amount_minor,
+        subitems: row
+            .subitems
+            .into_iter()
+            .map(distribution_subitem_to_dto)
+            .collect(),
+    }
+}
+
+fn distribution_monthly_to_dto(row: DistributionMonthlyPayload) -> DistributionMonthlyDto {
+    DistributionMonthlyDto {
+        month: row.month,
+        net_income_base: format_money(row.net_income_base),
+        net_income_minor: row.net_income_minor,
+        is_negative: row.is_negative,
+        items: row
+            .items
+            .into_iter()
+            .map(distribution_item_to_dto)
+            .collect(),
+    }
+}
+
+fn distribution_frozen_to_dto(row: FrozenDistributionPayload) -> DistributionFrozenRowDto {
+    let labels = row
+        .headings_by_column
+        .into_iter()
+        .collect::<std::collections::HashMap<_, _>>();
+    let values = row
+        .values_by_column
+        .into_iter()
+        .collect::<std::collections::HashMap<_, _>>();
+    DistributionFrozenRowDto {
+        month: row.month,
+        columns: row
+            .column_order
+            .into_iter()
+            .map(|key| DistributionColumnDto {
+                label: labels.get(&key).cloned().unwrap_or_else(|| key.clone()),
+                value: values.get(&key).cloned().unwrap_or_else(|| "-".to_owned()),
+                key,
+            })
+            .collect(),
+        is_negative: row.is_negative,
+        auto_fixed: row.auto_fixed,
     }
 }
 
