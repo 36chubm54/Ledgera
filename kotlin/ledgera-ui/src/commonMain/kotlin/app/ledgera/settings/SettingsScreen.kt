@@ -146,7 +146,7 @@ fun SettingsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Current wallets, operations, debts, mandatory templates, tags, budgets, and Distribution will be replaced.")
-                    Text("Rows: ${preview.importedRows} · Budgets: ${preview.budgetRows} · Distribution: ${preview.distributionRows}")
+                    Text("Rows: ${preview.importedRows} · Budgets: ${preview.budgetRows} · Distribution entries: ${preview.distributionRows}")
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },

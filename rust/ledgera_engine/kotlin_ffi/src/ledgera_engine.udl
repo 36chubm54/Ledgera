@@ -655,7 +655,11 @@ interface LedgeraEngine {
     [Throws=LedgeraEngineError]
     DistributionItemDto distribution_update_item_pct(i64 item_id, double pct);
     [Throws=LedgeraEngineError]
+    DistributionItemDto distribution_update_item(i64 item_id, string name, double pct);
+    [Throws=LedgeraEngineError]
     DistributionSubitemDto distribution_update_subitem_pct(i64 subitem_id, double pct);
+    [Throws=LedgeraEngineError]
+    DistributionSubitemDto distribution_update_subitem(i64 subitem_id, string name, double pct);
     [Throws=LedgeraEngineError]
     DistributionItemDto distribution_update_item_name(i64 item_id, string name);
     [Throws=LedgeraEngineError]

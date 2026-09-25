@@ -163,6 +163,8 @@ interface DistributionEngine {
     suspend fun createDistributionSubitem(request: CreateDistributionSubitemRequest): DistributionSubitem = error("Distribution is unavailable")
     suspend fun updateDistributionItemPct(itemId: Long, pct: Double): DistributionItem = error("Distribution is unavailable")
     suspend fun updateDistributionSubitemPct(subitemId: Long, pct: Double): DistributionSubitem = error("Distribution is unavailable")
+    suspend fun updateDistributionItem(itemId: Long, name: String, pct: Double): DistributionItem = error("Distribution is unavailable")
+    suspend fun updateDistributionSubitem(subitemId: Long, name: String, pct: Double): DistributionSubitem = error("Distribution is unavailable")
     suspend fun renameDistributionItem(itemId: Long, name: String): DistributionItem = error("Distribution is unavailable")
     suspend fun renameDistributionSubitem(subitemId: Long, name: String): DistributionSubitem = error("Distribution is unavailable")
     suspend fun updateDistributionItemOrder(itemId: Long, order: Long) = Unit

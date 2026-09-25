@@ -637,6 +637,12 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     override suspend fun updateDistributionSubitemPct(subitemId: Long, pct: Double): DistributionSubitem = withContext(Dispatchers.IO) {
         engine.distributionUpdateSubitemPct(subitemId, pct).let(::toDistributionSubitem)
     }
+    override suspend fun updateDistributionItem(itemId: Long, name: String, pct: Double): DistributionItem = withContext(Dispatchers.IO) {
+        engine.distributionUpdateItem(itemId, name, pct).let(::toDistributionItem)
+    }
+    override suspend fun updateDistributionSubitem(subitemId: Long, name: String, pct: Double): DistributionSubitem = withContext(Dispatchers.IO) {
+        engine.distributionUpdateSubitem(subitemId, name, pct).let(::toDistributionSubitem)
+    }
 
     override suspend fun renameDistributionItem(itemId: Long, name: String): DistributionItem = withContext(Dispatchers.IO) {
         engine.distributionUpdateItemName(itemId, name).let(::toDistributionItem)

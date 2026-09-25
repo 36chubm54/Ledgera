@@ -87,7 +87,6 @@ private sealed class DistributionDialog {
     data object NewItem : DistributionDialog()
     data class NewSubitem(val parentItemId: Long) : DistributionDialog()
     data class EditNode(val id: Long, val subitem: Boolean, val initialName: String, val initialPct: String) : DistributionDialog()
-    data class Rename(val id: Long, val subitem: Boolean, val initial: String) : DistributionDialog()
 }
 
 private sealed class DistributionTreeRow {
@@ -293,10 +292,11 @@ private fun DistributionDialogHost(dialog: DistributionDialog, viewModel: Distri
     var pct by remember(dialog) { mutableStateOf((dialog as? DistributionDialog.EditNode)?.initialPct ?: "0") }
     val parsedPct = pct.replace(',', '.').toDoubleOrNull()
     val percentageOverLimit = parsedPct != null && parsedPct > 100.0
-    val title = when (dialog) { DistributionDialog.NewItem -> "New item"; is DistributionDialog.NewSubitem -> "New subitem"; is DistributionDialog.EditNode -> "Edit distribution item"; is DistributionDialog.Rename -> "Rename" }
+    val percentageInvalid = parsedPct == null || parsedPct < 0.0
+    val title = when (dialog) { DistributionDialog.NewItem -> "New item"; is DistributionDialog.NewSubitem -> "New subitem"; is DistributionDialog.EditNode -> "Edit distribution item" }
     AlertDialog(onDismissRequest = close, title = { Text(title) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (dialog is DistributionDialog.NewItem || dialog is DistributionDialog.NewSubitem || dialog is DistributionDialog.EditNode || dialog is DistributionDialog.Rename) OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
+            OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
             if (dialog is DistributionDialog.NewItem) OutlinedTextField(group, { group = it }, label = { Text("Group") }, singleLine = true)
             if (dialog is DistributionDialog.NewItem || dialog is DistributionDialog.NewSubitem || dialog is DistributionDialog.EditNode) {
                 OutlinedTextField(
@@ -304,10 +304,12 @@ private fun DistributionDialogHost(dialog: DistributionDialog, viewModel: Distri
                     onValueChange = { pct = it },
                     label = { Text("Percent") },
                     singleLine = true,
-                    isError = percentageOverLimit,
-                    supportingText = if (percentageOverLimit) {
-                        { Text("Percent cannot be greater than 100") }
-                    } else null,
+                    isError = percentageInvalid || percentageOverLimit,
+                    supportingText = when {
+                        percentageOverLimit -> { { Text("Percent cannot be greater than 100") } }
+                        percentageInvalid -> { { Text("Enter a number from 0 to 100") } }
+                        else -> null
+                    },
                 )
             }
         }
@@ -317,14 +319,11 @@ private fun DistributionDialogHost(dialog: DistributionDialog, viewModel: Distri
             is DistributionDialog.NewSubitem -> viewModel.addSubitem(dialog.parentItemId, name, parsedPct ?: 0.0)
             is DistributionDialog.EditNode -> {
                 if (dialog.subitem) {
-                    viewModel.renameSubitem(dialog.id, name)
-                    viewModel.updateSubitemPct(dialog.id, parsedPct ?: 0.0)
+                    viewModel.updateSubitem(dialog.id, name, parsedPct ?: 0.0)
                 } else {
-                    viewModel.renameItem(dialog.id, name)
-                    viewModel.updateItemPct(dialog.id, parsedPct ?: 0.0)
+                    viewModel.updateItem(dialog.id, name, parsedPct ?: 0.0)
                 }
             }
-            is DistributionDialog.Rename -> if (dialog.subitem) viewModel.renameSubitem(dialog.id, name) else viewModel.renameItem(dialog.id, name)
         }; close()
-    }, enabled = !percentageOverLimit) { Text("Save") } }, dismissButton = { TextButton(onClick = close) { Text("Cancel") } })
+    }, enabled = !percentageInvalid && !percentageOverLimit && name.isNotBlank()) { Text("Save") } }, dismissButton = { TextButton(onClick = close) { Text("Cancel") } })
 }

@@ -190,6 +190,17 @@ fn round_money_minor_to_whole(value_minor: i64) -> i64 {
     (rounded_abs * i128::from(sign)) as i64
 }
 
+fn validate_distribution_pct(pct: f64, pct_minor: i64) -> StorageResult<()> {
+    if !pct.is_finite() || !(0.0..=100.0).contains(&pct) {
+        return Err("Distribution percentage must be between 0.00 and 100.00".to_owned());
+    }
+    let expected_minor = (pct * 100.0).round() as i64;
+    if pct_minor != expected_minor || !(0..=FULL_PCT_MINOR).contains(&pct_minor) {
+        return Err("Distribution percentage precision is invalid".to_owned());
+    }
+    Ok(())
+}
+
 fn open_write_connection(db_path: &str) -> StorageResult<Connection> {
     Connection::open(db_path).map_err(sqlite_err)
 }
@@ -216,7 +227,7 @@ fn distribution_item_from_conn(
     conn: &Connection,
     item_id: i64,
 ) -> StorageResult<DistributionItemPayload> {
-    conn.query_row(
+    let mut item = conn.query_row(
         "SELECT id, name, group_name, sort_order, pct, pct_minor, is_active
          FROM distribution_items
          WHERE id = ?",
@@ -239,6 +250,32 @@ fn distribution_item_from_conn(
     .optional()
     .map_err(sqlite_err)?
     .ok_or_else(|| format!("Distribution item not found: {item_id}"))
+    ?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, item_id, name, sort_order, pct, pct_minor, is_active
+             FROM distribution_subitems
+             WHERE item_id = ?
+             ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC",
+        )
+        .map_err(sqlite_err)?;
+    let rows = stmt
+        .query_map([item_id], |row| {
+            Ok(DistributionSubitemPayload {
+                id: row.get(0)?,
+                item_id: row.get(1)?,
+                name: row.get(2)?,
+                sort_order: row.get(3)?,
+                pct: row.get(4)?,
+                pct_minor: row.get(5)?,
+                is_active: row.get(6)?,
+                amount_base: 0.0,
+                amount_minor: 0,
+            })
+        })
+        .map_err(sqlite_err)?;
+    item.subitems = rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)?;
+    Ok(item)
 }
 
 fn distribution_subitem_from_conn(
@@ -1023,6 +1060,15 @@ pub fn distribution_monthly_payload(
                 subitem.amount_base = minor_to_money_value(subitem.amount_minor);
                 subitems.push(subitem);
             }
+            if subitems.iter().map(|subitem| subitem.pct_minor).sum::<i64>() == FULL_PCT_MINOR
+                && !subitems.is_empty()
+            {
+                let allocated: i64 = subitems.iter().map(|subitem| subitem.amount_minor).sum();
+                if let Some(last) = subitems.last_mut() {
+                    last.amount_minor += item_minor - allocated;
+                    last.amount_base = minor_to_money_value(last.amount_minor);
+                }
+            }
             items.push(DistributionItemPayload {
                 id,
                 name,
@@ -1035,6 +1081,33 @@ pub fn distribution_monthly_payload(
                 amount_minor: item_minor,
                 subitems,
             });
+        }
+        if items.iter().map(|item| item.pct_minor).sum::<i64>() == FULL_PCT_MINOR
+            && !items.is_empty()
+        {
+            let allocated: i64 = items.iter().map(|item| item.amount_minor).sum();
+            if let Some(last) = items.last_mut() {
+                last.amount_minor += net_income_minor - allocated;
+                last.amount_base = minor_to_money_value(last.amount_minor);
+                if last.subitems.iter().map(|subitem| subitem.pct_minor).sum::<i64>()
+                    == FULL_PCT_MINOR
+                    && !last.subitems.is_empty()
+                {
+                    for subitem in &mut last.subitems {
+                        subitem.amount_minor = apply_pct(last.amount_minor, subitem.pct_minor);
+                        subitem.amount_base = minor_to_money_value(subitem.amount_minor);
+                    }
+                    let sub_allocated: i64 = last
+                        .subitems
+                        .iter()
+                        .map(|subitem| subitem.amount_minor)
+                        .sum();
+                    if let Some(last_subitem) = last.subitems.last_mut() {
+                        last_subitem.amount_minor += last.amount_minor - sub_allocated;
+                        last_subitem.amount_base = minor_to_money_value(last_subitem.amount_minor);
+                    }
+                }
+            }
         }
         Ok(DistributionMonthlyPayload {
             month: month.to_owned(),
@@ -1056,6 +1129,7 @@ pub fn distribution_item_rows(
         } else {
             ""
         };
+        let subitem_active_clause = if active_only { "AND is_active = 1" } else { "" };
         let mut stmt = conn
             .prepare(&format!(
                 "SELECT id, name, group_name, sort_order, pct, pct_minor, is_active
@@ -1083,12 +1157,12 @@ pub fn distribution_item_rows(
         let mut items = rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)?;
         for item in &mut items {
             let mut sub_stmt = conn
-                .prepare(
+                .prepare(&format!(
                     "SELECT id, item_id, name, sort_order, pct, pct_minor, is_active
                      FROM distribution_subitems
-                     WHERE item_id = ?
-                     ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC",
-                )
+                     WHERE item_id = ? {subitem_active_clause}
+                     ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC"
+                ))
                 .map_err(sqlite_err)?;
             let sub_rows = sub_stmt
                 .query_map([item.id], |row| {
@@ -1158,6 +1232,7 @@ pub fn distribution_create_item(
     pct: f64,
     pct_minor: i64,
 ) -> StorageResult<DistributionItemPayload> {
+    validate_distribution_pct(pct, pct_minor)?;
     let mut conn = open_write_connection(db_path)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
     tx.execute(
@@ -1179,6 +1254,7 @@ pub fn distribution_update_item_pct(
     pct: f64,
     pct_minor: i64,
 ) -> StorageResult<DistributionItemPayload> {
+    validate_distribution_pct(pct, pct_minor)?;
     let mut conn = open_write_connection(db_path)?;
     if !distribution_item_exists(&conn, item_id)? {
         return Err(format!("Distribution item not found: {item_id}"));
@@ -1189,6 +1265,30 @@ pub fn distribution_update_item_pct(
         params![pct, pct_minor, item_id],
     )
     .map_err(sqlite_err)?;
+    tx.commit().map_err(sqlite_err)?;
+    storage_clear_read_connection_cache();
+    let conn = open_write_connection(db_path)?;
+    distribution_item_from_conn(&conn, item_id)
+}
+
+pub fn distribution_update_item(
+    db_path: &str,
+    item_id: i64,
+    name: &str,
+    pct: f64,
+    pct_minor: i64,
+) -> StorageResult<DistributionItemPayload> {
+    validate_distribution_pct(pct, pct_minor)?;
+    let mut conn = open_write_connection(db_path)?;
+    if !distribution_item_exists(&conn, item_id)? {
+        return Err(format!("Distribution item not found: {item_id}"));
+    }
+    let tx = conn.transaction().map_err(sqlite_err)?;
+    tx.execute(
+        "UPDATE distribution_items SET name = ?, pct = ?, pct_minor = ? WHERE id = ?",
+        params![name, pct, pct_minor, item_id],
+    )
+    .map_err(|err| map_distribution_integrity_error(err, name, None))?;
     tx.commit().map_err(sqlite_err)?;
     storage_clear_read_connection_cache();
     let conn = open_write_connection(db_path)?;
@@ -1257,6 +1357,7 @@ pub fn distribution_create_subitem(
     pct: f64,
     pct_minor: i64,
 ) -> StorageResult<DistributionSubitemPayload> {
+    validate_distribution_pct(pct, pct_minor)?;
     let mut conn = open_write_connection(db_path)?;
     if !distribution_item_exists(&conn, item_id)? {
         return Err(format!("Distribution item not found: {item_id}"));
@@ -1281,6 +1382,7 @@ pub fn distribution_update_subitem_pct(
     pct: f64,
     pct_minor: i64,
 ) -> StorageResult<DistributionSubitemPayload> {
+    validate_distribution_pct(pct, pct_minor)?;
     let mut conn = open_write_connection(db_path)?;
     distribution_subitem_from_conn(&conn, subitem_id)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
@@ -1289,6 +1391,28 @@ pub fn distribution_update_subitem_pct(
         params![pct, pct_minor, subitem_id],
     )
     .map_err(sqlite_err)?;
+    tx.commit().map_err(sqlite_err)?;
+    storage_clear_read_connection_cache();
+    let conn = open_write_connection(db_path)?;
+    distribution_subitem_from_conn(&conn, subitem_id)
+}
+
+pub fn distribution_update_subitem(
+    db_path: &str,
+    subitem_id: i64,
+    name: &str,
+    pct: f64,
+    pct_minor: i64,
+) -> StorageResult<DistributionSubitemPayload> {
+    validate_distribution_pct(pct, pct_minor)?;
+    let mut conn = open_write_connection(db_path)?;
+    let existing = distribution_subitem_from_conn(&conn, subitem_id)?;
+    let tx = conn.transaction().map_err(sqlite_err)?;
+    tx.execute(
+        "UPDATE distribution_subitems SET name = ?, pct = ?, pct_minor = ? WHERE id = ?",
+        params![name, pct, pct_minor, subitem_id],
+    )
+    .map_err(|err| map_distribution_integrity_error(err, name, Some(existing.item_id)))?;
     tx.commit().map_err(sqlite_err)?;
     storage_clear_read_connection_cache();
     let conn = open_write_connection(db_path)?;
@@ -1351,6 +1475,12 @@ pub fn distribution_replace_structure(
     items: &[DistributionItemPayload],
     subitems: &[DistributionSubitemPayload],
 ) -> StorageResult<()> {
+    for item in items {
+        validate_distribution_pct(item.pct, item.pct_minor)?;
+    }
+    for subitem in subitems {
+        validate_distribution_pct(subitem.pct, subitem.pct_minor)?;
+    }
     let mut conn = open_write_connection(db_path)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
     tx.execute("DELETE FROM distribution_subitems", [])
@@ -3056,6 +3186,12 @@ mod tests {
         init_distribution_schema(&db_path);
         let item =
             distribution_create_item(&db_path, "Needs", "", 0, 100.0, 10000).expect("create item");
+        assert!(distribution_create_item(&db_path, "Invalid", "", 1, 100.01, 10001)
+            .expect_err("percentage over 100")
+            .contains("between 0.00 and 100.00"));
+        assert!(distribution_update_item_pct(&db_path, item.id, -1.0, -100)
+            .expect_err("negative percentage")
+            .contains("between 0.00 and 100.00"));
         assert_eq!(item.id, 1);
         let subitem = distribution_create_subitem(&db_path, item.id, "Rent", 0, 100.0, 10000)
             .expect("create subitem");

@@ -72,7 +72,6 @@ class DistributionViewModel(
         mutableState.value = current.copy(loading = true, error = null, notice = null)
         refreshJob = scope.launch {
             runCatching {
-                engine.freezeClosedDistributionMonths(current.endMonth)
                 RefreshPayload(
                     engine.distributionItems(true),
                     engine.distributionHistory(current.startMonth, current.endMonth),
@@ -107,6 +106,8 @@ class DistributionViewModel(
     }
     fun updateItemPct(id: Long, pct: Double) = mutate { engine.updateDistributionItemPct(id, pct) }
     fun updateSubitemPct(id: Long, pct: Double) = mutate { engine.updateDistributionSubitemPct(id, pct) }
+    fun updateItem(id: Long, name: String, pct: Double) = mutate { engine.updateDistributionItem(id, name.trim(), pct) }
+    fun updateSubitem(id: Long, name: String, pct: Double) = mutate { engine.updateDistributionSubitem(id, name.trim(), pct) }
     fun renameItem(id: Long, name: String) = mutate { engine.renameDistributionItem(id, name.trim()) }
     fun renameSubitem(id: Long, name: String) = mutate { engine.renameDistributionSubitem(id, name.trim()) }
     fun deleteItem(id: Long) = mutate { engine.deleteDistributionItem(id) }

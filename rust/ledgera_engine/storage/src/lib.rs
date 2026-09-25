@@ -435,7 +435,8 @@ pub use planning::{
     distribution_monthly_payload, distribution_net_income_for_period,
     distribution_replace_frozen_rows, distribution_replace_structure, distribution_subitem_rows,
     distribution_unfreeze_month, distribution_update_item_name, distribution_update_item_order,
-    distribution_update_item_pct, distribution_update_subitem_name,
+    distribution_update_item, distribution_update_item_pct, distribution_update_subitem,
+    distribution_update_subitem_name,
     distribution_update_subitem_order, distribution_update_subitem_pct,
     distribution_validate_structure, distribution_write_frozen_row,
 };

@@ -29,6 +29,12 @@ const BACKUP_TABLES: &[&str] = &[
     "distribution_snapshot_values",
 ];
 
+const DISTRIBUTION_RESULT_TABLES: &[&str] = &[
+    "distribution_items",
+    "distribution_subitems",
+    "distribution_snapshots",
+];
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FullBackupResult {
     pub path: String,
@@ -794,12 +800,7 @@ pub fn export_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         let _ = fs::remove_file(&temp_path);
         return Err(error);
     }
-    let distribution_rows = [
-        "distribution_items",
-        "distribution_subitems",
-        "distribution_snapshots",
-        "distribution_snapshot_values",
-    ]
+    let distribution_rows = DISTRIBUTION_RESULT_TABLES
     .iter()
     .map(|table| {
         object
@@ -885,12 +886,7 @@ pub fn preview_full_backup_json(db_path: &str, path: &str) -> StorageResult<Full
                 .map_or(0, |rows| rows.len() as i64)
         })
         .sum();
-    let distribution_rows = [
-        "distribution_items",
-        "distribution_subitems",
-        "distribution_snapshots",
-        "distribution_snapshot_values",
-    ]
+    let distribution_rows = DISTRIBUTION_RESULT_TABLES
     .iter()
     .map(|table| {
         object
@@ -986,12 +982,7 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
     }
     tx.commit().map_err(sqlite_err)?;
     storage_clear_read_connection_cache();
-    let distribution_rows = [
-        "distribution_items",
-        "distribution_subitems",
-        "distribution_snapshots",
-        "distribution_snapshot_values",
-    ]
+    let distribution_rows = DISTRIBUTION_RESULT_TABLES
     .iter()
     .map(|table| {
         object

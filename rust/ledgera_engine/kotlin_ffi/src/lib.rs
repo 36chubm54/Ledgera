@@ -11,8 +11,9 @@ use ledgera_engine_storage::{
     distribution_delete_subitem, distribution_freeze_closed_months, distribution_frozen_rows,
     distribution_history_months, distribution_is_month_auto_fixed, distribution_is_month_fixed,
     distribution_item_rows, distribution_monthly_payload, distribution_subitem_rows,
-    distribution_unfreeze_month, distribution_update_item_name, distribution_update_item_order,
-    distribution_update_item_pct, distribution_update_subitem_name,
+    distribution_unfreeze_month, distribution_update_item, distribution_update_item_name,
+    distribution_update_item_order, distribution_update_item_pct, distribution_update_subitem,
+    distribution_update_subitem_name,
     distribution_update_subitem_order, distribution_update_subitem_pct,
     distribution_validate_structure, distribution_write_frozen_row, export_full_backup_json,
     export_mandatory_csv, export_mandatory_xlsx, export_records_csv, export_records_xlsx,
@@ -1258,6 +1259,17 @@ impl LedgeraEngine {
         .map_err(storage_error)
     }
 
+    pub fn distribution_update_item(
+        &self,
+        item_id: i64,
+        name: String,
+        pct: f64,
+    ) -> Result<DistributionItemDto, LedgeraEngineError> {
+        distribution_update_item(&self.db_path, item_id, &name, pct, (pct * 100.0).round() as i64)
+            .map(distribution_item_to_dto)
+            .map_err(storage_error)
+    }
+
     pub fn distribution_update_item_name(
         &self,
         item_id: i64,
@@ -1266,6 +1278,23 @@ impl LedgeraEngine {
         distribution_update_item_name(&self.db_path, item_id, &name)
             .map(distribution_item_to_dto)
             .map_err(storage_error)
+    }
+
+    pub fn distribution_update_subitem(
+        &self,
+        subitem_id: i64,
+        name: String,
+        pct: f64,
+    ) -> Result<DistributionSubitemDto, LedgeraEngineError> {
+        distribution_update_subitem(
+            &self.db_path,
+            subitem_id,
+            &name,
+            pct,
+            (pct * 100.0).round() as i64,
+        )
+        .map(distribution_subitem_to_dto)
+        .map_err(storage_error)
     }
 
     pub fn distribution_update_subitem_name(
