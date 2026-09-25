@@ -35,6 +35,8 @@ import app.ledgera.debts.DebtsScreen
 import app.ledgera.debts.DebtsViewModel
 import app.ledgera.distribution.DistributionScreen
 import app.ledgera.distribution.DistributionViewModel
+import app.ledgera.dashboard.DashboardScreen
+import app.ledgera.dashboard.DashboardViewModel
 import app.ledgera.analytics.AnalyticsScreen
 import app.ledgera.analytics.AnalyticsViewModel
 import app.ledgera.budget.BudgetScreen
@@ -89,6 +91,7 @@ fun AppShell(
     budgetViewModel: BudgetViewModel,
     analyticsViewModel: AnalyticsViewModel,
     distributionViewModel: DistributionViewModel,
+    dashboardViewModel: DashboardViewModel,
     modifier: Modifier = Modifier,
     operationsFileActions: OperationsFileActions = NoOperationsFileActions,
     mandatoryFileActions: MandatoryFileActions = NoMandatoryFileActions,
@@ -180,7 +183,7 @@ fun AppShell(
                         )
                         DesktopSection.Reports -> ReportsScreen(reportsViewModel, reportsFileActions)
                         DesktopSection.Analytics -> AnalyticsScreen(analyticsViewModel)
-                        DesktopSection.Dashboard -> PendingSection(state.selectedSection)
+                        DesktopSection.Dashboard -> DashboardScreen(dashboardViewModel)
                         DesktopSection.Budget -> BudgetScreen(budgetViewModel)
                         DesktopSection.Debts -> DebtsScreen(debtsViewModel)
                         DesktopSection.Distribution -> DistributionScreen(distributionViewModel)

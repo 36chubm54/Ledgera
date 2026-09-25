@@ -36,6 +36,8 @@ fun LedgerDateField(
     allowFuture: Boolean = false,
     enabled: Boolean = true,
     externalError: String? = null,
+    showErrorOutline: Boolean = true,
+    showErrorText: Boolean = true,
 ) {
     var text by remember { mutableStateOf(displayDate(value)) }
     var pickerOpen by remember { mutableStateOf(false) }
@@ -67,12 +69,10 @@ fun LedgerDateField(
         label = { Text(label) },
         singleLine = true,
         enabled = enabled,
-        isError = error != null,
-        supportingText = {
-            if (error != null) {
-                Text(error)
-            }
-        },
+        isError = showErrorOutline && error != null,
+        supportingText = if (showErrorText && error != null) {
+            { Text(error) }
+        } else null,
         trailingIcon = {
             IconButton(onClick = { pickerOpen = true }, enabled = enabled) {
                 Icon(

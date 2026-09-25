@@ -26,6 +26,7 @@ import app.ledgera.bridge.RustEngineAdapter
 import app.ledgera.analytics.AnalyticsViewModel
 import app.ledgera.budget.BudgetViewModel
 import app.ledgera.distribution.DistributionViewModel
+import app.ledgera.dashboard.DashboardViewModel
 import app.ledgera.debts.DebtsViewModel
 import app.ledgera.mandatory.MandatoryViewModel
 import app.ledgera.mandatory.MandatoryFileActions
@@ -102,6 +103,7 @@ private fun runApplication(args: Array<String>) = application {
                             budgetViewModel = BudgetViewModel(engine),
                             analyticsViewModel = AnalyticsViewModel(engine),
                             distributionViewModel = DistributionViewModel(engine),
+                            dashboardViewModel = DashboardViewModel(engine),
                             operationsFileActions = DesktopOperationsFileActions(window),
                             mandatoryFileActions = DesktopMandatoryFileActions(window),
                             reportsFileActions = DesktopReportsFileActions(window),

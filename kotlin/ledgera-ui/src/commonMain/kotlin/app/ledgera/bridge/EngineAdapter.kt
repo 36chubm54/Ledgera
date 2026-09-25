@@ -47,6 +47,9 @@ import app.ledgera.model.DistributionItem
 import app.ledgera.model.DistributionMonthlyResult
 import app.ledgera.model.DistributionSubitem
 import app.ledgera.model.DistributionValidationError
+import app.ledgera.model.DashboardAsset
+import app.ledgera.model.DashboardGoal
+import app.ledgera.model.DashboardSnapshot
 
 interface RuntimeEngine {
     suspend fun status(): EngineStatus
@@ -69,6 +72,19 @@ interface AnalyticsEngine {
     suspend fun listAnalyticsTags(periodStart: String, periodEnd: String): List<String> = emptyList()
     suspend fun listAnalyticsMonths(): List<String> = emptyList()
     suspend fun listAnalyticsYears(): List<String> = emptyList()
+}
+
+interface DashboardEngine {
+    suspend fun dashboardSnapshot(): DashboardSnapshot = error("Dashboard is unavailable")
+    suspend fun dashboardAssets(activeOnly: Boolean = true): List<DashboardAsset> = emptyList()
+    suspend fun createDashboardAsset(name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = error("Dashboard is unavailable")
+    suspend fun updateDashboardAsset(assetId: Long, name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = error("Dashboard is unavailable")
+    suspend fun addDashboardAssetSnapshot(assetId: Long, value: String, snapshotDate: String, note: String): DashboardAsset = error("Dashboard is unavailable")
+    suspend fun setDashboardAssetActive(assetId: Long, active: Boolean): DashboardAsset = error("Dashboard is unavailable")
+    suspend fun dashboardGoals(): List<DashboardGoal> = emptyList()
+    suspend fun createDashboardGoal(title: String, targetAmount: String, currency: String, targetDate: String?, description: String): DashboardGoal = error("Dashboard is unavailable")
+    suspend fun setDashboardGoalCompleted(goalId: Long, completed: Boolean) = Unit
+    suspend fun deleteDashboardGoal(goalId: Long) = Unit
 }
 
 interface OperationsEngine {
@@ -182,4 +198,4 @@ interface DistributionEngine {
     suspend fun frozenDistributionRows(startMonth: String? = null, endMonth: String? = null): List<DistributionFrozenRow> = emptyList()
 }
 
-interface EngineAdapter : RuntimeEngine, ReportsEngine, AnalyticsEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine, BudgetEngine, DistributionEngine
+interface EngineAdapter : RuntimeEngine, ReportsEngine, AnalyticsEngine, DashboardEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine, BudgetEngine, DistributionEngine

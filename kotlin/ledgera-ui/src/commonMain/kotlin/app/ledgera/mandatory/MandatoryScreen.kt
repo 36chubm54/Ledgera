@@ -350,6 +350,8 @@ private fun MandatoryTemplateDialog(
                     label = "Auto-pay anchor",
                     required = false,
                     allowFuture = true,
+                    showErrorOutline = false,
+                    showErrorText = false,
                 )
                 Text(
                     if (draft.date.isBlank()) {
@@ -406,6 +408,8 @@ private fun AddMandatoryToRecordsDialog(
                     onValueChange = { onDraftChange(draft.copy(date = it)) },
                     label = "Date",
                     allowFuture = false,
+                    showErrorOutline = false,
+                    showErrorText = false,
                 )
                 validationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 engineError?.let { Text(it, color = MaterialTheme.colorScheme.error) }

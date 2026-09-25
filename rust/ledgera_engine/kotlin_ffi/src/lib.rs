@@ -41,6 +41,9 @@ use ledgera_engine_storage::{
     StandaloneRecordUpdatePayload, TagColorAssignment as StorageTagColorAssignment,
     TransferCreatePayload, TransferRow, TransferUpdatePayload, WalletBalanceRow,
     WalletCreatePayload, WalletRow,
+    asset_add_snapshot, asset_create, asset_rows, asset_set_active, asset_update, dashboard_payload,
+    goal_create, goal_delete, goal_rows, goal_set_completed, AssetPayload, DashboardPayload,
+    GoalPayload,
 };
 use std::fmt;
 use std::path::Path;
@@ -230,6 +233,9 @@ pub struct FullBackupResultDto {
     pub imported_rows: i64,
     pub budget_rows: i64,
     pub distribution_rows: i64,
+    pub asset_rows: i64,
+    pub asset_snapshot_rows: i64,
+    pub goal_rows: i64,
     pub checksum: String,
 }
 
@@ -649,6 +655,64 @@ pub struct AnalyticsSnapshotDto {
     pub infographic_years: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssetDto {
+    pub id: i64,
+    pub name: String,
+    pub category: String,
+    pub currency: String,
+    pub is_active: bool,
+    pub created_at: String,
+    pub description: String,
+    pub current_value: String,
+    pub current_value_minor: i64,
+    pub current_snapshot_date: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssetBreakdownDto {
+    pub label: String,
+    pub amount_base: String,
+    pub asset_count: i64,
+    pub color: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CapitalPointDto {
+    pub month: String,
+    pub balance_base: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GoalDto {
+    pub id: i64,
+    pub title: String,
+    pub target_amount: String,
+    pub target_amount_minor: i64,
+    pub currency: String,
+    pub target_date: Option<String>,
+    pub is_completed: bool,
+    pub created_at: String,
+    pub description: String,
+    pub current_amount: String,
+    pub current_amount_minor: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DashboardDto {
+    pub base_currency: String,
+    pub net_worth: String,
+    pub total_assets: String,
+    pub active_asset_count: i64,
+    pub total_asset_count: i64,
+    pub completed_goal_count: i64,
+    pub total_goal_count: i64,
+    pub capital: Vec<CapitalPointDto>,
+    pub asset_breakdown: Vec<AssetBreakdownDto>,
+    pub assets: Vec<AssetDto>,
+    pub goals: Vec<GoalDto>,
+}
+
 #[derive(Debug)]
 pub enum LedgeraEngineError {
     Validation { message: String },
@@ -734,6 +798,94 @@ impl LedgeraEngine {
         )
         .map(analytics_to_dto)
         .map_err(storage_error)
+    }
+
+    pub fn dashboard_snapshot(&self) -> Result<DashboardDto, LedgeraEngineError> {
+        dashboard_payload(&self.db_path)
+            .map(dashboard_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn dashboard_assets(&self, active_only: bool) -> Result<Vec<AssetDto>, LedgeraEngineError> {
+        asset_rows(&self.db_path, active_only)
+            .map(|rows| rows.into_iter().map(asset_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn dashboard_create_asset(
+        &self,
+        name: String,
+        category: String,
+        currency: String,
+        value: String,
+        snapshot_date: String,
+        description: String,
+    ) -> Result<AssetDto, LedgeraEngineError> {
+        asset_create(&self.db_path, &name, &category, &currency, &value, &snapshot_date, &description)
+            .map(asset_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn dashboard_update_asset(
+        &self,
+        asset_id: i64,
+        name: String,
+        category: String,
+        currency: String,
+        value: String,
+        snapshot_date: String,
+        description: String,
+    ) -> Result<AssetDto, LedgeraEngineError> {
+        asset_update(&self.db_path, asset_id, &name, &category, &currency, &value, &snapshot_date, &description)
+            .map(asset_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn dashboard_add_asset_snapshot(
+        &self,
+        asset_id: i64,
+        value: String,
+        snapshot_date: String,
+        note: String,
+    ) -> Result<AssetDto, LedgeraEngineError> {
+        asset_add_snapshot(&self.db_path, asset_id, &value, &snapshot_date, &note)
+            .map(asset_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn dashboard_set_asset_active(&self, asset_id: i64, active: bool) -> Result<AssetDto, LedgeraEngineError> {
+        asset_set_active(&self.db_path, asset_id, active)
+            .map(asset_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn dashboard_goals(&self) -> Result<Vec<GoalDto>, LedgeraEngineError> {
+        goal_rows(&self.db_path)
+            .map(|rows| rows.into_iter().map(goal_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn dashboard_create_goal(
+        &self,
+        title: String,
+        target_amount: String,
+        currency: String,
+        target_date: Option<String>,
+        description: String,
+    ) -> Result<GoalDto, LedgeraEngineError> {
+        let created_at = current_local_date();
+        let created_at = format!("{:04}-{:02}-{:02}", created_at.0, created_at.1, created_at.2);
+        goal_create(&self.db_path, &title, &target_amount, &currency, target_date.as_deref(), &description, &created_at)
+            .map(goal_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn dashboard_set_goal_completed(&self, goal_id: i64, completed: bool) -> Result<(), LedgeraEngineError> {
+        goal_set_completed(&self.db_path, goal_id, completed).map_err(storage_error)
+    }
+
+    pub fn dashboard_delete_goal(&self, goal_id: i64) -> Result<(), LedgeraEngineError> {
+        goal_delete(&self.db_path, goal_id).map_err(storage_error)
     }
 
     pub fn list_analytics_categories(
@@ -2245,7 +2397,65 @@ fn full_backup_result_to_dto(row: ledgera_engine_storage::FullBackupResult) -> F
         imported_rows: row.imported_rows,
         budget_rows: row.budget_rows,
         distribution_rows: row.distribution_rows,
+        asset_rows: row.asset_rows,
+        asset_snapshot_rows: row.asset_snapshot_rows,
+        goal_rows: row.goal_rows,
         checksum: row.checksum,
+    }
+}
+
+fn asset_to_dto(row: AssetPayload) -> AssetDto {
+    AssetDto {
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        currency: row.currency,
+        is_active: row.is_active,
+        created_at: row.created_at,
+        description: row.description,
+        current_value: format_money(row.current_value_base),
+        current_value_minor: row.current_value_minor,
+        current_snapshot_date: row.current_snapshot_date,
+    }
+}
+
+fn goal_to_dto(row: GoalPayload) -> GoalDto {
+    GoalDto {
+        id: row.id,
+        title: row.title,
+        target_amount: format_money(row.target_amount_minor as f64 / 100.0),
+        target_amount_minor: row.target_amount_minor,
+        currency: row.currency,
+        target_date: row.target_date,
+        is_completed: row.is_completed,
+        created_at: row.created_at,
+        description: row.description,
+        current_amount: format_money(row.current_amount_minor as f64 / 100.0),
+        current_amount_minor: row.current_amount_minor,
+    }
+}
+
+fn dashboard_to_dto(row: DashboardPayload) -> DashboardDto {
+    DashboardDto {
+        base_currency: row.base_currency,
+        net_worth: format_money(row.net_worth_base),
+        total_assets: format_money(row.total_assets_base),
+        active_asset_count: row.active_asset_count,
+        total_asset_count: row.total_asset_count,
+        completed_goal_count: row.completed_goal_count,
+        total_goal_count: row.total_goal_count,
+        capital: row.capital.into_iter().map(|point| CapitalPointDto {
+            month: point.month,
+            balance_base: format_money(point.balance_base),
+        }).collect(),
+        asset_breakdown: row.asset_breakdown.into_iter().map(|item| AssetBreakdownDto {
+            label: item.label,
+            amount_base: format_money(item.amount_base),
+            asset_count: item.asset_count,
+            color: item.color,
+        }).collect(),
+        assets: row.assets.into_iter().map(asset_to_dto).collect(),
+        goals: row.goals.into_iter().map(goal_to_dto).collect(),
     }
 }
 

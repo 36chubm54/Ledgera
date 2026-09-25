@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 const BACKUP_FORMAT: &str = "ledgera.full_backup";
-const BACKUP_VERSION: i64 = 2;
+const BACKUP_VERSION: i64 = 3;
 const MAX_BACKUP_BYTES: u64 = 50 * 1024 * 1024;
 
 const BACKUP_TABLES: &[&str] = &[
@@ -22,6 +22,9 @@ const BACKUP_TABLES: &[&str] = &[
     "record_tags",
     "debts",
     "debt_payments",
+    "assets",
+    "asset_snapshots",
+    "goals",
     "budgets",
     "distribution_items",
     "distribution_subitems",
@@ -35,12 +38,19 @@ const DISTRIBUTION_RESULT_TABLES: &[&str] = &[
     "distribution_snapshots",
 ];
 
+fn backup_section_count(object: &Map<String, JsonValue>, table: &str) -> i64 {
+    object.get(table).and_then(JsonValue::as_array).map_or(0, |rows| rows.len() as i64)
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FullBackupResult {
     pub path: String,
     pub imported_rows: i64,
     pub budget_rows: i64,
     pub distribution_rows: i64,
+    pub asset_rows: i64,
+    pub asset_snapshot_rows: i64,
+    pub goal_rows: i64,
     pub checksum: String,
 }
 
@@ -149,7 +159,7 @@ fn sections(payload: &JsonValue) -> StorageResult<&Map<String, JsonValue>> {
         return Err("Unsupported backup format".to_owned());
     }
     let version = object.get("version").and_then(JsonValue::as_i64);
-    if version != Some(1) && version != Some(BACKUP_VERSION) {
+    if !matches!(version, Some(1) | Some(2) | Some(BACKUP_VERSION)) {
         return Err("Unsupported backup version".to_owned());
     }
     Ok(object)
@@ -314,6 +324,7 @@ fn validate_relationships(object: &Map<String, JsonValue>) -> StorageResult<()> 
     let tags = row_id_set("tags", rows("tags"))?;
     let records = row_id_set("records", rows("records"))?;
     let debts = row_id_set("debts", rows("debts"))?;
+    let assets = row_id_set("assets", rows("assets"))?;
     let distribution_items = object
         .get("distribution_items")
         .and_then(JsonValue::as_array)
@@ -329,6 +340,20 @@ fn validate_relationships(object: &Map<String, JsonValue>) -> StorageResult<()> 
                 .filter_map(|row| row.as_object()?.get("month")?.as_str().map(str::to_owned))
                 .collect()
         });
+    if let Some(rows) = object
+        .get("asset_snapshots")
+        .and_then(JsonValue::as_array)
+    {
+        for (index, row) in rows.iter().enumerate() {
+            validate_reference(
+                "asset_snapshots",
+                index + 1,
+                "asset_id",
+                row.as_object().and_then(|value| value.get("asset_id")),
+                &assets,
+            )?;
+        }
+    }
     if let Some(rows) = object
         .get("distribution_subitems")
         .and_then(JsonValue::as_array)
@@ -814,6 +839,9 @@ pub fn export_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         imported_rows: total,
         budget_rows: budgets,
         distribution_rows,
+        asset_rows: backup_section_count(&object, "assets"),
+        asset_snapshot_rows: backup_section_count(&object, "asset_snapshots"),
+        goal_rows: backup_section_count(&object, "goals"),
         checksum: format!("sha256:{checksum}"),
     })
 }
@@ -900,6 +928,9 @@ pub fn preview_full_backup_json(db_path: &str, path: &str) -> StorageResult<Full
         imported_rows,
         budget_rows: budgets.len() as i64,
         distribution_rows,
+        asset_rows: backup_section_count(&object, "assets"),
+        asset_snapshot_rows: backup_section_count(&object, "asset_snapshots"),
+        goal_rows: backup_section_count(&object, "goals"),
         checksum,
     })
 }
@@ -922,6 +953,9 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "budgets",
         "tags",
         "debts",
+        "asset_snapshots",
+        "assets",
+        "goals",
         "distribution_snapshot_values",
         "distribution_snapshots",
         "distribution_subitems",
@@ -941,6 +975,9 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "mandatory_expenses",
         "records",
         "tags",
+        "assets",
+        "asset_snapshots",
+        "goals",
         "distribution_items",
         "distribution_subitems",
         "distribution_snapshots",
@@ -996,6 +1033,9 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         imported_rows,
         budget_rows: budgets.len() as i64,
         distribution_rows,
+        asset_rows: backup_section_count(&object, "assets"),
+        asset_snapshot_rows: backup_section_count(&object, "asset_snapshots"),
+        goal_rows: backup_section_count(&object, "goals"),
         checksum,
     })
 }

@@ -200,6 +200,9 @@ data class FullBackupResult(
     val importedRows: Long,
     val budgetRows: Long,
     val distributionRows: Long = 0,
+    val assetRows: Long = 0,
+    val assetSnapshotRows: Long = 0,
+    val goalRows: Long = 0,
     val checksum: String,
 )
 
@@ -584,4 +587,46 @@ data class AnalyticsSnapshot(
     val suggestedTags: List<String> = emptyList(),
     val infographicMonths: List<String> = emptyList(),
     val infographicYears: List<String> = emptyList(),
+)
+
+data class DashboardAsset(
+    val id: Long,
+    val name: String,
+    val category: String,
+    val currency: String,
+    val isActive: Boolean,
+    val createdAt: String,
+    val description: String,
+    val currentValue: String,
+    val currentValueMinor: Long,
+    val currentSnapshotDate: String?,
+)
+
+data class DashboardAssetBreakdown(val label: String, val amountBase: String, val assetCount: Long, val color: String)
+data class DashboardCapitalPoint(val month: String, val balanceBase: String)
+data class DashboardGoal(
+    val id: Long,
+    val title: String,
+    val targetAmount: String,
+    val targetAmountMinor: Long,
+    val currency: String,
+    val targetDate: String?,
+    val isCompleted: Boolean,
+    val createdAt: String,
+    val description: String,
+    val currentAmount: String,
+    val currentAmountMinor: Long,
+)
+data class DashboardSnapshot(
+    val baseCurrency: String,
+    val netWorth: String,
+    val totalAssets: String,
+    val activeAssetCount: Long,
+    val totalAssetCount: Long,
+    val completedGoalCount: Long,
+    val totalGoalCount: Long,
+    val capital: List<DashboardCapitalPoint>,
+    val assetBreakdown: List<DashboardAssetBreakdown>,
+    val assets: List<DashboardAsset>,
+    val goals: List<DashboardGoal>,
 )

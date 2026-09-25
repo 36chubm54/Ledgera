@@ -147,8 +147,8 @@ private fun BudgetCreateDialog(state: BudgetUiState, draft: BudgetDraft, viewMod
                 }
                 AutocompleteTextField(draft.scopeValue, { viewModel.updateDraft(draft.copy(scopeValue = it)) }, if (draft.scopeType == "tag") "Tag" else "Category", state.suggestions, Modifier.fillMaxWidth(), showSuggestionsOnBlank = false)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LedgerDateField(draft.startDate, { viewModel.updateDraft(draft.copy(startDate = it)) }, "From", Modifier.weight(1f), required = true, allowFuture = true)
-                    LedgerDateField(draft.endDate, { viewModel.updateDraft(draft.copy(endDate = it)) }, "To", Modifier.weight(1f), required = true, allowFuture = true)
+                    LedgerDateField(draft.startDate, { viewModel.updateDraft(draft.copy(startDate = it)) }, "From", Modifier.weight(1f), required = true, allowFuture = true, showErrorOutline = false, showErrorText = false)
+                    LedgerDateField(draft.endDate, { viewModel.updateDraft(draft.copy(endDate = it)) }, "To", Modifier.weight(1f), required = true, allowFuture = true, showErrorOutline = false, showErrorText = false)
                 }
                 OutlinedTextField(draft.limitBase, { viewModel.updateDraft(draft.copy(limitBase = it)) }, label = { Text("Limit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

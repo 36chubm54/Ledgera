@@ -304,13 +304,14 @@ private fun DistributionDialogHost(dialog: DistributionDialog, viewModel: Distri
                     onValueChange = { pct = it },
                     label = { Text("Percent") },
                     singleLine = true,
-                    isError = percentageInvalid || percentageOverLimit,
-                    supportingText = when {
-                        percentageOverLimit -> { { Text("Percent cannot be greater than 100") } }
-                        percentageInvalid -> { { Text("Enter a number from 0 to 100") } }
-                        else -> null
-                    },
                 )
+            }
+            if (name.isBlank()) {
+                Text("Name is required", color = MaterialTheme.colorScheme.error)
+            }
+            when {
+                percentageOverLimit -> Text("Percent cannot be greater than 100", color = MaterialTheme.colorScheme.error)
+                percentageInvalid -> Text("Enter a number from 0 to 100", color = MaterialTheme.colorScheme.error)
             }
         }
     }, confirmButton = { Button(onClick = {

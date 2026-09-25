@@ -82,6 +82,11 @@ import app.ledgera.model.AnalyticsCapitalPoint
 import app.ledgera.model.AnalyticsBreakdownRow
 import app.ledgera.model.AnalyticsMonthlyRow
 import app.ledgera.model.AnalyticsDailyRow
+import app.ledgera.model.DashboardAsset
+import app.ledgera.model.DashboardAssetBreakdown
+import app.ledgera.model.DashboardCapitalPoint
+import app.ledgera.model.DashboardGoal
+import app.ledgera.model.DashboardSnapshot
 import app.ledgera.model.ReportFilters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -225,6 +230,31 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     override suspend fun listAnalyticsYears(): List<String> = withContext(Dispatchers.IO) {
         engine.listAnalyticsYears()
     }
+
+    override suspend fun dashboardSnapshot(): DashboardSnapshot = withContext(Dispatchers.IO) {
+        engine.dashboardSnapshot().toDashboardSnapshot()
+    }
+    override suspend fun dashboardAssets(activeOnly: Boolean): List<DashboardAsset> = withContext(Dispatchers.IO) {
+        engine.dashboardAssets(activeOnly).map(::toDashboardAsset)
+    }
+    override suspend fun createDashboardAsset(name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = withContext(Dispatchers.IO) {
+        engine.dashboardCreateAsset(name, category, currency, value, snapshotDate, description).let(::toDashboardAsset)
+    }
+    override suspend fun updateDashboardAsset(assetId: Long, name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = withContext(Dispatchers.IO) {
+        engine.dashboardUpdateAsset(assetId, name, category, currency, value, snapshotDate, description).let(::toDashboardAsset)
+    }
+    override suspend fun addDashboardAssetSnapshot(assetId: Long, value: String, snapshotDate: String, note: String): DashboardAsset = withContext(Dispatchers.IO) {
+        engine.dashboardAddAssetSnapshot(assetId, value, snapshotDate, note).let(::toDashboardAsset)
+    }
+    override suspend fun setDashboardAssetActive(assetId: Long, active: Boolean): DashboardAsset = withContext(Dispatchers.IO) {
+        engine.dashboardSetAssetActive(assetId, active).let(::toDashboardAsset)
+    }
+    override suspend fun dashboardGoals(): List<DashboardGoal> = withContext(Dispatchers.IO) { engine.dashboardGoals().map(::toDashboardGoal) }
+    override suspend fun createDashboardGoal(title: String, targetAmount: String, currency: String, targetDate: String?, description: String): DashboardGoal = withContext(Dispatchers.IO) {
+        engine.dashboardCreateGoal(title, targetAmount, currency, targetDate, description).let(::toDashboardGoal)
+    }
+    override suspend fun setDashboardGoalCompleted(goalId: Long, completed: Boolean) = withContext(Dispatchers.IO) { engine.dashboardSetGoalCompleted(goalId, completed) }
+    override suspend fun deleteDashboardGoal(goalId: Long) = withContext(Dispatchers.IO) { engine.dashboardDeleteGoal(goalId) }
 
     override suspend fun reportWallets(): List<WalletOption> = listWallets()
     override suspend fun reportCategories(): List<String> =
@@ -972,12 +1002,27 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         MandatoryExportResult(exportedRows = exportedRows, path = path)
 
     private fun FullBackupResultDto.toModel(): FullBackupResult =
-        FullBackupResult(path = path, importedRows = importedRows, budgetRows = budgetRows, distributionRows = distributionRows, checksum = checksum)
+        FullBackupResult(path = path, importedRows = importedRows, budgetRows = budgetRows, distributionRows = distributionRows, assetRows = assetRows, assetSnapshotRows = assetSnapshotRows, goalRows = goalRows, checksum = checksum)
 
     private fun toDistributionSubitem(value: app.ledgera.engine.DistributionSubitemDto) = DistributionSubitem(value.id, value.itemId, value.name, value.sortOrder, value.pct, value.pctMinor, value.isActive, value.amountBase, value.amountMinor)
     private fun toDistributionItem(value: app.ledgera.engine.DistributionItemDto) = DistributionItem(value.id, value.name, value.groupName, value.sortOrder, value.pct, value.pctMinor, value.isActive, value.amountBase, value.amountMinor, value.subitems.map(::toDistributionSubitem))
     private fun toDistributionMonthly(value: app.ledgera.engine.DistributionMonthlyDto) = DistributionMonthlyResult(value.month, value.netIncomeBase, value.netIncomeMinor, value.isNegative, value.items.map(::toDistributionItem))
     private fun toDistributionFrozenRow(value: app.ledgera.engine.DistributionFrozenRowDto) = DistributionFrozenRow(value.month, value.columns.map { DistributionColumn(it.key, it.label, it.value) }, value.isNegative, value.autoFixed)
+    private fun toDashboardAsset(value: app.ledgera.engine.AssetDto) = DashboardAsset(value.id, value.name, value.category, value.currency, value.isActive, value.createdAt, value.description, value.currentValue, value.currentValueMinor, value.currentSnapshotDate)
+    private fun toDashboardGoal(value: app.ledgera.engine.GoalDto) = DashboardGoal(value.id, value.title, value.targetAmount, value.targetAmountMinor, value.currency, value.targetDate, value.isCompleted, value.createdAt, value.description, value.currentAmount, value.currentAmountMinor)
+    private fun app.ledgera.engine.DashboardDto.toDashboardSnapshot() = DashboardSnapshot(
+        baseCurrency = baseCurrency,
+        netWorth = netWorth,
+        totalAssets = totalAssets,
+        activeAssetCount = activeAssetCount,
+        totalAssetCount = totalAssetCount,
+        completedGoalCount = completedGoalCount,
+        totalGoalCount = totalGoalCount,
+        capital = capital.map { DashboardCapitalPoint(it.month, it.balanceBase) },
+        assetBreakdown = assetBreakdown.map { DashboardAssetBreakdown(it.label, it.amountBase, it.assetCount, it.color) },
+        assets = assets.map(::toDashboardAsset),
+        goals = goals.map(::toDashboardGoal),
+    )
 }
 
 private fun ReportFilters.toNative() = NativeReportFiltersDto(

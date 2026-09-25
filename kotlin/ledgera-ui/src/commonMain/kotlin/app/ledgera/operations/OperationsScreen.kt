@@ -548,6 +548,8 @@ private fun CreateTransferDialog(
                     onValueChange = { date = it },
                     label = "Date",
                     allowFuture = false,
+                    showErrorOutline = false,
+                    showErrorText = false,
                 )
                 OutlinedTextField(
                     modifier = dialogFieldModifier(),
@@ -824,6 +826,8 @@ private fun CreateOperationForm(
             onValueChange = onDateChanged,
             label = "Date",
             allowFuture = false,
+            showErrorOutline = false,
+            showErrorText = false,
         )
         OutlinedTextField(
             modifier = dialogFieldModifier(),
@@ -979,6 +983,8 @@ private fun EditOperationFields(
             onValueChange = { onDraftChanged(draft.copy(date = it)) },
             label = "Date",
             allowFuture = false,
+            showErrorOutline = false,
+            showErrorText = false,
         )
         OutlinedTextField(
             modifier = dialogFieldModifier(),
@@ -1077,6 +1083,8 @@ private fun EditTransferDialog(
                     onValueChange = { onDraftChanged(draft.copy(date = it)) },
                     label = "Date",
                     allowFuture = false,
+                    showErrorOutline = false,
+                    showErrorText = false,
                 )
                 OutlinedTextField(
                     modifier = dialogFieldModifier(),

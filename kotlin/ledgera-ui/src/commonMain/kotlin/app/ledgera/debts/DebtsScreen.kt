@@ -460,6 +460,8 @@ private fun CreateDebtDialog(
                     modifier = Modifier.fillMaxWidth(),
                     label = "Date",
                     allowFuture = false,
+                    showErrorOutline = false,
+                    showErrorText = false,
                 )
                 OutlinedTextField(
                     value = draft.amount,
@@ -556,6 +558,8 @@ private fun DebtActionDialog(
                     modifier = Modifier.fillMaxWidth(),
                     label = "Date",
                     allowFuture = false,
+                    showErrorOutline = false,
+                    showErrorText = false,
                 )
                 OutlinedTextField(
                     value = draft.amount,
