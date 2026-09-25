@@ -26,7 +26,9 @@ data class DistributionUiState(
     val history: List<DistributionMonthlyResult> = emptyList(),
     val frozenRows: List<DistributionFrozenRow> = emptyList(),
     val expandedIds: Set<String> = emptySet(),
+    val collapsedGroups: Set<String> = emptySet(),
     val selectedItemId: Long? = null,
+    val selectedSubitemId: Long? = null,
     val selectedMonth: String? = null,
     val validation: List<DistributionValidationError> = emptyList(),
     val loading: Boolean = false,
@@ -48,11 +50,15 @@ class DistributionViewModel(
     fun updateStartMonth(value: String) = mutableState.update { it.copy(startMonth = value, error = null) }
     fun updateEndMonth(value: String) = mutableState.update { it.copy(endMonth = value, error = null) }
     fun selectMonth(month: String) = mutableState.update { it.copy(selectedMonth = month) }
+    fun selectItem(itemId: Long) = mutableState.update { it.copy(selectedItemId = itemId, selectedSubitemId = null) }
+    fun selectSubitem(itemId: Long, subitemId: Long) = mutableState.update { it.copy(selectedItemId = itemId, selectedSubitemId = subitemId) }
     fun toggleExpanded(id: String) = mutableState.update {
         it.copy(
             expandedIds = if (id in it.expandedIds) it.expandedIds - id else it.expandedIds + id,
-            selectedItemId = id.removePrefix("item-").toLongOrNull() ?: it.selectedItemId,
         )
+    }
+    fun toggleGroup(group: String) = mutableState.update {
+        it.copy(collapsedGroups = if (group in it.collapsedGroups) it.collapsedGroups - group else it.collapsedGroups + group)
     }
 
     fun refresh() {

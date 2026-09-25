@@ -7,6 +7,7 @@ use ledgera_engine_core::{minor_to_money_value, normalize_currency_code, to_mino
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 
 const FULL_PCT_MINOR: i64 = 10_000;
+const MINOR_UNITS_PER_MAJOR: i64 = 100;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DistributionValidationRow {
@@ -174,8 +175,18 @@ pub struct DebtPaymentRequestPayload {
 fn apply_pct(amount_minor: i64, pct_minor: i64) -> i64 {
     let numerator = i128::from(amount_minor) * i128::from(pct_minor);
     let sign = if numerator < 0 { -1 } else { 1 };
-    let rounded_abs =
-        (numerator.abs() + i128::from(FULL_PCT_MINOR / 2)) / i128::from(FULL_PCT_MINOR);
+    let denominator = i128::from(FULL_PCT_MINOR) * i128::from(MINOR_UNITS_PER_MAJOR);
+    let rounded_major_abs = (numerator.abs() + denominator / 2) / denominator
+        * i128::from(MINOR_UNITS_PER_MAJOR);
+    (rounded_major_abs * i128::from(sign)) as i64
+}
+
+fn round_money_minor_to_whole(value_minor: i64) -> i64 {
+    let sign = if value_minor < 0 { -1 } else { 1 };
+    let rounded_abs = (i128::from(value_minor).abs()
+        + i128::from(MINOR_UNITS_PER_MAJOR / 2))
+        / i128::from(MINOR_UNITS_PER_MAJOR)
+        * i128::from(MINOR_UNITS_PER_MAJOR);
     (rounded_abs * i128::from(sign)) as i64
 }
 
@@ -794,7 +805,8 @@ pub fn distribution_net_income_for_period(
                 |row| row.get::<_, i64>(0),
             )
             .map_err(sqlite_err)?;
-        Ok((minor_to_money_value(net_minor), net_minor))
+        let rounded_net_minor = round_money_minor_to_whole(net_minor);
+        Ok((minor_to_money_value(rounded_net_minor), rounded_net_minor))
     })
 }
 
@@ -1068,7 +1080,36 @@ pub fn distribution_item_rows(
                 })
             })
             .map_err(sqlite_err)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
+        let mut items = rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)?;
+        for item in &mut items {
+            let mut sub_stmt = conn
+                .prepare(
+                    "SELECT id, item_id, name, sort_order, pct, pct_minor, is_active
+                     FROM distribution_subitems
+                     WHERE item_id = ?
+                     ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC",
+                )
+                .map_err(sqlite_err)?;
+            let sub_rows = sub_stmt
+                .query_map([item.id], |row| {
+                    Ok(DistributionSubitemPayload {
+                        id: row.get(0)?,
+                        item_id: row.get(1)?,
+                        name: row.get(2)?,
+                        sort_order: row.get(3)?,
+                        pct: row.get(4)?,
+                        pct_minor: row.get(5)?,
+                        is_active: row.get(6)?,
+                        amount_base: 0.0,
+                        amount_minor: 0,
+                    })
+                })
+                .map_err(sqlite_err)?;
+            item.subitems = sub_rows
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(sqlite_err)?;
+        }
+        Ok(items)
     })
 }
 
@@ -2795,9 +2836,12 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
-    fn apply_pct_rounds_half_up_for_positive_and_negative_values() {
-        assert_eq!(apply_pct(101, 5000), 51);
-        assert_eq!(apply_pct(-101, 5000), -51);
+    fn distribution_rounds_to_whole_money_units_half_up() {
+        assert_eq!(apply_pct(10_100, 5000), 5_100);
+        assert_eq!(apply_pct(-10_100, 5000), -5_100);
+        assert_eq!(apply_pct(10_049, 5000), 5_000);
+        assert_eq!(round_money_minor_to_whole(12_695_250), 12_695_300);
+        assert_eq!(round_money_minor_to_whole(-12_695_250), -12_695_300);
     }
 
     fn test_db_path(name: &str) -> String {
