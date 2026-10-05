@@ -77,6 +77,7 @@ private fun runApplication(args: Array<String>) = application {
                 if (dbPath.isNullOrBlank()) {
                     Text("Start with --db-path <ledger.db>.")
                 } else {
+                    File(dbPath).parentFile?.mkdirs()
                     val newDatabase = !File(dbPath).exists()
                     val engine = RustEngineAdapter(dbPath)
                     var showInitialBalanceDialog by remember { mutableStateOf(newDatabase) }

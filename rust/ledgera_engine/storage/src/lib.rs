@@ -464,6 +464,13 @@ const INITIAL_SCHEMA: &str = include_str!("../../../../db/schema.sql");
 
 /// Create a missing database and initialize the current base schema.
 pub fn initialize_database(db_path: &str) -> StorageResult<()> {
+    if let Some(parent) = Path::new(db_path)
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create database directory {}: {error}", parent.display()))?;
+    }
     let conn = open_sqlite_connection(db_path)?;
     conn.execute_batch(INITIAL_SCHEMA).map_err(sqlite_err)?;
     conn.execute(
