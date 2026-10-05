@@ -602,6 +602,8 @@ data class DashboardAsset(
     val currentSnapshotDate: String?,
 )
 
+data class DashboardAssetSnapshotUpdate(val assetId: Long, val value: String, val note: String)
+
 data class DashboardAssetBreakdown(val label: String, val amountBase: String, val assetCount: Long, val color: String)
 data class DashboardCapitalPoint(val month: String, val balanceBase: String)
 data class DashboardGoal(

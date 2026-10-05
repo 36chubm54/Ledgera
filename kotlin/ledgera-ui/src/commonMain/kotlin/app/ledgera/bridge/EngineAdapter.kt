@@ -50,6 +50,7 @@ import app.ledgera.model.DistributionValidationError
 import app.ledgera.model.DashboardAsset
 import app.ledgera.model.DashboardGoal
 import app.ledgera.model.DashboardSnapshot
+import app.ledgera.model.DashboardAssetSnapshotUpdate
 
 interface RuntimeEngine {
     suspend fun status(): EngineStatus
@@ -80,6 +81,7 @@ interface DashboardEngine {
     suspend fun createDashboardAsset(name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = error("Dashboard is unavailable")
     suspend fun updateDashboardAsset(assetId: Long, name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = error("Dashboard is unavailable")
     suspend fun addDashboardAssetSnapshot(assetId: Long, value: String, snapshotDate: String, note: String): DashboardAsset = error("Dashboard is unavailable")
+    suspend fun addDashboardAssetSnapshots(updates: List<DashboardAssetSnapshotUpdate>, snapshotDate: String): List<DashboardAsset> = error("Dashboard is unavailable")
     suspend fun setDashboardAssetActive(assetId: Long, active: Boolean): DashboardAsset = error("Dashboard is unavailable")
     suspend fun dashboardGoals(): List<DashboardGoal> = emptyList()
     suspend fun createDashboardGoal(title: String, targetAmount: String, currency: String, targetDate: String?, description: String): DashboardGoal = error("Dashboard is unavailable")

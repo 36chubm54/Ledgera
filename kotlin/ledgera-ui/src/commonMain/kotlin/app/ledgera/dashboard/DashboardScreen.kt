@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Dp
@@ -54,6 +55,7 @@ import app.ledgera.model.DashboardAsset
 import app.ledgera.model.DashboardAssetBreakdown
 import app.ledgera.model.DashboardCapitalPoint
 import app.ledgera.model.DashboardGoal
+import app.ledgera.model.DashboardAssetSnapshotUpdate
 import app.ledgera.ui.LedgerDateField
 import app.ledgera.validation.DateValidation
 import app.ledgera.validation.currentLedgerDate
@@ -161,11 +163,11 @@ private fun CapitalCard(points: List<DashboardCapitalPoint>) {
             else {
                 CapitalChart(points, { hoveredIndex = it }, Modifier.fillMaxWidth().weight(1f))
                 Box(Modifier.fillMaxWidth().height(28.dp)) {
-                    hoveredIndex?.let { index ->
+                    hoveredIndex?.let { index -> points.getOrNull(index)?.let { point ->
                         Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .94f)) {
-                            Text("${points[index].month}: ${points[index].balanceBase}", Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                            Text("${point.month}: ${point.balanceBase}", Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                         }
-                    }
+                    } }
                 }
             }
         }
@@ -175,7 +177,11 @@ private fun CapitalCard(points: List<DashboardCapitalPoint>) {
 @Composable
 private fun CapitalChart(points: List<DashboardCapitalPoint>, onHover: (Int?) -> Unit, modifier: Modifier) {
     val values = points.map { it.balanceBase.toDoubleOrNull() ?: 0.0 }
-    val max = values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+    val dataMin = values.minOrNull() ?: 0.0
+    val dataMax = values.maxOrNull() ?: 0.0
+    val padding = maxOf((dataMax - dataMin) * .12, kotlin.math.abs(dataMin) * .02, kotlin.math.abs(dataMax) * .02, 1.0)
+    val chartMin = dataMin - padding
+    val chartSpan = (dataMax + padding - chartMin).coerceAtLeast(1.0)
     BoxWithConstraints(modifier) {
         val scrollState = rememberScrollState()
         val contentWidth = maxOf(maxWidth, (points.size * 96).dp)
@@ -187,8 +193,11 @@ private fun CapitalChart(points: List<DashboardCapitalPoint>, onHover: (Int?) ->
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val position = event.changes.firstOrNull()?.position
-                                onHover(position?.let {
-                                    ((it.x / size.width) * (points.lastIndex.coerceAtLeast(0))).roundToInt().coerceIn(0, points.lastIndex.coerceAtLeast(0))
+                                if (event.type == PointerEventType.Exit) onHover(null)
+                                else onHover(position?.let {
+                                    val inset = 28f
+                                    val usableWidth = (size.width - inset * 2f).coerceAtLeast(1f)
+                                    (((it.x - inset) / usableWidth) * points.lastIndex.coerceAtLeast(0)).roundToInt().coerceIn(0, points.lastIndex.coerceAtLeast(0))
                                 })
                             }
                         }
@@ -199,7 +208,7 @@ private fun CapitalChart(points: List<DashboardCapitalPoint>, onHover: (Int?) ->
                     val coords = values.mapIndexed { index, value ->
                         val x = if (values.size == 1) size.width / 2f
                         else horizontalInset + index.toFloat() / values.lastIndex * usableWidth
-                        Offset(x, size.height - 24f - (size.height - 42f) * (value / max).toFloat())
+                        Offset(x, size.height - 24f - (size.height - 42f) * ((value - chartMin) / chartSpan).toFloat())
                     }
                     drawLine(Color.Gray.copy(alpha = .45f), Offset(horizontalInset, size.height - 24f), Offset(size.width - horizontalInset, size.height - 24f), 1f)
                     coords.zipWithNext().forEach { (a, b) -> drawLine(Color(0xFF2E8B70), a, b, 4f, StrokeCap.Round) }
@@ -588,7 +597,7 @@ private fun AssetRefreshDialog(viewModel: DashboardViewModel, close: () -> Unit)
                 onClick = {
                     DateValidation.formatGuiDateToYmd(date)?.let { snapshotDate ->
                         viewModel.saveAssetSnapshots(
-                            rows.map { row -> DashboardSnapshotUpdate(row.asset.id, row.value, row.note) },
+                            rows.map { row -> DashboardAssetSnapshotUpdate(row.asset.id, row.value, row.note) },
                             snapshotDate,
                         )
                         close()

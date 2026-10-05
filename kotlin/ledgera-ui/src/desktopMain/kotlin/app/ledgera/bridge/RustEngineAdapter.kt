@@ -10,6 +10,7 @@ import app.ledgera.engine.CreateDistributionSubitemRequest as NativeCreateDistri
 import app.ledgera.engine.CreateTransferRequest as NativeCreateTransferRequest
 import app.ledgera.engine.CreateWalletRequest as NativeCreateWalletRequest
 import app.ledgera.engine.LedgeraEngine
+import app.ledgera.engine.DashboardAssetSnapshotUpdate as NativeDashboardAssetSnapshotUpdate
 import app.ledgera.engine.FullBackupResultDto
 import app.ledgera.engine.MandatoryExportResultDto
 import app.ledgera.engine.MandatoryImportResultDto
@@ -83,6 +84,7 @@ import app.ledgera.model.AnalyticsBreakdownRow
 import app.ledgera.model.AnalyticsMonthlyRow
 import app.ledgera.model.AnalyticsDailyRow
 import app.ledgera.model.DashboardAsset
+import app.ledgera.model.DashboardAssetSnapshotUpdate
 import app.ledgera.model.DashboardAssetBreakdown
 import app.ledgera.model.DashboardCapitalPoint
 import app.ledgera.model.DashboardGoal
@@ -245,6 +247,12 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     }
     override suspend fun addDashboardAssetSnapshot(assetId: Long, value: String, snapshotDate: String, note: String): DashboardAsset = withContext(Dispatchers.IO) {
         engine.dashboardAddAssetSnapshot(assetId, value, snapshotDate, note).let(::toDashboardAsset)
+    }
+    override suspend fun addDashboardAssetSnapshots(updates: List<DashboardAssetSnapshotUpdate>, snapshotDate: String): List<DashboardAsset> = withContext(Dispatchers.IO) {
+        engine.dashboardAddAssetSnapshots(
+            updates.map { update -> NativeDashboardAssetSnapshotUpdate(update.assetId, update.value, update.note) },
+            snapshotDate,
+        ).map(::toDashboardAsset)
     }
     override suspend fun setDashboardAssetActive(assetId: Long, active: Boolean): DashboardAsset = withContext(Dispatchers.IO) {
         engine.dashboardSetAssetActive(assetId, active).let(::toDashboardAsset)

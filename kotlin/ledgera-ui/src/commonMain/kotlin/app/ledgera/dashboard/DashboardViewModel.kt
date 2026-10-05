@@ -3,6 +3,7 @@ package app.ledgera.dashboard
 import app.ledgera.bridge.DashboardEngine
 import app.ledgera.model.DashboardAsset
 import app.ledgera.model.DashboardSnapshot
+import app.ledgera.model.DashboardAssetSnapshotUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,16 +25,12 @@ data class DashboardUiState(
     val notice: String? = null,
 )
 
-data class DashboardSnapshotUpdate(
-    val assetId: Long,
-    val value: String,
-    val note: String,
-)
-
 class DashboardViewModel(
     private val engine: DashboardEngine,
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
+    scope: CoroutineScope? = null,
 ) {
+    private val ownsScope = scope == null
+    private val workScope = scope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val mutableState = MutableStateFlow(DashboardUiState(loading = true))
     private var refreshJob: Job? = null
     private var generation = 0L
@@ -45,7 +42,7 @@ class DashboardViewModel(
         refreshJob?.cancel()
         val requestGeneration = ++generation
         mutableState.update { it.copy(loading = true, error = null, notice = null) }
-        refreshJob = scope.launch {
+        refreshJob = workScope.launch {
             runCatching { engine.dashboardSnapshot() }
                 .onSuccess { snapshot ->
                     if (requestGeneration == generation) mutableState.update { current ->
@@ -77,10 +74,8 @@ class DashboardViewModel(
     fun addAssetSnapshot(assetId: Long, value: String, date: String, note: String) = mutate {
         engine.addDashboardAssetSnapshot(assetId, value, date, note)
     }
-    fun saveAssetSnapshots(updates: List<DashboardSnapshotUpdate>, date: String) = mutate {
-        updates.filter { it.value.isNotBlank() }.forEach { update ->
-            engine.addDashboardAssetSnapshot(update.assetId, update.value, date, update.note)
-        }
+    fun saveAssetSnapshots(updates: List<DashboardAssetSnapshotUpdate>, date: String) = mutate {
+        engine.addDashboardAssetSnapshots(updates.filter { it.value.isNotBlank() }, date)
     }
     fun setAssetActive(assetId: Long, active: Boolean) = mutate { engine.setDashboardAssetActive(assetId, active) }
     fun createGoal(title: String, target: String, currency: String, date: String?, description: String) = mutate {
@@ -90,10 +85,15 @@ class DashboardViewModel(
     fun deleteGoal(goalId: Long) = mutate { engine.deleteDashboardGoal(goalId) }
 
     private fun mutate(action: suspend () -> Any) {
-        scope.launch {
+        workScope.launch {
             runCatching { action() }
                 .onSuccess { mutableState.update { it.copy(notice = "Dashboard updated") }; refresh() }
                 .onFailure { error -> mutableState.update { it.copy(error = error.message ?: "Dashboard update failed") } }
         }
+    }
+
+    fun close() {
+        refreshJob?.cancel()
+        if (ownsScope) workScope.cancel()
     }
 }

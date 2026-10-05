@@ -1,49 +1,48 @@
 use ledgera_engine_storage::{
-    analytics_generate, analytics_list_categories, analytics_list_months, analytics_list_tags,
-    analytics_list_years, audit_run_for_date, base_currency_code, budget_create, budget_delete,
+    AnalyticsBreakdownRow, AnalyticsFilters, AnalyticsSnapshot, AssetPayload,
+    AssetSnapshotUpdatePayload, AuditFindingRow, BudgetCreatePayload, BudgetPayload,
+    BudgetResultPayload, DashboardPayload, DebtCreatePayload, DebtPayload, DebtPaymentPayload,
+    DebtPaymentRequestPayload, DistributionItemPayload, DistributionMonthlyPayload,
+    DistributionSubitemPayload, FrozenDistributionPayload, GoalPayload,
+    MandatoryAddToRecordsPayload, MandatoryAutoPayResult, MandatoryExpenseRow,
+    MandatoryExportResult, MandatoryImportResult, MandatoryTemplateCreatePayload,
+    MandatoryTemplateUpdatePayload, OperationDeleteResult, OperationExportResult,
+    OperationImportResult, RecordFilterPayload, RecordRow, ReportCategoryRow, ReportDebtRow,
+    ReportExportResult, ReportFilters, ReportMonthlyRow, ReportOperationRow, ReportResult,
+    ReportTagRow, StandaloneRecordCreatePayload, StandaloneRecordUpdatePayload,
+    TagColorAssignment as StorageTagColorAssignment, TransferCreatePayload, TransferRow,
+    TransferUpdatePayload, WalletBalanceRow, WalletCreatePayload, WalletRow, analytics_generate,
+    analytics_list_categories, analytics_list_months, analytics_list_tags, analytics_list_years,
+    asset_add_snapshot, asset_add_snapshots_bulk, asset_create, asset_rows, asset_set_active,
+    asset_update, audit_run_for_date, base_currency_code, budget_create, budget_delete,
     budget_results, budget_rows, budget_update_limit, create_standalone_record_with_tag_colors,
-    create_transfer, create_wallet, current_local_date, debt_close_validated, debt_create,
-    debt_delete, debt_delete_payment, debt_payment_rows, debt_register_payment_validated,
-    debt_register_write_off_validated, debt_rows, delete_all_operations,
-    delete_operations_selection, delete_standalone_record, delete_transfer, delete_wallet,
-    distinct_record_categories, distinct_record_descriptions, distribution_available_months,
-    distribution_create_item, distribution_create_subitem, distribution_delete_item,
-    distribution_delete_subitem, distribution_freeze_closed_months, distribution_frozen_rows,
-    distribution_history_months, distribution_is_month_auto_fixed, distribution_is_month_fixed,
-    distribution_item_rows, distribution_monthly_payload, distribution_subitem_rows,
-    distribution_unfreeze_month, distribution_update_item, distribution_update_item_name,
-    distribution_update_item_order, distribution_update_item_pct, distribution_update_subitem,
-    distribution_update_subitem_name,
+    create_transfer, create_wallet, current_local_date, dashboard_payload, debt_close_validated,
+    debt_create, debt_delete, debt_delete_payment, debt_payment_rows,
+    debt_register_payment_validated, debt_register_write_off_validated, debt_rows,
+    delete_all_operations, delete_operations_selection, delete_standalone_record, delete_transfer,
+    delete_wallet, distinct_record_categories, distinct_record_descriptions,
+    distribution_available_months, distribution_create_item, distribution_create_subitem,
+    distribution_delete_item, distribution_delete_subitem, distribution_freeze_closed_months,
+    distribution_frozen_rows, distribution_history_months, distribution_is_month_auto_fixed,
+    distribution_is_month_fixed, distribution_item_rows, distribution_monthly_payload,
+    distribution_subitem_rows, distribution_unfreeze_month, distribution_update_item,
+    distribution_update_item_name, distribution_update_item_order, distribution_update_item_pct,
+    distribution_update_subitem, distribution_update_subitem_name,
     distribution_update_subitem_order, distribution_update_subitem_pct,
     distribution_validate_structure, distribution_write_frozen_row, export_full_backup_json,
     export_mandatory_csv, export_mandatory_xlsx, export_records_csv, export_records_xlsx,
-    filtered_record_list_rows, import_full_backup_json, import_mandatory_csv,
-    import_mandatory_xlsx, import_records_csv, import_records_xlsx, initialize_database,
-    mandatory_add_to_records, mandatory_apply_auto_payments, mandatory_expense_row,
-    mandatory_expense_rows, mandatory_template_create, mandatory_template_delete,
-    mandatory_template_delete_all, mandatory_template_update, normalize_tag_colors,
-    operation_suggestions, preview_full_backup_json, preview_import_mandatory_csv,
-    preview_import_mandatory_xlsx, preview_import_records_csv, preview_import_records_xlsx,
-    report_export_csv, report_export_pdf, report_export_xlsx, report_generate,
-    set_system_wallet_details, set_system_wallet_initial_balance, standalone_record_get_row,
-    tag_color_palette, tag_color_rows, tag_names, transfer_get_row,
-    update_standalone_record_with_tag_colors, update_transfer, wallet_balance_row,
-    wallet_balance_rows, wallet_list_rows, AnalyticsBreakdownRow, AnalyticsFilters,
-    AnalyticsSnapshot, AuditFindingRow, BudgetCreatePayload, BudgetPayload, BudgetResultPayload,
-    DebtCreatePayload, DebtPayload, DebtPaymentPayload, DebtPaymentRequestPayload,
-    DistributionItemPayload, DistributionMonthlyPayload, DistributionSubitemPayload,
-    FrozenDistributionPayload, MandatoryAddToRecordsPayload, MandatoryAutoPayResult,
-    MandatoryExpenseRow, MandatoryExportResult, MandatoryImportResult,
-    MandatoryTemplateCreatePayload, MandatoryTemplateUpdatePayload, OperationDeleteResult,
-    OperationExportResult, OperationImportResult, RecordFilterPayload, RecordRow,
-    ReportCategoryRow, ReportDebtRow, ReportExportResult, ReportFilters, ReportMonthlyRow,
-    ReportOperationRow, ReportResult, ReportTagRow, StandaloneRecordCreatePayload,
-    StandaloneRecordUpdatePayload, TagColorAssignment as StorageTagColorAssignment,
-    TransferCreatePayload, TransferRow, TransferUpdatePayload, WalletBalanceRow,
-    WalletCreatePayload, WalletRow,
-    asset_add_snapshot, asset_create, asset_rows, asset_set_active, asset_update, dashboard_payload,
-    goal_create, goal_delete, goal_rows, goal_set_completed, AssetPayload, DashboardPayload,
-    GoalPayload,
+    filtered_record_list_rows, goal_create, goal_delete, goal_rows, goal_set_completed,
+    import_full_backup_json, import_mandatory_csv, import_mandatory_xlsx, import_records_csv,
+    import_records_xlsx, initialize_database, mandatory_add_to_records,
+    mandatory_apply_auto_payments, mandatory_expense_row, mandatory_expense_rows,
+    mandatory_template_create, mandatory_template_delete, mandatory_template_delete_all,
+    mandatory_template_update, normalize_tag_colors, operation_suggestions,
+    preview_full_backup_json, preview_import_mandatory_csv, preview_import_mandatory_xlsx,
+    preview_import_records_csv, preview_import_records_xlsx, report_export_csv, report_export_pdf,
+    report_export_xlsx, report_generate, set_system_wallet_details,
+    set_system_wallet_initial_balance, standalone_record_get_row, tag_color_palette,
+    tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
+    update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
 };
 use std::fmt;
 use std::path::Path;
@@ -670,6 +669,13 @@ pub struct AssetDto {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct DashboardAssetSnapshotUpdate {
+    pub asset_id: i64,
+    pub value: String,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AssetBreakdownDto {
     pub label: String,
     pub amount_base: String,
@@ -821,9 +827,17 @@ impl LedgeraEngine {
         snapshot_date: String,
         description: String,
     ) -> Result<AssetDto, LedgeraEngineError> {
-        asset_create(&self.db_path, &name, &category, &currency, &value, &snapshot_date, &description)
-            .map(asset_to_dto)
-            .map_err(storage_error)
+        asset_create(
+            &self.db_path,
+            &name,
+            &category,
+            &currency,
+            &value,
+            &snapshot_date,
+            &description,
+        )
+        .map(asset_to_dto)
+        .map_err(storage_error)
     }
 
     pub fn dashboard_update_asset(
@@ -836,9 +850,18 @@ impl LedgeraEngine {
         snapshot_date: String,
         description: String,
     ) -> Result<AssetDto, LedgeraEngineError> {
-        asset_update(&self.db_path, asset_id, &name, &category, &currency, &value, &snapshot_date, &description)
-            .map(asset_to_dto)
-            .map_err(storage_error)
+        asset_update(
+            &self.db_path,
+            asset_id,
+            &name,
+            &category,
+            &currency,
+            &value,
+            &snapshot_date,
+            &description,
+        )
+        .map(asset_to_dto)
+        .map_err(storage_error)
     }
 
     pub fn dashboard_add_asset_snapshot(
@@ -853,7 +876,29 @@ impl LedgeraEngine {
             .map_err(storage_error)
     }
 
-    pub fn dashboard_set_asset_active(&self, asset_id: i64, active: bool) -> Result<AssetDto, LedgeraEngineError> {
+    pub fn dashboard_add_asset_snapshots(
+        &self,
+        updates: Vec<DashboardAssetSnapshotUpdate>,
+        snapshot_date: String,
+    ) -> Result<Vec<AssetDto>, LedgeraEngineError> {
+        let payloads = updates
+            .into_iter()
+            .map(|update| AssetSnapshotUpdatePayload {
+                asset_id: update.asset_id,
+                value: update.value,
+                note: update.note,
+            })
+            .collect::<Vec<_>>();
+        asset_add_snapshots_bulk(&self.db_path, &payloads, &snapshot_date)
+            .map(|rows| rows.into_iter().map(asset_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn dashboard_set_asset_active(
+        &self,
+        asset_id: i64,
+        active: bool,
+    ) -> Result<AssetDto, LedgeraEngineError> {
         asset_set_active(&self.db_path, asset_id, active)
             .map(asset_to_dto)
             .map_err(storage_error)
@@ -874,13 +919,28 @@ impl LedgeraEngine {
         description: String,
     ) -> Result<GoalDto, LedgeraEngineError> {
         let created_at = current_local_date();
-        let created_at = format!("{:04}-{:02}-{:02}", created_at.0, created_at.1, created_at.2);
-        goal_create(&self.db_path, &title, &target_amount, &currency, target_date.as_deref(), &description, &created_at)
-            .map(goal_to_dto)
-            .map_err(storage_error)
+        let created_at = format!(
+            "{:04}-{:02}-{:02}",
+            created_at.0, created_at.1, created_at.2
+        );
+        goal_create(
+            &self.db_path,
+            &title,
+            &target_amount,
+            &currency,
+            target_date.as_deref(),
+            &description,
+            &created_at,
+        )
+        .map(goal_to_dto)
+        .map_err(storage_error)
     }
 
-    pub fn dashboard_set_goal_completed(&self, goal_id: i64, completed: bool) -> Result<(), LedgeraEngineError> {
+    pub fn dashboard_set_goal_completed(
+        &self,
+        goal_id: i64,
+        completed: bool,
+    ) -> Result<(), LedgeraEngineError> {
         goal_set_completed(&self.db_path, goal_id, completed).map_err(storage_error)
     }
 
@@ -1417,9 +1477,15 @@ impl LedgeraEngine {
         name: String,
         pct: f64,
     ) -> Result<DistributionItemDto, LedgeraEngineError> {
-        distribution_update_item(&self.db_path, item_id, &name, pct, (pct * 100.0).round() as i64)
-            .map(distribution_item_to_dto)
-            .map_err(storage_error)
+        distribution_update_item(
+            &self.db_path,
+            item_id,
+            &name,
+            pct,
+            (pct * 100.0).round() as i64,
+        )
+        .map(distribution_item_to_dto)
+        .map_err(storage_error)
     }
 
     pub fn distribution_update_item_name(
@@ -2444,16 +2510,24 @@ fn dashboard_to_dto(row: DashboardPayload) -> DashboardDto {
         total_asset_count: row.total_asset_count,
         completed_goal_count: row.completed_goal_count,
         total_goal_count: row.total_goal_count,
-        capital: row.capital.into_iter().map(|point| CapitalPointDto {
-            month: point.month,
-            balance_base: format_money(point.balance_base),
-        }).collect(),
-        asset_breakdown: row.asset_breakdown.into_iter().map(|item| AssetBreakdownDto {
-            label: item.label,
-            amount_base: format_money(item.amount_base),
-            asset_count: item.asset_count,
-            color: item.color,
-        }).collect(),
+        capital: row
+            .capital
+            .into_iter()
+            .map(|point| CapitalPointDto {
+                month: point.month,
+                balance_base: format_money(point.balance_base),
+            })
+            .collect(),
+        asset_breakdown: row
+            .asset_breakdown
+            .into_iter()
+            .map(|item| AssetBreakdownDto {
+                label: item.label,
+                amount_base: format_money(item.amount_base),
+                asset_count: item.asset_count,
+                color: item.color,
+            })
+            .collect(),
         assets: row.assets.into_iter().map(asset_to_dto).collect(),
         goals: row.goals.into_iter().map(goal_to_dto).collect(),
     }
@@ -2844,9 +2918,11 @@ mod tests {
                 .name,
             "Personal wallet"
         );
-        assert!(engine
-            .set_system_wallet_details("x".repeat(101), "123.45".to_owned())
-            .is_err());
+        assert!(
+            engine
+                .set_system_wallet_details("x".repeat(101), "123.45".to_owned())
+                .is_err()
+        );
         assert_eq!(
             engine
                 .set_system_wallet_initial_balance("123.45".to_owned())
@@ -3068,9 +3144,11 @@ mod tests {
                 .unwrap(),
             vec!["Updated"]
         );
-        assert!(engine
-            .list_record_descriptions(Some("transfer".to_owned()))
-            .is_err());
+        assert!(
+            engine
+                .list_record_descriptions(Some("transfer".to_owned()))
+                .is_err()
+        );
         let suggestions = engine.operation_suggestions().unwrap();
         assert_eq!(suggestions.tags, vec!["food", "work"]);
         assert_eq!(suggestions.income_categories, vec!["Bonus"]);
@@ -3081,10 +3159,12 @@ mod tests {
 
         assert!(engine.delete_record(created.id).unwrap());
         assert_eq!(engine.get_record(created.id).unwrap(), None);
-        assert!(engine
-            .list_records(RecordFilterDto::default())
-            .unwrap()
-            .is_empty());
+        assert!(
+            engine
+                .list_records(RecordFilterDto::default())
+                .unwrap()
+                .is_empty()
+        );
         fs::remove_file(db_path).ok();
     }
 
@@ -3146,9 +3226,11 @@ mod tests {
                 tags: vec![],
             })
             .unwrap_err();
-        assert!(create_error
-            .to_string()
-            .contains("Date month must be between 01 and 12"));
+        assert!(
+            create_error
+                .to_string()
+                .contains("Date month must be between 01 and 12")
+        );
 
         let created = engine
             .create_record(CreateRecordRequest {
@@ -3181,9 +3263,11 @@ mod tests {
                 },
             )
             .unwrap_err();
-        assert!(update_error
-            .to_string()
-            .contains("Date day must be between 01 and 28"));
+        assert!(
+            update_error
+                .to_string()
+                .contains("Date day must be between 01 and 28")
+        );
         fs::remove_file(db_path).ok();
     }
 
@@ -3206,9 +3290,11 @@ mod tests {
                 tags: vec![],
             })
             .unwrap_err();
-        assert!(create_error
-            .to_string()
-            .contains("Date cannot be in the future"));
+        assert!(
+            create_error
+                .to_string()
+                .contains("Date cannot be in the future")
+        );
 
         let created = engine
             .create_record(CreateRecordRequest {
@@ -3241,9 +3327,11 @@ mod tests {
                 },
             )
             .unwrap_err();
-        assert!(update_error
-            .to_string()
-            .contains("Date cannot be in the future"));
+        assert!(
+            update_error
+                .to_string()
+                .contains("Date cannot be in the future")
+        );
         fs::remove_file(db_path).ok();
     }
 
@@ -3266,9 +3354,11 @@ mod tests {
                 tags: vec![],
             })
             .unwrap_err();
-        assert!(create_error
-            .to_string()
-            .contains("Currency code must contain 3 letters"));
+        assert!(
+            create_error
+                .to_string()
+                .contains("Currency code must contain 3 letters")
+        );
 
         let created = engine
             .create_record(CreateRecordRequest {
@@ -3301,9 +3391,11 @@ mod tests {
                 },
             )
             .unwrap_err();
-        assert!(update_error
-            .to_string()
-            .contains("Currency code must contain 3 letters"));
+        assert!(
+            update_error
+                .to_string()
+                .contains("Currency code must contain 3 letters")
+        );
         fs::remove_file(db_path).ok();
     }
 
@@ -3428,11 +3520,13 @@ mod tests {
 
         assert!(engine.delete_transfer(result.transfer_id).unwrap());
         assert!(engine.get_transfer(result.transfer_id).unwrap().is_none());
-        assert!(engine
-            .list_records(RecordFilterDto::default())
-            .unwrap()
-            .iter()
-            .all(|record| record.transfer_id != Some(result.transfer_id)));
+        assert!(
+            engine
+                .list_records(RecordFilterDto::default())
+                .unwrap()
+                .iter()
+                .all(|record| record.transfer_id != Some(result.transfer_id))
+        );
 
         let error = engine.delete_transfer(result.transfer_id).unwrap_err();
         assert!(error.to_string().contains("Transfer not found"));
@@ -3483,10 +3577,12 @@ mod tests {
                 skipped_records: 0,
             }
         );
-        assert!(engine
-            .list_records(RecordFilterDto::default())
-            .unwrap()
-            .is_empty());
+        assert!(
+            engine
+                .list_records(RecordFilterDto::default())
+                .unwrap()
+                .is_empty()
+        );
 
         engine
             .create_record(CreateRecordRequest {
@@ -3512,10 +3608,12 @@ mod tests {
                 skipped_records: 0,
             }
         );
-        assert!(engine
-            .list_records(RecordFilterDto::default())
-            .unwrap()
-            .is_empty());
+        assert!(
+            engine
+                .list_records(RecordFilterDto::default())
+                .unwrap()
+                .is_empty()
+        );
         fs::remove_file(db_path).ok();
     }
 
@@ -3708,14 +3806,18 @@ mod tests {
         assert_eq!(linked_type, "income");
         drop(conn);
 
-        assert!(engine
-            .delete_record(linked_record_id)
-            .expect("delete debt-linked record"));
+        assert!(
+            engine
+                .delete_record(linked_record_id)
+                .expect("delete debt-linked record")
+        );
         assert!(engine.get_record(linked_record_id).unwrap().is_none());
-        assert!(engine
-            .list_debt_payments(debt.id)
-            .expect("list debt payments")
-            .is_empty());
+        assert!(
+            engine
+                .list_debt_payments(debt.id)
+                .expect("list debt payments")
+                .is_empty()
+        );
         fs::remove_file(db_path).ok();
     }
 
@@ -3804,17 +3906,19 @@ mod tests {
         assert_eq!(payment.operation_type, "debt_repay");
         assert_eq!(payment.principal_paid, "20.00");
         assert!(payment.record_id.is_some());
-        assert!(engine
-            .register_debt_payment(RegisterDebtPaymentRequest {
-                debt_id: debt.id,
-                wallet_id: Some(1),
-                amount: "40.00".to_owned(),
-                payment_date: "2026-03-06".to_owned(),
-                description: "too much".to_owned(),
-            })
-            .expect_err("overpayment")
-            .to_string()
-            .contains("exceeds"));
+        assert!(
+            engine
+                .register_debt_payment(RegisterDebtPaymentRequest {
+                    debt_id: debt.id,
+                    wallet_id: Some(1),
+                    amount: "40.00".to_owned(),
+                    payment_date: "2026-03-06".to_owned(),
+                    description: "too much".to_owned(),
+                })
+                .expect_err("overpayment")
+                .to_string()
+                .contains("exceeds")
+        );
 
         let write_off = engine
             .register_debt_write_off(RegisterDebtPaymentRequest {
@@ -4059,11 +4163,13 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
             .preview_import_mandatory_csv(import_path.to_string_lossy().to_string())
             .unwrap();
         assert!(invalid_preview.blocking_errors);
-        assert!(engine
-            .import_mandatory_csv(import_path.to_string_lossy().to_string())
-            .unwrap_err()
-            .to_string()
-            .contains("Mandatory import contains validation errors"));
+        assert!(
+            engine
+                .import_mandatory_csv(import_path.to_string_lossy().to_string())
+                .unwrap_err()
+                .to_string()
+                .contains("Mandatory import contains validation errors")
+        );
 
         fs::remove_file(import_path).ok();
         fs::remove_file(export_path).ok();
@@ -4125,9 +4231,11 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
             .unwrap_err();
 
         assert!(matches!(error, LedgeraEngineError::Storage { .. }));
-        assert!(error
-            .to_string()
-            .contains("Wallet name already exists: emergency"));
+        assert!(
+            error
+                .to_string()
+                .contains("Wallet name already exists: emergency")
+        );
         fs::remove_file(db_path).ok();
     }
 
@@ -4180,11 +4288,13 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
         let result = engine.delete_wallet(empty_wallet.id).unwrap();
         assert_eq!(result.wallet_id, empty_wallet.id);
         assert_eq!(result.action, "hard_deleted");
-        assert!(engine
-            .list_wallets()
-            .unwrap()
-            .iter()
-            .all(|wallet| wallet.id != empty_wallet.id));
+        assert!(
+            engine
+                .list_wallets()
+                .unwrap()
+                .iter()
+                .all(|wallet| wallet.id != empty_wallet.id)
+        );
         let replacement = engine
             .create_wallet(CreateWalletRequest {
                 name: "Replacement".to_owned(),
@@ -4253,9 +4363,11 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
             .unwrap();
         drop(conn);
         let error = engine.delete_wallet(1).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("System wallet cannot be deleted"));
+        assert!(
+            error
+                .to_string()
+                .contains("System wallet cannot be deleted")
+        );
         fs::remove_file(db_path).ok();
     }
 
@@ -4357,9 +4469,11 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 tags: vec![],
             })
             .unwrap_err();
-        assert!(create_error
-            .to_string()
-            .contains("base-currency records only (KZT)"));
+        assert!(
+            create_error
+                .to_string()
+                .contains("base-currency records only (KZT)")
+        );
 
         let created = engine
             .create_record(CreateRecordRequest {
@@ -4392,9 +4506,11 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 },
             )
             .unwrap_err();
-        assert!(update_error
-            .to_string()
-            .contains("base-currency records only (KZT)"));
+        assert!(
+            update_error
+                .to_string()
+                .contains("base-currency records only (KZT)")
+        );
         fs::remove_file(db_path).ok();
     }
 

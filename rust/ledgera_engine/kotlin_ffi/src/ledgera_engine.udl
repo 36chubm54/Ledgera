@@ -565,6 +565,12 @@ dictionary AssetDto {
     string? current_snapshot_date;
 };
 
+dictionary DashboardAssetSnapshotUpdate {
+    i64 asset_id;
+    string value;
+    string note;
+};
+
 dictionary AssetBreakdownDto {
     string label;
     string amount_base;
@@ -629,6 +635,8 @@ interface LedgeraEngine {
     AssetDto dashboard_update_asset(i64 asset_id, string name, string category, string currency, string value, string snapshot_date, string description);
     [Throws=LedgeraEngineError]
     AssetDto dashboard_add_asset_snapshot(i64 asset_id, string value, string snapshot_date, string note);
+    [Throws=LedgeraEngineError]
+    sequence<AssetDto> dashboard_add_asset_snapshots(sequence<DashboardAssetSnapshotUpdate> updates, string snapshot_date);
     [Throws=LedgeraEngineError]
     AssetDto dashboard_set_asset_active(i64 asset_id, boolean active);
     [Throws=LedgeraEngineError]

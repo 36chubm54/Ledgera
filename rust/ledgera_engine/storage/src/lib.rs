@@ -413,7 +413,7 @@ pub use analytics::{
     analytics_list_years,
 };
 pub use audit::{AuditFindingRow, audit_run, audit_run_for_date};
-pub use dashboard::{AssetBreakdownPayload, AssetPayload, CapitalPointPayload, DashboardPayload, GoalPayload, asset_add_snapshot, asset_create, asset_rows, asset_set_active, asset_update, dashboard_payload, goal_create, goal_delete, goal_rows, goal_set_completed};
+pub use dashboard::{AssetBreakdownPayload, AssetPayload, AssetSnapshotUpdatePayload, CapitalPointPayload, DashboardPayload, GoalPayload, asset_add_snapshot, asset_add_snapshots_bulk, asset_create, asset_rows, asset_set_active, asset_update, dashboard_payload, goal_create, goal_delete, goal_rows, goal_set_completed};
 pub use metrics::{
     metrics_burn_rate, metrics_income_by_category, metrics_monthly_summary,
     metrics_period_snapshot, metrics_refresh_snapshot, metrics_savings_rate,
@@ -7880,7 +7880,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(suggestions.expense_categories, vec!["Dining".to_owned()]);
         assert_eq!(
             suggestions.expense_descriptions,
-            vec!["Updated dinner".to_owned()]
+            vec!["Monthly".to_owned(), "Updated dinner".to_owned()]
         );
         remove_test_db(&db_path);
     }
