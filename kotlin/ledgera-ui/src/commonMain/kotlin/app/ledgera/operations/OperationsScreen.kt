@@ -621,8 +621,10 @@ private fun CreateTransferDialog(
                     OutlinedTextField(
                         modifier = dialogFieldModifier(),
                         value = currency,
-                        onValueChange = { currency = OperationValidation.normalizeCurrency(it) },
+                        onValueChange = {},
                         label = { Text("Currency") },
+                        enabled = false,
+                        readOnly = true,
                         singleLine = true,
                     )
                 }
