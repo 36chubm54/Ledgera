@@ -3,6 +3,7 @@ package app.ledgera.operations
 import app.ledgera.bridge.OperationsEngine
 import app.ledgera.model.CreateOperationRequest
 import app.ledgera.model.CreateTransferRequest
+import app.ledgera.model.CurrencyTransferRequest
 import app.ledgera.model.OperationDraft
 import app.ledgera.model.OperationDeleteResult
 import app.ledgera.model.OperationFilter
@@ -507,6 +508,38 @@ class OperationsViewModel(
                 mutableState.value = mutableState.value.copy(
                     loading = false,
                     error = error.message ?: error::class.simpleName ?: "Unknown error",
+                    notice = null,
+                )
+            }
+        }
+    }
+
+    fun createCurrencyTransfer(request: CurrencyTransferRequest) {
+        val source = request.sourceAmount.toDoubleOrNull()
+        val target = request.targetAmount.toDoubleOrNull()
+        val rate = request.conversionRate.toDoubleOrNull()
+        val dateError = DateValidation.validateDmyNotFuture(request.date)
+        val error = when {
+            request.fromWalletId <= 0 || request.toWalletId <= 0 || request.fromWalletId == request.toWalletId -> "Select different source and target wallets"
+            dateError != null -> dateError
+            source == null || source <= 0.0 || target == null || target <= 0.0 -> "Transfer amounts must be positive numbers"
+            rate == null || rate <= 0.0 -> "Conversion rate must be positive"
+            kotlin.math.abs(source * rate - target) > 0.005 -> "Target amount does not match conversion rate"
+            else -> null
+        }
+        if (error != null) {
+            mutableState.value = mutableState.value.copy(error = error, notice = null)
+            return
+        }
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching {
+                val result = engine.createCurrencyTransfer(request.copy(date = request.date.toStorageDate()))
+                refresh(notice = "Currency transfer created (id=${result.id})")
+            }.onFailure { failure ->
+                mutableState.value = mutableState.value.copy(
+                    loading = false,
+                    error = failure.message ?: failure::class.simpleName ?: "Unknown error",
                     notice = null,
                 )
             }
