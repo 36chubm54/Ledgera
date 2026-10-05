@@ -396,10 +396,11 @@ private fun LineChart(points: List<Pair<String, Double>>) {
                     else horizontalInset + index.toFloat() / points.lastIndex * usableWidth
                     Offset(x, size.height - ((value - minValue) / span * size.height).toFloat())
                 }
+                val axisY = size.height - 28f
                 drawLine(
                     axisColor,
-                    Offset(horizontalInset, size.height / 2f),
-                    Offset(size.width - horizontalInset, size.height / 2f),
+                    Offset(horizontalInset, axisY),
+                    Offset(size.width - horizontalInset, axisY),
                     strokeWidth = 1f,
                 )
                 coordinates.zipWithNext().forEach { (a, b) -> drawLine(lineColor, a, b, strokeWidth = 4f) }
