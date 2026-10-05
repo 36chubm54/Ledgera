@@ -84,11 +84,7 @@ internal object OperationValidation {
     private fun validateBaseCurrencyOnly(currency: String, baseCurrency: String?): String? {
         val normalizedBase = baseCurrency?.trim()?.uppercase()?.takeIf { it.isNotEmpty() } ?: return null
         val normalizedCurrency = currency.trim().uppercase()
-        return if (normalizedCurrency == normalizedBase) {
-            null
-        } else {
-            "Standalone Operations currently supports base-currency records only ($normalizedBase)"
-        }
+        return null
     }
 
     private fun validateTransferBaseCurrencyOnly(currency: String, baseCurrency: String): String? {

@@ -18,8 +18,6 @@ internal object SettingsValidation {
         return when {
             name.isBlank() -> "Wallet name is required"
             currencyError != null -> currencyError
-            normalizedCurrency != normalizedBase ->
-                "Kotlin Settings currently supports base-currency wallets only ($normalizedBase)"
             balanceError != null -> "Initial balance must be zero or a positive number"
             else -> null
         }

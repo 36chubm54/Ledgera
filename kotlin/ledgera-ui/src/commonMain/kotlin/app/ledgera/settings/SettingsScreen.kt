@@ -59,6 +59,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var showCreateWalletDialog by remember { mutableStateOf(false) }
+    var showCurrencyRateDialog by remember { mutableStateOf(false) }
     var walletPendingDelete by remember { mutableStateOf<WalletSettingsItem?>(null) }
     var showAuditReport by remember { mutableStateOf(false) }
 
@@ -98,6 +99,16 @@ fun SettingsScreen(
                 walletPendingDelete = wallet
             },
         )
+        CurrencySection(
+            baseCurrency = state.baseCurrency,
+            currencies = state.supportedCurrencies,
+            rates = state.currencyRates,
+            loading = state.loading,
+            error = state.error,
+            onAddRate = { viewModel.clearFeedback(); showCurrencyRateDialog = true },
+            onDeleteRate = viewModel::deleteCurrencyRate,
+            onSetBase = viewModel::setBaseCurrency,
+        )
         AuditSection(
             running = state.auditRunning,
             summary = state.auditSummary,
@@ -124,6 +135,18 @@ fun SettingsScreen(
             onCancel = { showCreateWalletDialog = false },
         )
     }
+    if (showCurrencyRateDialog) {
+        CurrencyRateDialog(
+            baseCurrency = state.baseCurrency,
+            error = state.error,
+            submitting = state.loading,
+            onSave = { base, currency, rate, date, source ->
+                viewModel.saveCurrencyRate(base, currency, rate, date, source)
+                showCurrencyRateDialog = false
+            },
+            onCancel = { showCurrencyRateDialog = false },
+        )
+    }
     walletPendingDelete?.let { wallet ->
         DeleteWalletConfirmDialog(
             wallet = wallet,
@@ -146,7 +169,7 @@ fun SettingsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Current wallets, operations, debts, mandatory templates, tags, budgets, and Distribution will be replaced.")
-                    Text("Rows: ${preview.importedRows} · Assets: ${preview.assetRows} · Snapshots: ${preview.assetSnapshotRows} · Goals: ${preview.goalRows} · Distribution: ${preview.distributionRows}")
+                    Text("Rows: ${preview.importedRows} · Assets: ${preview.assetRows} · Snapshots: ${preview.assetSnapshotRows} · Goals: ${preview.goalRows} · Distribution: ${preview.distributionRows} · Rates: ${preview.currencyRateRows}")
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
@@ -170,6 +193,68 @@ private fun BackupSection(loading: Boolean, onRestore: () -> Unit, onExport: () 
             }
         }
     }
+}
+
+@Composable
+private fun CurrencySection(
+    baseCurrency: String,
+    currencies: List<String>,
+    rates: List<app.ledgera.model.CurrencyRate>,
+    loading: Boolean,
+    error: String?,
+    onAddRate: () -> Unit,
+    onDeleteRate: (Long) -> Unit,
+    onSetBase: (String) -> Unit,
+) {
+    var requestedBase by remember(baseCurrency) { mutableStateOf(baseCurrency) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Currencies", style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(requestedBase, { requestedBase = it.uppercase().take(3) }, label = { Text("Base currency") }, modifier = Modifier.weight(1f), singleLine = true)
+                Button(onClick = { onSetBase(requestedBase) }, enabled = !loading && requestedBase.length == 3) { Text("Set") }
+                Button(onClick = onAddRate, enabled = !loading) { Text("Add rate") }
+            }
+            Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall)
+            rates.forEach { rate ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("${rate.currency}/${rate.baseCurrency} = ${rate.rate} · ${rate.effectiveDate}")
+                    TextButton(onClick = { onDeleteRate(rate.id) }, enabled = !loading) { Text("Delete") }
+                }
+            }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+    }
+}
+
+@Composable
+private fun CurrencyRateDialog(
+    baseCurrency: String,
+    error: String?,
+    submitting: Boolean,
+    onSave: (String, String, String, String, String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var currency by remember { mutableStateOf("") }
+    var rate by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf("") }
+    var source by remember { mutableStateOf("manual") }
+    val valid = currency.length == 3 && rate.toDoubleOrNull()?.let { it > 0.0 } == true && date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Add currency rate") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(currency, { currency = it.uppercase().take(3) }, label = { Text("Currency") }, singleLine = true)
+                OutlinedTextField(rate, { rate = it }, label = { Text("Rate to $baseCurrency") }, singleLine = true)
+                OutlinedTextField(date, { date = it }, label = { Text("Effective date YYYY-MM-DD") }, singleLine = true)
+                OutlinedTextField(source, { source = it }, label = { Text("Source") }, singleLine = true)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = { Button(onClick = { onSave(baseCurrency, currency, rate, date, source) }, enabled = valid && !submitting) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+    )
 }
 
 @Composable

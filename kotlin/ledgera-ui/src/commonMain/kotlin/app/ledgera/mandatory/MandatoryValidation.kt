@@ -16,9 +16,6 @@ object MandatoryValidation {
         MoneyValidation.validatePositiveAmount(draft.amountOriginal.trim())?.let { return it }
         MoneyValidation.validatePositiveAmount(draft.amountBase.trim())?.let { return it }
         CurrencyValidation.validateSupportedCurrency(draft.currency.trim())?.let { return it }
-        if (!draft.currency.trim().equals(baseCurrency.trim(), ignoreCase = true)) {
-            return "Kotlin Mandatory currently supports base-currency templates only (${baseCurrency.trim().uppercase()})"
-        }
         validatePeriod(draft.period)?.let { return it }
         validateOptionalDate(draft.date)?.let { return it }
         return null

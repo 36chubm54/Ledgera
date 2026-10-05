@@ -6,6 +6,7 @@ import app.ledgera.model.AuditSummary
 import app.ledgera.model.CreateWalletRequest
 import app.ledgera.model.FullBackupResult
 import app.ledgera.model.WalletSettingsItem
+import app.ledgera.model.CurrencyRate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +19,8 @@ data class SettingsUiState(
     val loading: Boolean = false,
     val wallets: List<WalletSettingsItem> = emptyList(),
     val baseCurrency: String = "KZT",
+    val supportedCurrencies: List<String> = listOf("KZT"),
+    val currencyRates: List<CurrencyRate> = emptyList(),
     val auditRunning: Boolean = false,
     val auditFindings: List<AuditFinding> = emptyList(),
     val auditSummary: AuditSummary? = null,
@@ -41,10 +44,14 @@ class SettingsViewModel(
             runCatching {
                 val baseCurrency = engine.baseCurrency()
                 val wallets = engine.listWalletsForSettings()
+                val currencies = engine.supportedCurrencies()
+                val rates = engine.currencyRates()
                 mutableState.value = mutableState.value.copy(
                     loading = false,
                     wallets = wallets,
                     baseCurrency = baseCurrency,
+                    supportedCurrencies = currencies.ifEmpty { listOf(baseCurrency) },
+                    currencyRates = rates,
                 )
             }.onFailure(::showError)
         }
@@ -56,6 +63,33 @@ class SettingsViewModel(
 
     fun clearNotice() {
         mutableState.value = mutableState.value.copy(notice = null)
+    }
+
+    fun setBaseCurrency(currency: String) {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.setBaseCurrency(currency) }
+                .onSuccess { refresh() }
+                .onFailure(::showError)
+        }
+    }
+
+    fun saveCurrencyRate(baseCurrency: String, currency: String, rate: String, effectiveDate: String, source: String) {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.upsertCurrencyRate(baseCurrency, currency, rate, effectiveDate, source) }
+                .onSuccess { mutableState.value = mutableState.value.copy(notice = "Currency rate saved"); refresh() }
+                .onFailure(::showError)
+        }
+    }
+
+    fun deleteCurrencyRate(rateId: Long) {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.deleteCurrencyRate(rateId) }
+                .onSuccess { mutableState.value = mutableState.value.copy(notice = "Currency rate deleted"); refresh() }
+                .onFailure(::showError)
+        }
     }
 
     fun previewBackup(path: String?) {

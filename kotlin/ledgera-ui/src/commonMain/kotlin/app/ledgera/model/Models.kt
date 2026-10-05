@@ -183,6 +183,16 @@ data class WalletSettingsItem(
     val active: Boolean,
 )
 
+data class CurrencyRate(
+    val id: Long,
+    val baseCurrency: String,
+    val currency: String,
+    val rate: String,
+    val effectiveDate: String,
+    val source: String,
+    val createdAt: String,
+)
+
 data class CreateWalletRequest(
     val name: String,
     val currency: String,
@@ -203,6 +213,7 @@ data class FullBackupResult(
     val assetRows: Long = 0,
     val assetSnapshotRows: Long = 0,
     val goalRows: Long = 0,
+    val currencyRateRows: Long = 0,
     val checksum: String,
 )
 

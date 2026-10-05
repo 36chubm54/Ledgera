@@ -43,6 +43,8 @@ use ledgera_engine_storage::{
     set_system_wallet_initial_balance, standalone_record_get_row, tag_color_palette,
     tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
     update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
+    CurrencyRatePayload, CurrencyRateRow, currency_rate_rows, delete_currency_rate,
+    set_base_currency, supported_currencies, upsert_currency_rate,
 };
 use std::fmt;
 use std::path::Path;
@@ -235,6 +237,7 @@ pub struct FullBackupResultDto {
     pub asset_rows: i64,
     pub asset_snapshot_rows: i64,
     pub goal_rows: i64,
+    pub currency_rate_rows: i64,
     pub checksum: String,
 }
 
@@ -676,6 +679,26 @@ pub struct DashboardAssetSnapshotUpdate {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyRateDto {
+    pub id: i64,
+    pub base_currency: String,
+    pub currency: String,
+    pub rate: String,
+    pub effective_date: String,
+    pub source: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyRateRequest {
+    pub base_currency: String,
+    pub currency: String,
+    pub rate: String,
+    pub effective_date: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AssetBreakdownDto {
     pub label: String,
     pub amount_base: String,
@@ -1004,6 +1027,34 @@ impl LedgeraEngine {
 
     pub fn base_currency(&self) -> Result<String, LedgeraEngineError> {
         base_currency_code(&self.db_path).map_err(storage_error)
+    }
+
+    pub fn set_base_currency(&self, currency: String) -> Result<String, LedgeraEngineError> {
+        set_base_currency(&self.db_path, &currency).map_err(storage_error)
+    }
+
+    pub fn supported_currencies(&self) -> Result<Vec<String>, LedgeraEngineError> {
+        supported_currencies(&self.db_path).map_err(storage_error)
+    }
+
+    pub fn currency_rates(&self) -> Result<Vec<CurrencyRateDto>, LedgeraEngineError> {
+        currency_rate_rows(&self.db_path)
+            .map(|rows| rows.into_iter().map(currency_rate_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn upsert_currency_rate(&self, request: CurrencyRateRequest) -> Result<CurrencyRateDto, LedgeraEngineError> {
+        upsert_currency_rate(&self.db_path, &CurrencyRatePayload {
+            base_currency: request.base_currency,
+            currency: request.currency,
+            rate: request.rate,
+            effective_date: request.effective_date,
+            source: request.source,
+        }).map(currency_rate_to_dto).map_err(storage_error)
+    }
+
+    pub fn delete_currency_rate(&self, rate_id: i64) -> Result<bool, LedgeraEngineError> {
+        delete_currency_rate(&self.db_path, rate_id).map_err(storage_error)
     }
 
     pub fn list_records(
@@ -2324,6 +2375,18 @@ fn wallet_to_dto(row: WalletRow) -> WalletDto {
     }
 }
 
+fn currency_rate_to_dto(row: CurrencyRateRow) -> CurrencyRateDto {
+    CurrencyRateDto {
+        id: row.id,
+        base_currency: row.base_currency,
+        currency: row.currency,
+        rate: row.rate_text,
+        effective_date: row.effective_date,
+        source: row.source,
+        created_at: row.created_at,
+    }
+}
+
 fn wallet_balance_to_dto(row: WalletBalanceRow) -> WalletBalanceDto {
     WalletBalanceDto {
         wallet_id: row.0,
@@ -2466,6 +2529,7 @@ fn full_backup_result_to_dto(row: ledgera_engine_storage::FullBackupResult) -> F
         asset_rows: row.asset_rows,
         asset_snapshot_rows: row.asset_snapshot_rows,
         goal_rows: row.goal_rows,
+        currency_rate_rows: row.currency_rate_rows,
         checksum: row.checksum,
     }
 }

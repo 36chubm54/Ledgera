@@ -2300,11 +2300,6 @@ pub fn debt_create(db_path: &str, payload: &DebtCreatePayload) -> StorageResult<
     let tx = conn.transaction().map_err(sqlite_err)?;
     let base_currency = base_currency_code_for_debt_in_tx(&tx)?;
     let currency = normalize_currency_code(&payload.currency, &base_currency);
-    if !currency.eq_ignore_ascii_case(&base_currency) {
-        return Err(format!(
-            "Kotlin Debts currently supports base-currency obligations only ({base_currency})"
-        ));
-    }
     let allow_negative = active_debt_wallet_in_tx(&tx, payload.wallet_id)?;
     if kind == "loan" && !allow_negative {
         let balance_minor = wallet_balance_minor_for_debt_in_tx(&tx, payload.wallet_id)?;
@@ -3888,14 +3883,12 @@ mod tests {
                 .expect_err("zero amount")
                 .contains("positive")
         );
-        assert!(
-            debt_create(
-                &db_path,
-                &request("debt", "A", 1, "10", "USD", "2026-03-01")
-            )
-            .expect_err("currency")
-            .contains("base-currency")
-        );
+        let foreign_debt = debt_create(
+            &db_path,
+            &request("debt", "A", 1, "10", "USD", "2026-03-01"),
+        )
+        .expect("foreign currency debt");
+        assert_eq!(foreign_debt.currency, "USD");
         assert!(
             debt_create(
                 &db_path,

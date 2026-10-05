@@ -74,6 +74,24 @@ dictionary CreateWalletRequest {
     boolean allow_negative;
 };
 
+dictionary CurrencyRateDto {
+    i64 id;
+    string base_currency;
+    string currency;
+    string rate;
+    string effective_date;
+    string source;
+    string created_at;
+};
+
+dictionary CurrencyRateRequest {
+    string base_currency;
+    string currency;
+    string rate;
+    string effective_date;
+    string source;
+};
+
 dictionary CreateDebtRequest {
     string kind;
     string contact_name;
@@ -222,6 +240,7 @@ dictionary FullBackupResultDto {
     i64 asset_rows;
     i64 asset_snapshot_rows;
     i64 goal_rows;
+    i64 currency_rate_rows;
     string checksum;
 };
 
@@ -657,6 +676,16 @@ interface LedgeraEngine {
     sequence<string> list_analytics_years();
     [Throws=LedgeraEngineError]
     string base_currency();
+    [Throws=LedgeraEngineError]
+    string set_base_currency(string currency);
+    [Throws=LedgeraEngineError]
+    sequence<string> supported_currencies();
+    [Throws=LedgeraEngineError]
+    sequence<CurrencyRateDto> currency_rates();
+    [Throws=LedgeraEngineError]
+    CurrencyRateDto upsert_currency_rate(CurrencyRateRequest request);
+    [Throws=LedgeraEngineError]
+    boolean delete_currency_rate(i64 rate_id);
     [Throws=LedgeraEngineError]
     sequence<RecordDto> list_records(RecordFilterDto filter);
     [Throws=LedgeraEngineError]

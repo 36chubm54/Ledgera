@@ -244,6 +244,27 @@ pub struct WalletCreatePayload {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyRatePayload {
+    pub base_currency: String,
+    pub currency: String,
+    pub rate: String,
+    pub effective_date: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyRateRow {
+    pub id: i64,
+    pub base_currency: String,
+    pub currency: String,
+    pub rate: f64,
+    pub rate_text: String,
+    pub effective_date: String,
+    pub source: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct CategoryMetricRow {
     pub category: String,
     pub total_base: f64,
@@ -819,9 +840,6 @@ pub fn create_wallet(db_path: &str, payload: &WalletCreatePayload) -> StorageRes
     }
     let currency = payload.currency.trim().to_uppercase();
     validate_currency_code(&currency)?;
-    let base_currency = base_currency_code_in_tx(&tx)?;
-    validate_wallet_base_currency_only(&currency, &base_currency)?;
-
     let initial_balance_minor = to_minor_units(&payload.initial_balance)?;
     if initial_balance_minor < 0 {
         return Err("Initial balance must be zero or a positive number".to_owned());
@@ -1091,9 +1109,9 @@ pub fn create_transfer(
     let from_wallet = active_wallet_in_tx(&tx, payload.from_wallet_id, "source")?;
     active_wallet_in_tx(&tx, payload.to_wallet_id, "target")?;
 
-    let base_currency = base_currency_code_in_tx(&tx)?;
     let currency = payload.currency.trim().to_uppercase();
     validate_currency_code(&currency)?;
+    let base_currency = base_currency_code_in_tx(&tx)?;
     validate_transfer_base_currency_only(&currency, &base_currency)?;
     let commission_currency = if payload.commission_currency.trim().is_empty() {
         base_currency.clone()
@@ -2295,7 +2313,7 @@ fn empty_mandatory_import_plan() -> MandatoryImportPlan {
 fn parse_mandatory_template_row(
     values: &HashMap<String, String>,
     row_label: &str,
-    base_currency: &str,
+    _base_currency: &str,
     wallet_ids: &HashSet<i64>,
 ) -> StorageResult<ParsedMandatoryTemplate> {
     let row_type = required_csv_value(values, "type", row_label)?
@@ -2318,7 +2336,6 @@ fn parse_mandatory_template_row(
     validate_mandatory_period(&period)?;
     let currency = required_csv_value(values, "currency", row_label)?.to_uppercase();
     validate_currency_code(&currency)?;
-    validate_mandatory_base_currency_only(&currency, base_currency)?;
     let (_amount_original_text, amount_original, amount_original_minor) =
         parse_abs_positive_money(values, "amount_original", row_label)?;
     let (_amount_base_text, amount_base, amount_base_minor) =
@@ -2551,7 +2568,6 @@ fn parse_operation_csv_row(
     }
     let currency = required_csv_value(values, "currency", row_label)?.to_uppercase();
     validate_currency_code(&currency)?;
-    validate_base_currency_only(&currency, base_currency)?;
     let (_amount_original_text, amount_original, amount_original_minor) =
         parse_positive_money(values, "amount_original", row_label)?;
     let (_amount_base_text, amount_base, amount_base_minor) =
@@ -4053,7 +4069,6 @@ pub fn create_standalone_record_with_tag_colors(
     let currency = payload.currency.trim().to_uppercase();
     validate_currency_code(&currency)?;
     let base_currency = base_currency_code_in_tx(&tx)?;
-    validate_base_currency_only(&currency, &base_currency)?;
 
     let wallet_exists = tx
         .query_row(
@@ -4069,28 +4084,33 @@ pub fn create_standalone_record_with_tag_colors(
     }
 
     let amount_original_minor = to_minor_units(&payload.amount_original)?;
-    let amount_base_minor = to_minor_units(&payload.amount_base)?;
-    if amount_original_minor <= 0 || amount_base_minor <= 0 {
+    if amount_original_minor <= 0 {
         return Err("Record amount must be positive".to_owned());
     }
     let requested_amount_original = quantize_money_text(&payload.amount_original)?
         .parse::<f64>()
         .map_err(|_| "invalid amount_original".to_owned())?;
-    let requested_amount_base = quantize_money_text(&payload.amount_base)?
+    let supplied_rate_text = quantize_rate_text(&payload.rate_at_operation)?;
+    let supplied_rate = supplied_rate_text
         .parse::<f64>()
-        .map_err(|_| "invalid amount_base".to_owned())?;
-    let (amount_original, amount_original_minor, amount_base) = if currency == base_currency {
-        (requested_amount_base, amount_base_minor, requested_amount_base)
+        .map_err(|_| "invalid rate_at_operation".to_owned())?;
+    let rate_at_operation_text = if currency != base_currency && supplied_rate == 1.0 {
+        resolve_currency_rate_in_tx(&tx, &base_currency, &currency, payload.date.trim())?
     } else {
-        (requested_amount_original, amount_original_minor, requested_amount_base)
+        supplied_rate_text
     };
-    let rate_at_operation_text = quantize_rate_text(&payload.rate_at_operation)?;
     let rate_at_operation = rate_at_operation_text
         .parse::<f64>()
         .map_err(|_| "invalid rate_at_operation".to_owned())?;
     if rate_at_operation <= 0.0 {
         return Err("rate_at_operation must be positive".to_owned());
     }
+    let amount_base_minor = ((requested_amount_original * rate_at_operation) * 100.0).round() as i64;
+    if amount_base_minor <= 0 {
+        return Err("Base amount must be positive".to_owned());
+    }
+    let amount_base = amount_base_minor as f64 / 100.0;
+    let amount_original = requested_amount_original;
 
     let cursor = tx
         .execute(
@@ -4183,7 +4203,6 @@ pub fn update_standalone_record_with_tag_colors(
     let currency = payload.currency.trim().to_uppercase();
     validate_currency_code(&currency)?;
     let base_currency = base_currency_code_in_tx(&tx)?;
-    validate_base_currency_only(&currency, &base_currency)?;
     let wallet_exists = tx
         .query_row(
             "SELECT 1 FROM wallets WHERE id = ?1",
@@ -4198,28 +4217,33 @@ pub fn update_standalone_record_with_tag_colors(
     }
 
     let amount_original_minor = to_minor_units(&payload.amount_original)?;
-    let amount_base_minor = to_minor_units(&payload.amount_base)?;
-    if amount_original_minor <= 0 || amount_base_minor <= 0 {
+    if amount_original_minor <= 0 {
         return Err("Record amount must be positive".to_owned());
     }
     let requested_amount_original = quantize_money_text(&payload.amount_original)?
         .parse::<f64>()
         .map_err(|_| "invalid amount_original".to_owned())?;
-    let requested_amount_base = quantize_money_text(&payload.amount_base)?
+    let supplied_rate_text = quantize_rate_text(&payload.rate_at_operation)?;
+    let supplied_rate = supplied_rate_text
         .parse::<f64>()
-        .map_err(|_| "invalid amount_base".to_owned())?;
-    let (amount_original, amount_original_minor, amount_base) = if currency == base_currency {
-        (requested_amount_base, amount_base_minor, requested_amount_base)
+        .map_err(|_| "invalid rate_at_operation".to_owned())?;
+    let rate_at_operation_text = if currency != base_currency && supplied_rate == 1.0 {
+        resolve_currency_rate_in_tx(&tx, &base_currency, &currency, payload.date.trim())?
     } else {
-        (requested_amount_original, amount_original_minor, requested_amount_base)
+        supplied_rate_text
     };
-    let rate_at_operation_text = quantize_rate_text(&payload.rate_at_operation)?;
     let rate_at_operation = rate_at_operation_text
         .parse::<f64>()
         .map_err(|_| "invalid rate_at_operation".to_owned())?;
     if rate_at_operation <= 0.0 {
         return Err("rate_at_operation must be positive".to_owned());
     }
+    let amount_base_minor = ((requested_amount_original * rate_at_operation) * 100.0).round() as i64;
+    if amount_base_minor <= 0 {
+        return Err("Base amount must be positive".to_owned());
+    }
+    let amount_base = amount_base_minor as f64 / 100.0;
+    let amount_original = requested_amount_original;
 
     let updated = tx
         .execute(
@@ -4283,6 +4307,91 @@ pub fn delete_standalone_record(db_path: &str, record_id: i64) -> StorageResult<
 pub fn base_currency_code(db_path: &str) -> StorageResult<String> {
     let conn = open_sqlite_connection(db_path)?;
     base_currency_code_in_conn(&conn)
+}
+
+pub fn currency_rate_rows(db_path: &str) -> StorageResult<Vec<CurrencyRateRow>> {
+    let conn = open_sqlite_connection(db_path)?;
+    let mut stmt = conn.prepare(
+        "SELECT id, base_currency, currency, rate, rate_text, effective_date, source, created_at
+         FROM currency_rates ORDER BY effective_date DESC, currency COLLATE NOCASE, id DESC",
+    ).map_err(sqlite_err)?;
+    let rows = stmt.query_map([], |row| Ok(CurrencyRateRow {
+        id: row.get(0)?, base_currency: row.get(1)?, currency: row.get(2)?,
+        rate: row.get(3)?, rate_text: row.get(4)?, effective_date: row.get(5)?,
+        source: row.get(6)?, created_at: row.get(7)?,
+    })).map_err(sqlite_err)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
+}
+
+pub fn supported_currencies(db_path: &str) -> StorageResult<Vec<String>> {
+    let conn = open_sqlite_connection(db_path)?;
+    let mut stmt = conn.prepare(
+        "SELECT currency FROM (
+            SELECT value AS currency FROM schema_meta WHERE key = 'base_currency'
+            UNION SELECT currency FROM currency_rates
+            UNION SELECT currency FROM wallets
+            UNION SELECT currency FROM records
+            UNION SELECT currency FROM assets
+            UNION SELECT currency FROM goals
+            UNION SELECT currency FROM debts
+            UNION SELECT currency FROM mandatory_expenses
+        ) WHERE length(trim(currency)) = 3 ORDER BY currency COLLATE NOCASE",
+    ).map_err(sqlite_err)?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0)).map_err(sqlite_err)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
+}
+
+pub fn upsert_currency_rate(db_path: &str, payload: &CurrencyRatePayload) -> StorageResult<CurrencyRateRow> {
+    let base = payload.base_currency.trim().to_uppercase();
+    let currency = payload.currency.trim().to_uppercase();
+    validate_currency_code(&base)?;
+    validate_currency_code(&currency)?;
+    if base == currency { return Err("Currency rate must not target the base currency".to_owned()); }
+    validate_ymd_date(payload.effective_date.trim())?;
+    let rate_text = normalize_currency_rate_text(&payload.rate)?;
+    let rate = rate_text.parse::<f64>().map_err(|_| "Invalid currency rate".to_owned())?;
+    if rate <= 0.0 { return Err("Currency rate must be positive".to_owned()); }
+    let source = if payload.source.trim().is_empty() { "manual" } else { payload.source.trim() };
+    let conn = open_sqlite_connection(db_path)?;
+    conn.execute(
+        "INSERT INTO currency_rates (base_currency, currency, rate, rate_text, effective_date, source)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(base_currency, currency, effective_date) DO UPDATE SET
+            rate = excluded.rate, rate_text = excluded.rate_text, source = excluded.source",
+        rusqlite::params![base, currency, rate, rate_text, payload.effective_date.trim(), source],
+    ).map_err(sqlite_err)?;
+    storage_clear_read_connection_cache();
+    currency_rate_rows(db_path)?.into_iter().find(|row| row.base_currency == base && row.currency == currency && row.effective_date == payload.effective_date.trim())
+        .ok_or_else(|| "Currency rate was not saved".to_owned())
+}
+
+pub fn delete_currency_rate(db_path: &str, rate_id: i64) -> StorageResult<bool> {
+    if rate_id <= 0 { return Err("Currency rate id is required".to_owned()); }
+    let conn = open_sqlite_connection(db_path)?;
+    let deleted = conn.execute("DELETE FROM currency_rates WHERE id = ?1", [rate_id]).map_err(sqlite_err)?;
+    storage_clear_read_connection_cache();
+    Ok(deleted == 1)
+}
+
+pub fn set_base_currency(db_path: &str, currency: &str) -> StorageResult<String> {
+    let normalized = currency.trim().to_uppercase();
+    validate_currency_code(&normalized)?;
+    let mut conn = open_sqlite_connection(db_path)?;
+    let tx = conn.transaction().map_err(sqlite_err)?;
+    let data_count: i64 = tx.query_row(
+        "SELECT
+            (SELECT COUNT(*) FROM wallets WHERE system = 0) +
+            (SELECT COUNT(*) FROM records) + (SELECT COUNT(*) FROM transfers) +
+            (SELECT COUNT(*) FROM mandatory_expenses) + (SELECT COUNT(*) FROM debts) +
+            (SELECT COUNT(*) FROM debt_payments) + (SELECT COUNT(*) FROM assets) +
+            (SELECT COUNT(*) FROM goals) + (SELECT COUNT(*) FROM budgets) +
+            (SELECT COUNT(*) FROM distribution_items)", [], |row| row.get(0),
+    ).map_err(sqlite_err)?;
+    if data_count > 0 { return Err("Base currency can only be changed before user data exists".to_owned()); }
+    tx.execute("INSERT INTO schema_meta (key, value) VALUES ('base_currency', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [normalized.as_str()]).map_err(sqlite_err)?;
+    tx.commit().map_err(sqlite_err)?;
+    storage_clear_read_connection_cache();
+    Ok(normalized)
 }
 
 pub fn tag_names(db_path: &str) -> StorageResult<Vec<String>> {
@@ -5242,8 +5351,6 @@ fn validate_mandatory_template_create_payload_in_tx(
     }
     let currency = payload.currency.trim().to_uppercase();
     validate_currency_code(&currency)?;
-    let base_currency = base_currency_code_in_tx(tx)?;
-    validate_mandatory_base_currency_only(&currency, &base_currency)?;
     let amount_original_minor = to_minor_units(&payload.amount_original)?;
     let amount_base_minor = to_minor_units(&payload.amount_base)?;
     if amount_original_minor <= 0 || amount_base_minor <= 0 {
@@ -5843,14 +5950,60 @@ fn normalize_base_currency_code(value: &str) -> StorageResult<String> {
     Ok(normalized)
 }
 
-fn validate_base_currency_only(currency: &str, base_currency: &str) -> StorageResult<()> {
+fn resolve_currency_rate_in_tx(
+    tx: &rusqlite::Transaction<'_>,
+    base_currency: &str,
+    currency: &str,
+    date: &str,
+) -> StorageResult<String> {
     if currency.eq_ignore_ascii_case(base_currency) {
-        Ok(())
-    } else {
-        Err(format!(
-            "Standalone Operations currently supports base-currency records only ({base_currency})"
-        ))
+        return Ok("1".to_owned());
     }
+    let rate_text = tx
+        .query_row(
+            "SELECT rate_text
+             FROM currency_rates
+             WHERE base_currency = ?1 AND currency = ?2 AND effective_date <= ?3
+             ORDER BY effective_date DESC, id DESC
+             LIMIT 1",
+            (base_currency, currency, date),
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(sqlite_err)?
+        .ok_or_else(|| format!("No currency rate for {currency} on {date}"))?;
+    normalize_currency_rate_text(&rate_text)
+}
+
+fn normalize_currency_rate_text(value: &str) -> StorageResult<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.starts_with('-') || trimmed.starts_with('+') {
+        return Err("Currency rate must be a positive decimal".to_owned());
+    }
+    let mut parts = trimmed.split('.');
+    let whole = parts.next().unwrap_or_default();
+    let fraction = parts.next().unwrap_or_default();
+    if parts.next().is_some()
+        || whole.is_empty()
+        || !whole.chars().all(|value| value.is_ascii_digit())
+        || !fraction.chars().all(|value| value.is_ascii_digit())
+    {
+        return Err("Currency rate must be a positive decimal".to_owned());
+    }
+    let whole = whole.trim_start_matches('0');
+    let fraction = fraction.trim_end_matches('0');
+    let normalized = if fraction.is_empty() {
+        if whole.is_empty() { "0".to_owned() } else { whole.to_owned() }
+    } else {
+        format!("{}.{}", if whole.is_empty() { "0" } else { whole }, fraction)
+    };
+    let numeric = normalized
+        .parse::<f64>()
+        .map_err(|_| "Currency rate must be a positive decimal".to_owned())?;
+    if !numeric.is_finite() || numeric <= 0.0 {
+        return Err("Currency rate must be positive".to_owned());
+    }
+    Ok(normalized)
 }
 
 fn validate_transfer_base_currency_only(currency: &str, base_currency: &str) -> StorageResult<()> {
@@ -5863,25 +6016,6 @@ fn validate_transfer_base_currency_only(currency: &str, base_currency: &str) -> 
     }
 }
 
-fn validate_mandatory_base_currency_only(currency: &str, base_currency: &str) -> StorageResult<()> {
-    if currency.eq_ignore_ascii_case(base_currency) {
-        Ok(())
-    } else {
-        Err(format!(
-            "Kotlin Mandatory currently supports base-currency templates only ({base_currency})"
-        ))
-    }
-}
-
-fn validate_wallet_base_currency_only(currency: &str, base_currency: &str) -> StorageResult<()> {
-    if currency.eq_ignore_ascii_case(base_currency) {
-        Ok(())
-    } else {
-        Err(format!(
-            "Kotlin Settings currently supports base-currency wallets only ({base_currency})"
-        ))
-    }
-}
 
 fn validate_ymd_date(value: &str) -> StorageResult<()> {
     let (year, month, day) = parse_ymd_parts(value)?;
@@ -6454,6 +6588,17 @@ mod tests {
                 scope_type TEXT NOT NULL DEFAULT 'category',
                 scope_value TEXT NOT NULL DEFAULT ''
             );
+            CREATE TABLE currency_rates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                base_currency TEXT NOT NULL,
+                currency TEXT NOT NULL,
+                rate REAL NOT NULL,
+                rate_text TEXT NOT NULL,
+                effective_date TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'manual',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(base_currency, currency, effective_date)
+            );
             ",
         )
         .unwrap();
@@ -6934,17 +7079,15 @@ mod tests {
             .unwrap_err()
             .contains("Unsupported currency")
         );
-        assert!(
-            create_wallet(
-                &db_path,
-                &WalletCreatePayload {
-                    currency: "USD".to_owned(),
-                    ..request
-                }
-            )
-            .unwrap_err()
-            .contains("base-currency wallets only (KZT)")
-        );
+        let foreign_wallet = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                currency: "USD".to_owned(),
+                ..request
+            },
+        )
+        .unwrap();
+        assert_eq!(foreign_wallet.currency, "USD");
         remove_test_db(&db_path);
     }
 
@@ -7260,17 +7403,15 @@ mod tests {
             .unwrap_err()
             .contains("positive")
         );
-        assert!(
-            mandatory_template_create(
-                &db_path,
-                &MandatoryTemplateCreatePayload {
-                    currency: "USD".to_owned(),
-                    ..request.clone()
-                }
-            )
-            .unwrap_err()
-            .contains("base-currency")
-        );
+        let foreign_template = mandatory_template_create(
+            &db_path,
+            &MandatoryTemplateCreatePayload {
+                currency: "USD".to_owned(),
+                ..request.clone()
+            },
+        )
+        .unwrap();
+        assert_eq!(foreign_template.currency, "USD");
         assert!(
             mandatory_template_create(
                 &db_path,
@@ -8109,9 +8250,20 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
     }
 
     #[test]
-    fn standalone_record_create_and_update_reject_non_base_currency() {
+    fn standalone_record_create_and_update_support_non_base_currency() {
         let db_path = create_balance_test_db();
-        let create_error = create_standalone_record(
+        upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "KZT".to_owned(),
+                currency: "USD".to_owned(),
+                rate: "500.123456".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "test".to_owned(),
+            },
+        )
+        .unwrap();
+        let created = create_standalone_record(
             &db_path,
             &StandaloneRecordCreatePayload {
                 record_type: "income".to_owned(),
@@ -8126,10 +8278,12 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 tags: vec![],
             },
         )
-        .unwrap_err();
-        assert!(create_error.contains("base-currency records only (KZT)"));
+        .unwrap();
+        assert_eq!(created.currency, "USD");
+        assert_eq!(created.rate_at_operation, 500.123456);
+        assert_eq!(created.amount_base, 5001.23);
 
-        let update_error = update_standalone_record(
+        let updated = update_standalone_record(
             &db_path,
             2,
             &StandaloneRecordUpdatePayload {
@@ -8145,8 +8299,47 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 tags: vec![],
             },
         )
-        .unwrap_err();
-        assert!(update_error.contains("base-currency records only (KZT)"));
+        .unwrap();
+        assert_eq!(updated.currency, "USD");
+        assert_eq!(updated.amount_base, 5001.23);
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn currency_rates_are_exact_and_base_currency_locks_after_user_data() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("ledgera_currency_test_{unique}.db"));
+        let db_path = path.to_string_lossy().into_owned();
+        initialize_database(&db_path).unwrap();
+        assert_eq!(set_base_currency(&db_path, "EUR").unwrap(), "EUR");
+        let rate = upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "EUR".to_owned(),
+                currency: "KZT".to_owned(),
+                rate: "542.123456789".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "manual".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(rate.rate_text, "542.123456789");
+        assert!(supported_currencies(&db_path).unwrap().contains(&"KZT".to_owned()));
+        create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "Foreign wallet".to_owned(),
+                currency: "KZT".to_owned(),
+                initial_balance: "0".to_owned(),
+                allow_negative: true,
+            },
+        )
+        .unwrap();
+        let error = set_base_currency(&db_path, "USD").unwrap_err();
+        assert!(error.contains("before user data exists"));
         remove_test_db(&db_path);
     }
 

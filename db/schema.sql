@@ -5,6 +5,19 @@ CREATE TABLE IF NOT EXISTS schema_meta (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS currency_rates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    base_currency TEXT NOT NULL CHECK(length(trim(base_currency)) = 3 AND upper(trim(base_currency)) = trim(base_currency)),
+    currency TEXT NOT NULL CHECK(length(trim(currency)) = 3 AND upper(trim(currency)) = trim(currency)),
+    rate REAL NOT NULL CHECK(rate > 0),
+    rate_text TEXT NOT NULL CHECK(length(trim(rate_text)) > 0),
+    effective_date TEXT NOT NULL CHECK(effective_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    source TEXT NOT NULL DEFAULT 'manual',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(base_currency, currency, effective_date),
+    CHECK(base_currency <> currency)
+);
+
 CREATE TABLE IF NOT EXISTS wallets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL CHECK(length(trim(name)) > 0),

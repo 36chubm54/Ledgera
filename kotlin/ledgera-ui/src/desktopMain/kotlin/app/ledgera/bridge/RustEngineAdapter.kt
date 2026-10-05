@@ -68,6 +68,7 @@ import app.ledgera.model.UpdateTransferResult
 import app.ledgera.model.WalletDeleteResult
 import app.ledgera.model.WalletOption
 import app.ledgera.model.WalletSettingsItem
+import app.ledgera.model.CurrencyRate
 import app.ledgera.model.ReportCategoryRow
 import app.ledgera.model.ReportDebtRow
 import app.ledgera.model.ReportMonthlyRow
@@ -279,6 +280,17 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     override suspend fun baseCurrency(): String = withContext(Dispatchers.IO) {
         engine.baseCurrency()
     }
+    override suspend fun setBaseCurrency(currency: String): String = withContext(Dispatchers.IO) { engine.setBaseCurrency(currency) }
+    override suspend fun supportedCurrencies(): List<String> = withContext(Dispatchers.IO) { engine.supportedCurrencies() }
+    override suspend fun currencyRates(): List<CurrencyRate> = withContext(Dispatchers.IO) {
+        engine.currencyRates().map { CurrencyRate(it.id, it.baseCurrency, it.currency, it.rate, it.effectiveDate, it.source, it.createdAt) }
+    }
+    override suspend fun upsertCurrencyRate(baseCurrency: String, currency: String, rate: String, effectiveDate: String, source: String): CurrencyRate = withContext(Dispatchers.IO) {
+        engine.upsertCurrencyRate(app.ledgera.engine.CurrencyRateRequest(baseCurrency, currency, rate, effectiveDate, source)).let {
+            CurrencyRate(it.id, it.baseCurrency, it.currency, it.rate, it.effectiveDate, it.source, it.createdAt)
+        }
+    }
+    override suspend fun deleteCurrencyRate(rateId: Long): Boolean = withContext(Dispatchers.IO) { engine.deleteCurrencyRate(rateId) }
 
     override suspend fun listRecords(filter: OperationFilter): List<OperationRecord> =
         withContext(Dispatchers.IO) {
@@ -1010,7 +1022,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         MandatoryExportResult(exportedRows = exportedRows, path = path)
 
     private fun FullBackupResultDto.toModel(): FullBackupResult =
-        FullBackupResult(path = path, importedRows = importedRows, budgetRows = budgetRows, distributionRows = distributionRows, assetRows = assetRows, assetSnapshotRows = assetSnapshotRows, goalRows = goalRows, checksum = checksum)
+        FullBackupResult(path = path, importedRows = importedRows, budgetRows = budgetRows, distributionRows = distributionRows, assetRows = assetRows, assetSnapshotRows = assetSnapshotRows, goalRows = goalRows, currencyRateRows = currencyRateRows, checksum = checksum)
 
     private fun toDistributionSubitem(value: app.ledgera.engine.DistributionSubitemDto) = DistributionSubitem(value.id, value.itemId, value.name, value.sortOrder, value.pct, value.pctMinor, value.isActive, value.amountBase, value.amountMinor)
     private fun toDistributionItem(value: app.ledgera.engine.DistributionItemDto) = DistributionItem(value.id, value.name, value.groupName, value.sortOrder, value.pct, value.pctMinor, value.isActive, value.amountBase, value.amountMinor, value.subitems.map(::toDistributionSubitem))

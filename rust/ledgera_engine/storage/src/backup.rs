@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 const BACKUP_FORMAT: &str = "ledgera.full_backup";
-const BACKUP_VERSION: i64 = 3;
+const BACKUP_VERSION: i64 = 4;
 const MAX_BACKUP_BYTES: u64 = 50 * 1024 * 1024;
 
 const BACKUP_TABLES: &[&str] = &[
@@ -30,6 +30,7 @@ const BACKUP_TABLES: &[&str] = &[
     "distribution_subitems",
     "distribution_snapshots",
     "distribution_snapshot_values",
+    "currency_rates",
 ];
 
 const DISTRIBUTION_RESULT_TABLES: &[&str] = &[
@@ -51,6 +52,7 @@ pub struct FullBackupResult {
     pub asset_rows: i64,
     pub asset_snapshot_rows: i64,
     pub goal_rows: i64,
+    pub currency_rate_rows: i64,
     pub checksum: String,
 }
 
@@ -159,7 +161,7 @@ fn sections(payload: &JsonValue) -> StorageResult<&Map<String, JsonValue>> {
         return Err("Unsupported backup format".to_owned());
     }
     let version = object.get("version").and_then(JsonValue::as_i64);
-    if !matches!(version, Some(1) | Some(2) | Some(BACKUP_VERSION)) {
+    if !matches!(version, Some(1) | Some(2) | Some(3) | Some(BACKUP_VERSION)) {
         return Err("Unsupported backup version".to_owned());
     }
     Ok(object)
@@ -715,7 +717,8 @@ fn validate_payload(conn: &Connection, payload: &JsonValue) -> StorageResult<Vec
             || *table == "distribution_items"
             || *table == "distribution_subitems"
             || *table == "distribution_snapshots"
-            || *table == "distribution_snapshot_values")
+            || *table == "distribution_snapshot_values"
+            || *table == "currency_rates")
             && !object.contains_key(*table)
         {
             continue;
@@ -747,7 +750,13 @@ fn validate_payload(conn: &Connection, payload: &JsonValue) -> StorageResult<Vec
         if *table == "budgets" {
             continue;
         }
-        for (index, row) in object[*table].as_array().unwrap().iter().enumerate() {
+        for (index, row) in object
+            .get(*table)
+            .and_then(JsonValue::as_array)
+            .map_or(&[][..], Vec::as_slice)
+            .iter()
+            .enumerate()
+        {
             if !row.is_object() {
                 return Err(format!("{table} row {} must be an object", index + 1));
             }
@@ -799,6 +808,19 @@ pub fn export_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "version".to_owned(),
         JsonValue::Number(BACKUP_VERSION.into()),
     );
+    let base_currency = if table_exists(&conn, "schema_meta")? {
+        conn.query_row(
+            "SELECT value FROM schema_meta WHERE key = 'base_currency' LIMIT 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(sqlite_err)?
+        .unwrap_or_else(|| "KZT".to_owned())
+    } else {
+        "KZT".to_owned()
+    };
+    object.insert("base_currency".to_owned(), JsonValue::String(base_currency));
     let mut total = 0_i64;
     let mut budgets = 0_i64;
     for table in BACKUP_TABLES {
@@ -842,6 +864,7 @@ pub fn export_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         asset_rows: backup_section_count(&object, "assets"),
         asset_snapshot_rows: backup_section_count(&object, "asset_snapshots"),
         goal_rows: backup_section_count(&object, "goals"),
+        currency_rate_rows: backup_section_count(&object, "currency_rates"),
         checksum: format!("sha256:{checksum}"),
     })
 }
@@ -931,6 +954,7 @@ pub fn preview_full_backup_json(db_path: &str, path: &str) -> StorageResult<Full
         asset_rows: backup_section_count(&object, "assets"),
         asset_snapshot_rows: backup_section_count(&object, "asset_snapshots"),
         goal_rows: backup_section_count(&object, "goals"),
+        currency_rate_rows: backup_section_count(&object, "currency_rates"),
         checksum,
     })
 }
@@ -961,6 +985,7 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "distribution_subitems",
         "distribution_items",
         "wallets",
+        "currency_rates",
     ] {
         if table_exists(&tx, table)? {
             tx.execute(&format!("DELETE FROM {table}"), [])
@@ -982,6 +1007,7 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "distribution_subitems",
         "distribution_snapshots",
         "distribution_snapshot_values",
+        "currency_rates",
     ] {
         let rows = object
             .get(table)
@@ -1017,6 +1043,20 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
             .map_err(sqlite_err)?;
         }
     }
+    if let Some(base_currency) = object.get("base_currency").and_then(JsonValue::as_str) {
+        let normalized = base_currency.trim().to_uppercase();
+        if normalized.len() != 3 || !normalized.chars().all(|value| value.is_ascii_uppercase()) {
+            return Err("Backup base_currency must be a three-letter uppercase code".to_owned());
+        }
+        if table_exists(&tx, "schema_meta")? {
+            tx.execute(
+                "INSERT INTO schema_meta (key, value) VALUES ('base_currency', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [normalized.as_str()],
+            )
+            .map_err(sqlite_err)?;
+        }
+    }
     tx.commit().map_err(sqlite_err)?;
     storage_clear_read_connection_cache();
     let distribution_rows = DISTRIBUTION_RESULT_TABLES
@@ -1036,6 +1076,7 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         asset_rows: backup_section_count(&object, "assets"),
         asset_snapshot_rows: backup_section_count(&object, "asset_snapshots"),
         goal_rows: backup_section_count(&object, "goals"),
+        currency_rate_rows: backup_section_count(&object, "currency_rates"),
         checksum,
     })
 }

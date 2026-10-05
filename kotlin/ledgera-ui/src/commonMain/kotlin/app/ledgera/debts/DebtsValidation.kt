@@ -21,9 +21,6 @@ object DebtsValidation {
         DateValidation.validateDmyNotFuture(draft.createdAt.trim())?.let { return it }
         MoneyValidation.validatePositiveAmount(draft.amount.trim())?.let { return it }
         CurrencyValidation.validateSupportedCurrency(draft.currency.trim())?.let { return it }
-        if (!draft.currency.trim().equals(baseCurrency.trim(), ignoreCase = true)) {
-            return "Kotlin Debts currently supports base-currency obligations only (${baseCurrency.trim().uppercase()})"
-        }
         return null
     }
 
