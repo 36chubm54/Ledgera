@@ -54,6 +54,33 @@ dictionary CreateTransferResult {
     i64 transfer_id;
 };
 
+dictionary CurrencyTransferRequest {
+    i64 from_wallet_id;
+    i64 to_wallet_id;
+    string date;
+    string source_amount;
+    string source_currency;
+    string target_amount;
+    string target_currency;
+    string conversion_rate;
+    string description;
+    string commission_amount;
+    string commission_currency;
+};
+
+dictionary CurrencyTransferDto {
+    i64 id;
+    i64 from_wallet_id;
+    i64 to_wallet_id;
+    string date;
+    string source_amount;
+    string source_currency;
+    string target_amount;
+    string target_currency;
+    string conversion_rate;
+    string description;
+};
+
 dictionary UpdateTransferRequest {
     i64 from_wallet_id;
     i64 to_wallet_id;
@@ -702,6 +729,8 @@ interface LedgeraEngine {
     boolean delete_record(i64 record_id);
     [Throws=LedgeraEngineError]
     CreateTransferResult create_transfer(CreateTransferRequest request);
+    [Throws=LedgeraEngineError]
+    CurrencyTransferDto create_currency_transfer(CurrencyTransferRequest request);
     [Throws=LedgeraEngineError]
     TransferDto? get_transfer(i64 transfer_id);
     [Throws=LedgeraEngineError]

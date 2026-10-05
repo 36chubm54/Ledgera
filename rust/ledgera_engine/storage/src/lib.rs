@@ -244,6 +244,35 @@ pub struct WalletCreatePayload {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyTransferCreatePayload {
+    pub from_wallet_id: i64,
+    pub to_wallet_id: i64,
+    pub date: String,
+    pub source_amount: String,
+    pub source_currency: String,
+    pub target_amount: String,
+    pub target_currency: String,
+    pub conversion_rate: String,
+    pub description: String,
+    pub commission_amount: String,
+    pub commission_currency: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyTransferRow {
+    pub id: i64,
+    pub from_wallet_id: i64,
+    pub to_wallet_id: i64,
+    pub date: String,
+    pub source_amount: f64,
+    pub source_currency: String,
+    pub target_amount: f64,
+    pub target_currency: String,
+    pub conversion_rate: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct CurrencyRatePayload {
     pub base_currency: String,
     pub currency: String,
@@ -494,6 +523,7 @@ pub fn initialize_database(db_path: &str) -> StorageResult<()> {
     }
     let conn = open_sqlite_connection(db_path)?;
     conn.execute_batch(INITIAL_SCHEMA).map_err(sqlite_err)?;
+    ensure_transfer_currency_columns_on_conn(&conn)?;
     conn.execute(
         "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('base_currency', 'KZT')",
         [],
@@ -4309,6 +4339,127 @@ pub fn base_currency_code(db_path: &str) -> StorageResult<String> {
     base_currency_code_in_conn(&conn)
 }
 
+fn ensure_transfer_currency_columns_on_conn(conn: &Connection) -> StorageResult<()> {
+    let columns = table_columns_for_connection(conn, "transfers")?;
+    for (name, definition) in [
+        ("source_amount_original", "REAL"),
+        ("source_amount_original_minor", "INTEGER"),
+        ("source_currency", "TEXT"),
+        ("target_amount_original", "REAL"),
+        ("target_amount_original_minor", "INTEGER"),
+        ("target_currency", "TEXT"),
+        ("conversion_rate", "REAL"),
+        ("conversion_rate_text", "TEXT"),
+    ] {
+        if !columns.iter().any(|column| column == name) {
+            conn.execute(&format!("ALTER TABLE transfers ADD COLUMN {name} {definition}"), [])
+                .map_err(sqlite_err)?;
+        }
+    }
+    Ok(())
+}
+
+fn table_columns_for_connection(conn: &Connection, table: &str) -> StorageResult<Vec<String>> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})")).map_err(sqlite_err)?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1)).map_err(sqlite_err)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
+}
+
+fn ensure_transfer_currency_columns(tx: &rusqlite::Transaction<'_>) -> StorageResult<()> {
+    let columns = table_columns_for_connection(tx, "transfers")?;
+    for (name, definition) in [
+        ("source_amount_original", "REAL"),
+        ("source_amount_original_minor", "INTEGER"),
+        ("source_currency", "TEXT"),
+        ("target_amount_original", "REAL"),
+        ("target_amount_original_minor", "INTEGER"),
+        ("target_currency", "TEXT"),
+        ("conversion_rate", "REAL"),
+        ("conversion_rate_text", "TEXT"),
+    ] {
+        if !columns.iter().any(|column| column == name) {
+            tx.execute(&format!("ALTER TABLE transfers ADD COLUMN {name} {definition}"), [])
+                .map_err(sqlite_err)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn create_currency_transfer(
+    db_path: &str,
+    payload: &CurrencyTransferCreatePayload,
+) -> StorageResult<CurrencyTransferRow> {
+    let mut conn = open_sqlite_connection(db_path)?;
+    conn.pragma_update(None, "foreign_keys", "ON").map_err(sqlite_err)?;
+    let tx = conn.transaction().map_err(sqlite_err)?;
+    ensure_transfer_currency_columns(&tx)?;
+    if payload.from_wallet_id <= 0 || payload.to_wallet_id <= 0 || payload.from_wallet_id == payload.to_wallet_id {
+        return Err("Transfer wallets must be different".to_owned());
+    }
+    validate_ymd_date(payload.date.trim())?;
+    let from_wallet = active_wallet_in_tx(&tx, payload.from_wallet_id, "source")?;
+    let to_wallet = active_wallet_in_tx(&tx, payload.to_wallet_id, "target")?;
+    let source_currency = payload.source_currency.trim().to_uppercase();
+    let target_currency = payload.target_currency.trim().to_uppercase();
+    validate_currency_code(&source_currency)?;
+    validate_currency_code(&target_currency)?;
+    if !source_currency.eq_ignore_ascii_case(&wallet_currency_in_tx(&tx, from_wallet.id)?) {
+        return Err("Source currency must match source wallet".to_owned());
+    }
+    if !target_currency.eq_ignore_ascii_case(&wallet_currency_in_tx(&tx, to_wallet.id)?) {
+        return Err("Target currency must match target wallet".to_owned());
+    }
+    let source_minor = to_minor_units(&payload.source_amount)?;
+    let target_minor = to_minor_units(&payload.target_amount)?;
+    if source_minor <= 0 || target_minor <= 0 {
+        return Err("Transfer amounts must be positive".to_owned());
+    }
+    let conversion_rate_text = normalize_currency_rate_text(&payload.conversion_rate)?;
+    let conversion_rate = conversion_rate_text.parse::<f64>().map_err(|_| "Invalid conversion rate".to_owned())?;
+    let expected_target = ((source_minor as f64 / 100.0) * conversion_rate * 100.0).round() as i64;
+    if expected_target != target_minor {
+        return Err("Target amount does not match conversion rate".to_owned());
+    }
+    let base_currency = base_currency_code_in_tx(&tx)?;
+    let source_rate_text = resolve_currency_rate_in_tx(&tx, &base_currency, &source_currency, payload.date.trim())?;
+    let target_rate_text = resolve_currency_rate_in_tx(&tx, &base_currency, &target_currency, payload.date.trim())?;
+    let source_base_minor = ((source_minor as f64 / 100.0) * source_rate_text.parse::<f64>().unwrap() * 100.0).round() as i64;
+    let target_base_minor = ((target_minor as f64 / 100.0) * target_rate_text.parse::<f64>().unwrap() * 100.0).round() as i64;
+    let commission_minor = if payload.commission_amount.trim().is_empty() { 0 } else { to_minor_units(&payload.commission_amount)? };
+    let commission_currency = if payload.commission_currency.trim().is_empty() { source_currency.clone() } else { payload.commission_currency.trim().to_uppercase() };
+    validate_currency_code(&commission_currency)?;
+    let commission_base_minor = if commission_minor == 0 { 0 } else {
+        let rate = resolve_currency_rate_in_tx(&tx, &base_currency, &commission_currency, payload.date.trim())?;
+        ((commission_minor as f64 / 100.0) * rate.parse::<f64>().unwrap() * 100.0).round() as i64
+    };
+    if !from_wallet.allow_negative && wallet_balance_minor_in_tx(&tx, payload.from_wallet_id)? < source_base_minor + commission_base_minor {
+        return Err("Insufficient funds in source wallet".to_owned());
+    }
+    let source_value = source_minor as f64 / 100.0;
+    let target_value = target_minor as f64 / 100.0;
+    tx.execute(
+        "INSERT INTO transfers (from_wallet_id, to_wallet_id, date, amount_original, amount_original_minor, currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, source_amount_original, source_amount_original_minor, source_currency, target_amount_original, target_amount_original_minor, target_currency, conversion_rate, conversion_rate_text, description)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?4, ?5, ?6, ?11, ?12, ?13, ?14, ?15, ?16)",
+        rusqlite::params![payload.from_wallet_id, payload.to_wallet_id, payload.date.trim(), source_value, source_minor, source_currency, source_rate_text.parse::<f64>().unwrap(), source_rate_text, source_base_minor as f64 / 100.0, source_base_minor, target_value, target_minor, target_currency, conversion_rate, conversion_rate_text, payload.description.trim()],
+    ).map_err(sqlite_err)?;
+    let transfer_id = tx.last_insert_rowid();
+    insert_transfer_record_in_tx(&tx, "expense", payload.date.trim(), payload.from_wallet_id, Some(transfer_id), source_value, source_minor, &source_currency, source_rate_text.parse::<f64>().unwrap(), &source_rate_text, "Transfer", payload.description.trim())?;
+    insert_transfer_record_in_tx(&tx, "income", payload.date.trim(), payload.to_wallet_id, Some(transfer_id), target_value, target_minor, &target_currency, target_rate_text.parse::<f64>().unwrap(), &target_rate_text, "Transfer", payload.description.trim())?;
+    tx.execute("UPDATE records SET amount_base = ?1, amount_base_minor = ?2 WHERE transfer_id = ?3 AND type = 'expense'", (source_base_minor as f64 / 100.0, source_base_minor, transfer_id)).map_err(sqlite_err)?;
+    tx.execute("UPDATE records SET amount_base = ?1, amount_base_minor = ?2 WHERE transfer_id = ?3 AND type = 'income'", (target_base_minor as f64 / 100.0, target_base_minor, transfer_id)).map_err(sqlite_err)?;
+    if commission_minor > 0 {
+        let commission_rate = resolve_currency_rate_in_tx(&tx, &base_currency, &commission_currency, payload.date.trim())?;
+        insert_transfer_record_in_tx(&tx, "expense", payload.date.trim(), payload.from_wallet_id, None, commission_minor as f64 / 100.0, commission_minor, &commission_currency, commission_rate.parse::<f64>().unwrap(), &commission_rate, "Commission", &format!("[transfer:{transfer_id}]"))?;
+        tx.execute("UPDATE records SET amount_base = ?1, amount_base_minor = ?2 WHERE transfer_id IS NULL AND description = ?3", (commission_base_minor as f64 / 100.0, commission_base_minor, format!("[transfer:{transfer_id}]"))).map_err(sqlite_err)?;
+    }
+    normalize_transfer_ids_in_tx(&tx)?;
+    normalize_record_ids_in_tx(&tx)?;
+    tx.commit().map_err(sqlite_err)?;
+    storage_clear_read_connection_cache();
+    let conn = open_sqlite_connection(db_path)?;
+    conn.query_row("SELECT id, from_wallet_id, to_wallet_id, date, source_amount_original, source_currency, target_amount_original, target_currency, conversion_rate_text, description FROM transfers WHERE id = ?1", [transfer_id], |row| Ok(CurrencyTransferRow { id: row.get(0)?, from_wallet_id: row.get(1)?, to_wallet_id: row.get(2)?, date: row.get(3)?, source_amount: row.get(4)?, source_currency: row.get(5)?, target_amount: row.get(6)?, target_currency: row.get(7)?, conversion_rate: row.get(8)?, description: row.get(9)? })).map_err(sqlite_err)
+}
+
 pub fn currency_rate_rows(db_path: &str) -> StorageResult<Vec<CurrencyRateRow>> {
     let conn = open_sqlite_connection(db_path)?;
     let mut stmt = conn.prepare(
@@ -5948,6 +6099,11 @@ fn normalize_base_currency_code(value: &str) -> StorageResult<String> {
     }
     validate_currency_code(&normalized)?;
     Ok(normalized)
+}
+
+fn wallet_currency_in_tx(tx: &rusqlite::Transaction<'_>, wallet_id: i64) -> StorageResult<String> {
+    tx.query_row("SELECT currency FROM wallets WHERE id = ?1", [wallet_id], |row| row.get::<_, String>(0))
+        .map_err(sqlite_err)
 }
 
 fn resolve_currency_rate_in_tx(
@@ -8540,6 +8696,55 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(commission.wallet_id, 1);
         assert_eq!(commission.amount_base, 3.5);
         assert_eq!(commission.category, "Commission");
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn create_currency_transfer_preserves_both_amounts_and_rate() {
+        let db_path = create_balance_test_db();
+        upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "KZT".to_owned(),
+                currency: "USD".to_owned(),
+                rate: "500".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "test".to_owned(),
+            },
+        )
+        .unwrap();
+        let usd_wallet = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "USD wallet".to_owned(),
+                currency: "USD".to_owned(),
+                initial_balance: "0".to_owned(),
+                allow_negative: false,
+            },
+        )
+        .unwrap();
+        let transfer = create_currency_transfer(
+            &db_path,
+            &CurrencyTransferCreatePayload {
+                from_wallet_id: 2,
+                to_wallet_id: usd_wallet.id,
+                date: "2026-01-10".to_owned(),
+                source_amount: "100".to_owned(),
+                source_currency: "KZT".to_owned(),
+                target_amount: "0.2".to_owned(),
+                target_currency: "USD".to_owned(),
+                conversion_rate: "0.002".to_owned(),
+                description: "FX transfer".to_owned(),
+                commission_amount: "".to_owned(),
+                commission_currency: "".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(transfer.source_amount, 100.0);
+        assert_eq!(transfer.target_amount, 0.2);
+        assert_eq!(transfer.source_currency, "KZT");
+        assert_eq!(transfer.target_currency, "USD");
+        assert_eq!(transfer.conversion_rate, "0.002");
         remove_test_db(&db_path);
     }
 

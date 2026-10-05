@@ -83,6 +83,33 @@ data class CreateTransferResult(
     val transferId: Long,
 )
 
+data class CurrencyTransferRequest(
+    val fromWalletId: Long,
+    val toWalletId: Long,
+    val date: String,
+    val sourceAmount: String,
+    val sourceCurrency: String,
+    val targetAmount: String,
+    val targetCurrency: String,
+    val conversionRate: String,
+    val description: String,
+    val commissionAmount: String = "",
+    val commissionCurrency: String = "",
+)
+
+data class CurrencyTransferResult(
+    val id: Long,
+    val fromWalletId: Long,
+    val toWalletId: Long,
+    val date: String,
+    val sourceAmount: String,
+    val sourceCurrency: String,
+    val targetAmount: String,
+    val targetCurrency: String,
+    val conversionRate: String,
+    val description: String,
+)
+
 data class TransferDetails(
     val id: Long,
     val fromWalletId: Long,

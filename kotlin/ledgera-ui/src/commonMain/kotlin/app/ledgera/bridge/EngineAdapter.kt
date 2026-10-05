@@ -100,6 +100,7 @@ interface OperationsEngine {
     suspend fun updateRecordWithTagColors(recordId: Long, request: UpdateOperationRequest): OperationRecord
     suspend fun deleteRecord(recordId: Long): Boolean
     suspend fun createTransfer(request: CreateTransferRequest): CreateTransferResult
+    suspend fun createCurrencyTransfer(request: CurrencyTransferRequest): CurrencyTransferResult = error("Currency transfers are unavailable")
     suspend fun getTransfer(transferId: Long): TransferDetails?
     suspend fun updateTransfer(transferId: Long, request: UpdateTransferRequest): UpdateTransferResult
     suspend fun deleteTransfer(transferId: Long): Boolean

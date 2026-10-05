@@ -8,6 +8,7 @@ import app.ledgera.engine.CreateBudgetRequest as NativeCreateBudgetRequest
 import app.ledgera.engine.CreateDistributionItemRequest as NativeCreateDistributionItemRequest
 import app.ledgera.engine.CreateDistributionSubitemRequest as NativeCreateDistributionSubitemRequest
 import app.ledgera.engine.CreateTransferRequest as NativeCreateTransferRequest
+import app.ledgera.engine.CurrencyTransferRequest as NativeCurrencyTransferRequest
 import app.ledgera.engine.CreateWalletRequest as NativeCreateWalletRequest
 import app.ledgera.engine.LedgeraEngine
 import app.ledgera.engine.DashboardAssetSnapshotUpdate as NativeDashboardAssetSnapshotUpdate
@@ -43,6 +44,8 @@ import app.ledgera.model.CreateMandatoryTemplateRequest
 import app.ledgera.model.CreateOperationRequest
 import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CreateTransferResult
+import app.ledgera.model.CurrencyTransferRequest
+import app.ledgera.model.CurrencyTransferResult
 import app.ledgera.model.CreateWalletRequest
 import app.ledgera.model.FullBackupResult
 import app.ledgera.model.DebtItem
@@ -409,6 +412,26 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 )
             ).let { CreateTransferResult(transferId = it.transferId) }
         }
+
+    override suspend fun createCurrencyTransfer(request: CurrencyTransferRequest): CurrencyTransferResult = withContext(Dispatchers.IO) {
+        engine.createCurrencyTransfer(
+            app.ledgera.engine.CurrencyTransferRequest(
+                fromWalletId = request.fromWalletId,
+                toWalletId = request.toWalletId,
+                date = request.date,
+                sourceAmount = request.sourceAmount,
+                sourceCurrency = request.sourceCurrency,
+                targetAmount = request.targetAmount,
+                targetCurrency = request.targetCurrency,
+                conversionRate = request.conversionRate,
+                description = request.description,
+                commissionAmount = request.commissionAmount,
+                commissionCurrency = request.commissionCurrency,
+            )
+        ).let {
+            CurrencyTransferResult(it.id, it.fromWalletId, it.toWalletId, it.date, it.sourceAmount, it.sourceCurrency, it.targetAmount, it.targetCurrency, it.conversionRate, it.description)
+        }
+    }
 
     override suspend fun getTransfer(transferId: Long): TransferDetails? = withContext(Dispatchers.IO) {
         engine.getTransfer(transferId)?.let(::toTransferDetails)

@@ -43,7 +43,8 @@ use ledgera_engine_storage::{
     set_system_wallet_initial_balance, standalone_record_get_row, tag_color_palette,
     tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
     update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
-    CurrencyRatePayload, CurrencyRateRow, currency_rate_rows, delete_currency_rate,
+    CurrencyRatePayload, CurrencyRateRow, CurrencyTransferCreatePayload, CurrencyTransferRow,
+    create_currency_transfer, currency_rate_rows, delete_currency_rate,
     set_base_currency, supported_currencies, upsert_currency_rate,
 };
 use std::fmt;
@@ -699,6 +700,35 @@ pub struct CurrencyRateRequest {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyTransferRequest {
+    pub from_wallet_id: i64,
+    pub to_wallet_id: i64,
+    pub date: String,
+    pub source_amount: String,
+    pub source_currency: String,
+    pub target_amount: String,
+    pub target_currency: String,
+    pub conversion_rate: String,
+    pub description: String,
+    pub commission_amount: String,
+    pub commission_currency: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyTransferDto {
+    pub id: i64,
+    pub from_wallet_id: i64,
+    pub to_wallet_id: i64,
+    pub date: String,
+    pub source_amount: String,
+    pub source_currency: String,
+    pub target_amount: String,
+    pub target_currency: String,
+    pub conversion_rate: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AssetBreakdownDto {
     pub label: String,
     pub amount_base: String,
@@ -1177,6 +1207,22 @@ impl LedgeraEngine {
                 transfer_id: row.id,
             })
             .map_err(storage_error)
+    }
+
+    pub fn create_currency_transfer(&self, request: CurrencyTransferRequest) -> Result<CurrencyTransferDto, LedgeraEngineError> {
+        create_currency_transfer(&self.db_path, &CurrencyTransferCreatePayload {
+            from_wallet_id: request.from_wallet_id,
+            to_wallet_id: request.to_wallet_id,
+            date: request.date,
+            source_amount: request.source_amount,
+            source_currency: request.source_currency,
+            target_amount: request.target_amount,
+            target_currency: request.target_currency,
+            conversion_rate: request.conversion_rate,
+            description: request.description,
+            commission_amount: request.commission_amount,
+            commission_currency: request.commission_currency,
+        }).map(currency_transfer_to_dto).map_err(storage_error)
     }
 
     pub fn get_transfer(
@@ -2384,6 +2430,21 @@ fn currency_rate_to_dto(row: CurrencyRateRow) -> CurrencyRateDto {
         effective_date: row.effective_date,
         source: row.source,
         created_at: row.created_at,
+    }
+}
+
+fn currency_transfer_to_dto(row: CurrencyTransferRow) -> CurrencyTransferDto {
+    CurrencyTransferDto {
+        id: row.id,
+        from_wallet_id: row.from_wallet_id,
+        to_wallet_id: row.to_wallet_id,
+        date: row.date,
+        source_amount: format_money(row.source_amount),
+        source_currency: row.source_currency,
+        target_amount: format_money(row.target_amount),
+        target_currency: row.target_currency,
+        conversion_rate: row.conversion_rate,
+        description: row.description,
     }
 }
 
