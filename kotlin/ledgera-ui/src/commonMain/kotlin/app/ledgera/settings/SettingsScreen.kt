@@ -39,7 +39,10 @@ import androidx.compose.ui.unit.dp
 import app.ledgera.model.AuditFinding
 import app.ledgera.model.AuditSummary
 import app.ledgera.model.CreateWalletRequest
+import app.ledgera.model.CurrencyRate
 import app.ledgera.model.WalletSettingsItem
+import app.ledgera.validation.CurrencyValidation
+import app.ledgera.validation.DateValidation
 
 interface SettingsFileActions {
     fun openBackupPath(): String?
@@ -60,6 +63,7 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsState()
     var showCreateWalletDialog by remember { mutableStateOf(false) }
     var showCurrencyRateDialog by remember { mutableStateOf(false) }
+    var editingCurrencyRate by remember { mutableStateOf<CurrencyRate?>(null) }
     var walletPendingDelete by remember { mutableStateOf<WalletSettingsItem?>(null) }
     var showAuditReport by remember { mutableStateOf(false) }
 
@@ -105,7 +109,12 @@ fun SettingsScreen(
             rates = state.currencyRates,
             loading = state.loading,
             error = state.error,
-            onAddRate = { viewModel.clearFeedback(); showCurrencyRateDialog = true },
+            onAddRate = { viewModel.clearFeedback(); editingCurrencyRate = null; showCurrencyRateDialog = true },
+            onUpdateRate = { rate ->
+                viewModel.clearFeedback()
+                editingCurrencyRate = rate
+                showCurrencyRateDialog = true
+            },
             onDeleteRate = viewModel::deleteCurrencyRate,
             onSetBase = viewModel::setBaseCurrency,
         )
@@ -138,13 +147,15 @@ fun SettingsScreen(
     if (showCurrencyRateDialog) {
         CurrencyRateDialog(
             baseCurrency = state.baseCurrency,
+            existingRate = editingCurrencyRate,
             error = state.error,
             submitting = state.loading,
             onSave = { base, currency, rate, date, source ->
                 viewModel.saveCurrencyRate(base, currency, rate, date, source)
                 showCurrencyRateDialog = false
+                editingCurrencyRate = null
             },
-            onCancel = { showCurrencyRateDialog = false },
+            onCancel = { showCurrencyRateDialog = false; editingCurrencyRate = null },
         )
     }
     walletPendingDelete?.let { wallet ->
@@ -203,6 +214,7 @@ private fun CurrencySection(
     loading: Boolean,
     error: String?,
     onAddRate: () -> Unit,
+    onUpdateRate: (CurrencyRate) -> Unit,
     onDeleteRate: (Long) -> Unit,
     onSetBase: (String) -> Unit,
 ) {
@@ -219,7 +231,10 @@ private fun CurrencySection(
             rates.forEach { rate ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("${rate.currency}/${rate.baseCurrency} = ${rate.rate} · ${rate.effectiveDate}")
-                    TextButton(onClick = { onDeleteRate(rate.id) }, enabled = !loading) { Text("Delete") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TextButton(onClick = { onUpdateRate(rate) }, enabled = !loading) { Text("Update") }
+                        TextButton(onClick = { onDeleteRate(rate.id) }, enabled = !loading) { Text("Delete") }
+                    }
                 }
             }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -230,29 +245,35 @@ private fun CurrencySection(
 @Composable
 private fun CurrencyRateDialog(
     baseCurrency: String,
+    existingRate: CurrencyRate? = null,
     error: String?,
     submitting: Boolean,
     onSave: (String, String, String, String, String) -> Unit,
     onCancel: () -> Unit,
 ) {
-    var currency by remember { mutableStateOf("") }
-    var rate by remember { mutableStateOf("") }
-    var date by remember { mutableStateOf("") }
-    var source by remember { mutableStateOf("manual") }
-    val valid = currency.length == 3 && rate.toDoubleOrNull()?.let { it > 0.0 } == true && date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))
+    var currency by remember(existingRate?.id) { mutableStateOf(existingRate?.currency.orEmpty()) }
+    var rate by remember(existingRate?.id) { mutableStateOf(existingRate?.rate.orEmpty()) }
+    var date by remember(existingRate?.id) { mutableStateOf(existingRate?.effectiveDate.orEmpty()) }
+    var source by remember(existingRate?.id) { mutableStateOf(existingRate?.source ?: "manual") }
+    val currencyError = CurrencyValidation.validateSupportedCurrency(currency)
+        ?.takeIf { currency != baseCurrency }
+    val dateError = if (DateValidation.parseYmd(date) == null) "Date must use a valid YYYY-MM-DD value" else null
+    val rateError = if (rate.toDoubleOrNull()?.let { it > 0.0 } == true) null else "Rate must be greater than zero"
+    val valid = currencyError == null && currency != baseCurrency && dateError == null && rateError == null
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Add currency rate") },
+        title = { Text(if (existingRate == null) "Add currency rate" else "Update currency rate") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(currency, { currency = it.uppercase().take(3) }, label = { Text("Currency") }, singleLine = true)
                 OutlinedTextField(rate, { rate = it }, label = { Text("Rate to $baseCurrency") }, singleLine = true)
                 OutlinedTextField(date, { date = it }, label = { Text("Effective date YYYY-MM-DD") }, singleLine = true)
                 OutlinedTextField(source, { source = it }, label = { Text("Source") }, singleLine = true)
+                listOfNotNull(currencyError, rateError, dateError).firstOrNull()?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { Button(onClick = { onSave(baseCurrency, currency, rate, date, source) }, enabled = valid && !submitting) { Text("Save") } },
+        confirmButton = { Button(onClick = { onSave(baseCurrency, currency, rate, date, source) }, enabled = valid && !submitting) { Text(if (existingRate == null) "Save" else "Update") } },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
     )
 }
