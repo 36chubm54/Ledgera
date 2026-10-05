@@ -248,11 +248,8 @@ pub struct CurrencyTransferCreatePayload {
     pub from_wallet_id: i64,
     pub to_wallet_id: i64,
     pub date: String,
-    pub source_amount: String,
-    pub source_currency: String,
-    pub target_amount: String,
-    pub target_currency: String,
-    pub conversion_rate: String,
+    pub amount: String,
+    pub amount_currency: String,
     pub description: String,
     pub commission_amount: String,
     pub commission_currency: String,
@@ -291,6 +288,17 @@ pub struct CurrencyRateRow {
     pub effective_date: String,
     pub source: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyTransferQuoteRow {
+    pub source_amount: f64,
+    pub source_currency: String,
+    pub target_amount: f64,
+    pub target_currency: String,
+    pub conversion_rate: String,
+    pub source_rate: String,
+    pub target_rate: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4413,30 +4421,19 @@ pub fn create_currency_transfer(
     validate_ymd_date(payload.date.trim())?;
     let from_wallet = active_wallet_in_tx(&tx, payload.from_wallet_id, "source")?;
     let to_wallet = active_wallet_in_tx(&tx, payload.to_wallet_id, "target")?;
-    let source_currency = payload.source_currency.trim().to_uppercase();
-    let target_currency = payload.target_currency.trim().to_uppercase();
-    validate_currency_code(&source_currency)?;
-    validate_currency_code(&target_currency)?;
-    if !source_currency.eq_ignore_ascii_case(&wallet_currency_in_tx(&tx, from_wallet.id)?) {
-        return Err("Source currency must match source wallet".to_owned());
-    }
-    if !target_currency.eq_ignore_ascii_case(&wallet_currency_in_tx(&tx, to_wallet.id)?) {
-        return Err("Target currency must match target wallet".to_owned());
-    }
-    let source_minor = to_minor_units(&payload.source_amount)?;
-    let target_minor = to_minor_units(&payload.target_amount)?;
-    if source_minor <= 0 || target_minor <= 0 {
-        return Err("Transfer amounts must be positive".to_owned());
-    }
-    let conversion_rate_text = normalize_currency_rate_text(&payload.conversion_rate)?;
-    let conversion_rate = conversion_rate_text.parse::<f64>().map_err(|_| "Invalid conversion rate".to_owned())?;
-    let expected_target = ((source_minor as f64 / 100.0) * conversion_rate * 100.0).round() as i64;
-    if expected_target != target_minor {
-        return Err("Target amount does not match conversion rate".to_owned());
-    }
+    let resolved = resolve_currency_transfer_in_tx(&tx, payload, &from_wallet, &to_wallet)?;
+    let source_currency = resolved.source_currency.clone();
+    let target_currency = resolved.target_currency.clone();
+    let source_rate_text = resolved.source_rate.clone();
+    let target_rate_text = resolved.target_rate.clone();
+    let conversion_rate_text = resolved.conversion_rate.clone();
     let base_currency = base_currency_code_in_tx(&tx)?;
-    let source_rate_text = resolve_currency_rate_in_tx(&tx, &base_currency, &source_currency, payload.date.trim())?;
-    let target_rate_text = resolve_currency_rate_in_tx(&tx, &base_currency, &target_currency, payload.date.trim())?;
+    let source_minor = resolved.source_amount_minor;
+    let target_minor = resolved.target_amount_minor;
+    let conversion_rate = conversion_rate_text.parse::<f64>().map_err(|_| "Invalid conversion rate".to_owned())?;
+    if source_minor <= 0 || target_minor <= 0 {
+        return Err("Calculated transfer amounts must be positive".to_owned());
+    }
     let source_base_minor = ((source_minor as f64 / 100.0) * source_rate_text.parse::<f64>().unwrap() * 100.0).round() as i64;
     let target_base_minor = ((target_minor as f64 / 100.0) * target_rate_text.parse::<f64>().unwrap() * 100.0).round() as i64;
     let commission_minor = if payload.commission_amount.trim().is_empty() { 0 } else { to_minor_units(&payload.commission_amount)? };
@@ -4472,6 +4469,87 @@ pub fn create_currency_transfer(
     storage_clear_read_connection_cache();
     let conn = open_sqlite_connection(db_path)?;
     conn.query_row("SELECT id, from_wallet_id, to_wallet_id, date, source_amount_original, source_currency, target_amount_original, target_currency, conversion_rate_text, description FROM transfers WHERE id = ?1", [transfer_id], |row| Ok(CurrencyTransferRow { id: row.get(0)?, from_wallet_id: row.get(1)?, to_wallet_id: row.get(2)?, date: row.get(3)?, source_amount: row.get(4)?, source_currency: row.get(5)?, target_amount: row.get(6)?, target_currency: row.get(7)?, conversion_rate: row.get(8)?, description: row.get(9)? })).map_err(sqlite_err)
+}
+
+struct ResolvedCurrencyTransfer {
+    source_amount_minor: i64,
+    target_amount_minor: i64,
+    source_currency: String,
+    target_currency: String,
+    source_rate: String,
+    target_rate: String,
+    conversion_rate: String,
+}
+
+fn resolve_currency_transfer_in_tx(
+    tx: &rusqlite::Transaction<'_>,
+    payload: &CurrencyTransferCreatePayload,
+    from_wallet: &TransferWallet,
+    to_wallet: &TransferWallet,
+) -> StorageResult<ResolvedCurrencyTransfer> {
+    let source_currency = wallet_currency_in_tx(tx, from_wallet.id)?.trim().to_uppercase();
+    let target_currency = wallet_currency_in_tx(tx, to_wallet.id)?.trim().to_uppercase();
+    let amount_currency = payload.amount_currency.trim().to_uppercase();
+    validate_currency_code(&source_currency)?;
+    validate_currency_code(&target_currency)?;
+    validate_currency_code(&amount_currency)?;
+    if amount_currency != source_currency && amount_currency != target_currency {
+        return Err("Amount currency must match one of the selected wallets".to_owned());
+    }
+    let base_currency = base_currency_code_in_tx(tx)?;
+    let source_rate = resolve_currency_rate_in_tx(tx, &base_currency, &source_currency, payload.date.trim())?;
+    let target_rate = resolve_currency_rate_in_tx(tx, &base_currency, &target_currency, payload.date.trim())?;
+    let source_rate_value = source_rate.parse::<f64>().map_err(|_| "Invalid source currency rate".to_owned())?;
+    let target_rate_value = target_rate.parse::<f64>().map_err(|_| "Invalid target currency rate".to_owned())?;
+    let entered_minor = to_minor_units(&payload.amount)?;
+    if entered_minor <= 0 {
+        return Err("Transfer amount must be positive".to_owned());
+    }
+    let conversion_rate = source_rate_value / target_rate_value;
+    let conversion_rate = normalize_currency_rate_text(&format_rate_text(conversion_rate))?;
+    let conversion_rate_value = conversion_rate.parse::<f64>().map_err(|_| "Invalid conversion rate".to_owned())?;
+    let (source_amount_minor, target_amount_minor) = if source_currency == target_currency {
+        (entered_minor, entered_minor)
+    } else if amount_currency == source_currency {
+        (entered_minor, ((entered_minor as f64) * conversion_rate_value).round() as i64)
+    } else {
+        (((entered_minor as f64) / conversion_rate_value).round() as i64, entered_minor)
+    };
+    if source_amount_minor <= 0 || target_amount_minor <= 0 {
+        return Err("Calculated transfer amounts must be positive".to_owned());
+    }
+    Ok(ResolvedCurrencyTransfer { source_amount_minor, target_amount_minor, source_currency, target_currency, source_rate, target_rate, conversion_rate })
+}
+
+pub fn currency_transfer_quote(
+    db_path: &str,
+    payload: &CurrencyTransferCreatePayload,
+) -> StorageResult<CurrencyTransferQuoteRow> {
+    let conn = open_sqlite_connection(db_path)?;
+    let tx = conn.unchecked_transaction().map_err(sqlite_err)?;
+    if payload.from_wallet_id <= 0 || payload.to_wallet_id <= 0 || payload.from_wallet_id == payload.to_wallet_id {
+        return Err("Transfer wallets must be different".to_owned());
+    }
+    validate_ymd_date(payload.date.trim())?;
+    let from_wallet = active_wallet_in_tx(&tx, payload.from_wallet_id, "source")?;
+    let to_wallet = active_wallet_in_tx(&tx, payload.to_wallet_id, "target")?;
+    let resolved = resolve_currency_transfer_in_tx(&tx, payload, &from_wallet, &to_wallet)?;
+    Ok(CurrencyTransferQuoteRow {
+        source_amount: resolved.source_amount_minor as f64 / 100.0,
+        source_currency: resolved.source_currency,
+        target_amount: resolved.target_amount_minor as f64 / 100.0,
+        target_currency: resolved.target_currency,
+        conversion_rate: resolved.conversion_rate,
+        source_rate: resolved.source_rate,
+        target_rate: resolved.target_rate,
+    })
+}
+
+fn format_rate_text(value: f64) -> String {
+    let mut text = format!("{value:.12}");
+    while text.ends_with('0') { text.pop(); }
+    if text.ends_with('.') { text.pop(); }
+    if text.is_empty() { "0".to_owned() } else { text }
 }
 
 pub fn currency_rate_rows(db_path: &str) -> StorageResult<Vec<CurrencyRateRow>> {
@@ -6143,6 +6221,23 @@ fn resolve_currency_rate_in_tx(
         .map_err(sqlite_err)?
         .ok_or_else(|| format!("No currency rate for {currency} on {date}"))?;
     normalize_currency_rate_text(&rate_text)
+}
+
+/// Returns the latest configured rate for each currency from the SQLite rate table.
+/// The base currency is always present with a rate of one.
+pub fn current_currency_rates(db_path: &str) -> StorageResult<HashMap<String, f64>> {
+    let base = base_currency_code(db_path)?.to_uppercase();
+    let mut rates = HashMap::new();
+    rates.insert(base.clone(), 1.0);
+    for row in currency_rate_rows(db_path)? {
+        if row.base_currency.eq_ignore_ascii_case(&base)
+            && row.rate.is_finite()
+            && row.rate > 0.0
+        {
+            rates.entry(row.currency.trim().to_uppercase()).or_insert(row.rate);
+        }
+    }
+    Ok(rates)
 }
 
 fn normalize_currency_rate_text(value: &str) -> StorageResult<String> {
@@ -8743,11 +8838,8 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 from_wallet_id: 2,
                 to_wallet_id: usd_wallet.id,
                 date: "2026-01-10".to_owned(),
-                source_amount: "100".to_owned(),
-                source_currency: "KZT".to_owned(),
-                target_amount: "0.2".to_owned(),
-                target_currency: "USD".to_owned(),
-                conversion_rate: "0.002".to_owned(),
+                amount: "100".to_owned(),
+                amount_currency: "KZT".to_owned(),
                 description: "FX transfer".to_owned(),
                 commission_amount: "".to_owned(),
                 commission_currency: "".to_owned(),
@@ -8759,6 +8851,23 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(transfer.source_currency, "KZT");
         assert_eq!(transfer.target_currency, "USD");
         assert_eq!(transfer.conversion_rate, "0.002");
+        let reverse_quote = currency_transfer_quote(
+            &db_path,
+            &CurrencyTransferCreatePayload {
+                from_wallet_id: usd_wallet.id,
+                to_wallet_id: 2,
+                date: "2026-01-10".to_owned(),
+                amount: "0.1".to_owned(),
+                amount_currency: "USD".to_owned(),
+                description: "Reverse quote".to_owned(),
+                commission_amount: "".to_owned(),
+                commission_currency: "".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(reverse_quote.source_amount, 0.1);
+        assert_eq!(reverse_quote.target_amount, 50.0);
+        assert_eq!(reverse_quote.conversion_rate, "500");
         remove_test_db(&db_path);
     }
 
@@ -9210,7 +9319,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 }
             )
             .unwrap_err()
-            .contains("base-currency transfers only (KZT)")
+            .contains("Transfer currency must match both wallet currencies")
         );
         assert!(
             update_transfer(

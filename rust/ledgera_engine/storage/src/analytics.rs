@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::collections::HashMap;
 
 use crate::{
     minor_amount_expr, minor_to_money_value, round_money, sqlite_err, with_cached_read_connection,
@@ -217,24 +217,8 @@ fn load_current_rates(
     conn: &Connection,
     filters: &AnalyticsFilters,
 ) -> StorageResult<HashMap<String, f64>> {
-    let mut rates = HashMap::new();
-    let path = Path::new(db_path)
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join("currency_rates.json");
-    if path.is_file() {
-        let text = fs::read_to_string(&path)
-            .map_err(|err| format!("Failed to read current currency rates: {err}"))?;
-        let configured: HashMap<String, f64> = serde_json::from_str(&text)
-            .map_err(|err| format!("Invalid current currency rates: {err}"))?;
-        for (currency, rate) in configured {
-            if rate.is_finite() && rate > 0.0 {
-                rates.insert(currency.trim().to_uppercase(), rate);
-            }
-        }
-    }
-    let base = crate::base_currency_code(db_path)?;
-    rates.insert(base.to_uppercase(), 1.0);
+    let rates = crate::current_currency_rates(db_path)?;
+    let rates = rates;
     let mut statement = conn
         .prepare("SELECT DISTINCT UPPER(currency) FROM records WHERE trim(currency) <> '' AND date <= ?1")
         .map_err(sqlite_err)?;

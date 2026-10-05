@@ -4,6 +4,7 @@ import app.ledgera.bridge.OperationsEngine
 import app.ledgera.model.CreateOperationRequest
 import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CurrencyTransferRequest
+import app.ledgera.model.CurrencyTransferQuote
 import app.ledgera.model.OperationDraft
 import app.ledgera.model.OperationDeleteResult
 import app.ledgera.model.OperationFilter
@@ -15,6 +16,7 @@ import app.ledgera.model.UpdateOperationRequest
 import app.ledgera.model.UpdateTransferRequest
 import app.ledgera.model.WalletOption
 import app.ledgera.validation.DateValidation
+import app.ledgera.validation.CurrencyValidation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,6 +46,7 @@ data class OperationsUiState(
     val selectedBulkTransferIds: Set<Long> = emptySet(),
     val editDraft: OperationDraft? = null,
     val transferDraft: TransferDraft? = null,
+    val currencyTransferQuote: CurrencyTransferQuote? = null,
     val importPreview: OperationImportResult? = null,
     val importPath: String? = null,
     val importFileSnapshot: String? = null,
@@ -515,23 +518,20 @@ class OperationsViewModel(
     }
 
     fun createCurrencyTransfer(request: CurrencyTransferRequest) {
-        val source = request.sourceAmount.toDoubleOrNull()
-        val target = request.targetAmount.toDoubleOrNull()
-        val rate = request.conversionRate.toDoubleOrNull()
+        val amount = request.amount.toDoubleOrNull()
         val dateError = DateValidation.validateDmyNotFuture(request.date)
         val error = when {
             request.fromWalletId <= 0 || request.toWalletId <= 0 || request.fromWalletId == request.toWalletId -> "Select different source and target wallets"
             dateError != null -> dateError
-            source == null || source <= 0.0 || target == null || target <= 0.0 -> "Transfer amounts must be positive numbers"
-            rate == null || rate <= 0.0 -> "Conversion rate must be positive"
-            kotlin.math.abs(source * rate - target) > 0.005 -> "Target amount does not match conversion rate"
+            amount == null || amount <= 0.0 -> "Transfer amount must be positive"
+            !CurrencyValidation.isSupportedCurrency(request.amountCurrency) -> "Select a valid amount currency"
             else -> null
         }
         if (error != null) {
-            mutableState.value = mutableState.value.copy(error = error, notice = null)
+            mutableState.value = mutableState.value.copy(error = error, notice = null, currencyTransferQuote = null)
             return
         }
-        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null, currencyTransferQuote = null)
         launchSafely {
             runCatching {
                 val result = engine.createCurrencyTransfer(request.copy(date = request.date.toStorageDate()))
@@ -543,6 +543,15 @@ class OperationsViewModel(
                     notice = null,
                 )
             }
+        }
+    }
+
+    fun quoteCurrencyTransfer(request: CurrencyTransferRequest) {
+        mutableState.value = mutableState.value.copy(error = null, currencyTransferQuote = null)
+        launchSafely {
+            runCatching { engine.quoteCurrencyTransfer(request.copy(date = request.date.toStorageDate())) }
+                .onSuccess { quote -> mutableState.value = mutableState.value.copy(currencyTransferQuote = quote) }
+                .onFailure { failure -> mutableState.value = mutableState.value.copy(error = failure.message ?: "Unable to calculate transfer") }
         }
     }
 

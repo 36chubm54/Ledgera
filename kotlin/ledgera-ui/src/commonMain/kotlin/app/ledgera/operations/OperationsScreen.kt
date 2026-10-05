@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import app.ledgera.model.CreateOperationRequest
 import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CurrencyTransferRequest
+import app.ledgera.model.CurrencyTransferQuote
 import app.ledgera.model.OperationDraft
 import app.ledgera.model.OperationFilter
 import app.ledgera.model.OperationImportResult
@@ -213,6 +214,8 @@ fun OperationsScreen(
             submitting = state.loading,
             onSubmit = viewModel::createTransfer,
             onCurrencySubmit = viewModel::createCurrencyTransfer,
+            onQuote = viewModel::quoteCurrencyTransfer,
+            quote = state.currencyTransferQuote,
             onCancel = { showTransferDialog = false },
         )
     }
@@ -483,14 +486,14 @@ private fun CreateTransferDialog(
     submitting: Boolean,
     onSubmit: (CreateTransferRequest) -> Unit,
     onCurrencySubmit: (CurrencyTransferRequest) -> Unit,
+    onQuote: (CurrencyTransferRequest) -> Unit,
+    quote: CurrencyTransferQuote?,
     onCancel: () -> Unit,
 ) {
     var fromWalletId by remember { mutableStateOf(wallets.firstOrNull()?.id ?: 0L) }
     var toWalletId by remember { mutableStateOf(wallets.drop(1).firstOrNull()?.id ?: 0L) }
     var date by remember { mutableStateOf(todayText()) }
     var amount by remember { mutableStateOf("") }
-    var targetAmount by remember { mutableStateOf("") }
-    var conversionRate by remember { mutableStateOf("") }
     var currency by remember { mutableStateOf(baseCurrency) }
     var commissionAmount by remember { mutableStateOf("0") }
     var commissionCurrency by remember { mutableStateOf(baseCurrency) }
@@ -514,21 +517,17 @@ private fun CreateTransferDialog(
     val sourceWallet = wallets.firstOrNull { it.id == fromWalletId }
     val targetWallet = wallets.firstOrNull { it.id == toWalletId }
     val crossCurrency = sourceWallet != null && targetWallet != null && sourceWallet.currency != targetWallet.currency
-    LaunchedEffect(amount, conversionRate, crossCurrency) {
-        targetAmount = if (crossCurrency) {
-            val source = amount.toDoubleOrNull()
-            val rate = conversionRate.toDoubleOrNull()
-            if (source != null && rate != null && source > 0.0 && rate > 0.0) "%.2f".format(source * rate) else ""
-        } else ""
+    val amountCurrencies = listOfNotNull(sourceWallet?.currency, targetWallet?.currency).distinct()
+    LaunchedEffect(sourceWallet?.id, targetWallet?.id) {
+        if (currency !in amountCurrencies) currency = amountCurrencies.firstOrNull() ?: baseCurrency
     }
     val validationError = if (crossCurrency) {
         when {
             fromWalletId == toWalletId -> "Select different source and target wallets"
             DateValidation.validateDmyNotFuture(date) != null -> DateValidation.validateDmyNotFuture(date)
-            amount.toDoubleOrNull()?.let { it > 0 } != true -> "Source amount must be positive"
-            targetAmount.toDoubleOrNull()?.let { it > 0 } != true -> "Target amount must be positive"
-            conversionRate.toDoubleOrNull()?.let { it > 0 } != true -> "Conversion rate must be positive"
-            kotlin.math.abs((amount.toDoubleOrNull() ?: 0.0) * (conversionRate.toDoubleOrNull() ?: 0.0) - (targetAmount.toDoubleOrNull() ?: 0.0)) > 0.005 -> "Target amount does not match conversion rate"
+            amount.toDoubleOrNull()?.let { it > 0 } != true -> "Transfer amount must be positive"
+            currency !in amountCurrencies -> "Amount currency must match one of the selected wallets"
+            quote == null -> "Calculating transfer"
             else -> null
         }
     } else OperationValidation.validateTransferFields(
@@ -541,6 +540,23 @@ private fun CreateTransferDialog(
         commissionCurrency = commissionCurrency,
         baseCurrency = baseCurrency,
     )
+
+    LaunchedEffect(fromWalletId, toWalletId, date, amount, currency, commissionAmount, commissionCurrency, crossCurrency) {
+        if (crossCurrency && amount.toDoubleOrNull()?.let { it > 0 } == true && DateValidation.validateDmyNotFuture(date) == null && currency in amountCurrencies) {
+            onQuote(
+                CurrencyTransferRequest(
+                    fromWalletId = fromWalletId,
+                    toWalletId = toWalletId,
+                    date = date,
+                    amount = amount,
+                    amountCurrency = currency,
+                    description = description,
+                    commissionAmount = commissionAmount.ifBlank { "0" },
+                    commissionCurrency = commissionCurrency.ifBlank { sourceWallet?.currency ?: baseCurrency },
+                )
+            )
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -588,29 +604,28 @@ private fun CreateTransferDialog(
                     singleLine = true,
                 )
                 if (crossCurrency) {
+                    Text("Amount currency", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        amountCurrencies.forEach { candidate ->
+                            FilterChip(
+                                selected = currency == candidate,
+                                onClick = { currency = candidate },
+                                label = { Text(candidate) },
+                            )
+                        }
+                    }
+                    quote?.let {
+                        Text("Will debit ${it.sourceAmount} ${it.sourceCurrency} and credit ${it.targetAmount} ${it.targetCurrency} (rate ${it.conversionRate})")
+                    }
+                } else {
                     OutlinedTextField(
                         modifier = dialogFieldModifier(),
-                        value = targetAmount,
-                        onValueChange = {},
-                        label = { Text("Target amount (${targetWallet?.currency})") },
-                        readOnly = true,
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        modifier = dialogFieldModifier(),
-                        value = conversionRate,
-                        onValueChange = { conversionRate = it },
-                        label = { Text("Conversion rate") },
+                        value = currency,
+                        onValueChange = { currency = OperationValidation.normalizeCurrency(it) },
+                        label = { Text("Currency") },
                         singleLine = true,
                     )
                 }
-                OutlinedTextField(
-                    modifier = dialogFieldModifier(),
-                    value = currency,
-                    onValueChange = { currency = OperationValidation.normalizeCurrency(it) },
-                    label = { Text("Currency") },
-                    singleLine = true,
-                )
                 OutlinedTextField(
                     modifier = dialogFieldModifier(),
                     value = commissionAmount,
@@ -647,11 +662,8 @@ private fun CreateTransferDialog(
                             fromWalletId = fromWalletId,
                             toWalletId = toWalletId,
                             date = date,
-                            sourceAmount = amount,
-                            sourceCurrency = sourceWallet?.currency ?: currency,
-                            targetAmount = targetAmount,
-                            targetCurrency = targetWallet?.currency ?: currency,
-                            conversionRate = conversionRate,
+                            amount = amount,
+                            amountCurrency = currency,
                             description = description,
                             commissionAmount = commissionAmount.ifBlank { "0" },
                             commissionCurrency = commissionCurrency.ifBlank { sourceWallet?.currency ?: baseCurrency },

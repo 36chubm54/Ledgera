@@ -3,7 +3,7 @@ use crate::{
 };
 use ledgera_engine_core::{minor_to_money_value, to_minor_units};
 use rusqlite::{Connection, OptionalExtension, params};
-use std::{collections::HashMap, fs, path::Path};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AssetPayload {
@@ -387,25 +387,7 @@ pub fn goal_delete(db_path: &str, goal_id: i64) -> StorageResult<()> {
 }
 
 fn current_currency_rates(db_path: &str) -> StorageResult<HashMap<String, f64>> {
-    let mut rates = HashMap::new();
-    let path = Path::new(db_path)
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join("currency_rates.json");
-    if path.is_file() {
-        let text = fs::read_to_string(&path)
-            .map_err(|err| format!("Failed to read current currency rates: {err}"))?;
-        let configured: HashMap<String, f64> = serde_json::from_str(&text)
-            .map_err(|err| format!("Invalid current currency rates: {err}"))?;
-        for (currency, rate) in configured {
-            if rate.is_finite() && rate > 0.0 {
-                rates.insert(currency.trim().to_uppercase(), rate);
-            }
-        }
-    }
-    let base = crate::base_currency_code(db_path)?;
-    rates.insert(base.to_uppercase(), 1.0);
-    Ok(rates)
+    crate::current_currency_rates(db_path)
 }
 
 fn convert_minor(

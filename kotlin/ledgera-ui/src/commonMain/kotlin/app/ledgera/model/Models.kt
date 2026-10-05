@@ -87,11 +87,8 @@ data class CurrencyTransferRequest(
     val fromWalletId: Long,
     val toWalletId: Long,
     val date: String,
-    val sourceAmount: String,
-    val sourceCurrency: String,
-    val targetAmount: String,
-    val targetCurrency: String,
-    val conversionRate: String,
+    val amount: String,
+    val amountCurrency: String,
     val description: String,
     val commissionAmount: String = "",
     val commissionCurrency: String = "",
@@ -108,6 +105,16 @@ data class CurrencyTransferResult(
     val targetCurrency: String,
     val conversionRate: String,
     val description: String,
+)
+
+data class CurrencyTransferQuote(
+    val sourceAmount: String,
+    val sourceCurrency: String,
+    val targetAmount: String,
+    val targetCurrency: String,
+    val conversionRate: String,
+    val sourceRate: String,
+    val targetRate: String,
 )
 
 data class TransferDetails(

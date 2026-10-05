@@ -152,16 +152,7 @@ fn current_amount(
 }
 
 fn load_cached_rates(db_path: &str) -> StorageResult<std::collections::HashMap<String, f64>> {
-    let path = Path::new(db_path)
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join("currency_rates.json");
-    if !path.is_file() {
-        return Ok(std::collections::HashMap::new());
-    }
-    let text = fs::read_to_string(&path)
-        .map_err(|err| format!("Failed to read current currency rates: {err}"))?;
-    serde_json::from_str(&text).map_err(|err| format!("Invalid current currency rates: {err}"))
+    crate::current_currency_rates(db_path)
 }
 
 fn tags_for_records(
@@ -428,22 +419,26 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
     };
     let monthly = monthly
         .into_iter()
-        .map(|(month, (income, expenses, income_current, expenses_current))| ReportMonthlyRow {
-            month,
-            income,
-            expenses,
-            income_current,
-            expenses_current,
-        })
+        .map(
+            |(month, (income, expenses, income_current, expenses_current))| ReportMonthlyRow {
+                month,
+                income,
+                expenses,
+                income_current,
+                expenses_current,
+            },
+        )
         .collect();
     let categories = category_totals
         .into_iter()
-        .map(|(category, (count, total, total_current))| ReportCategoryRow {
-            category,
-            operations_count: count,
-            total_base: total,
-            total_current,
-        })
+        .map(
+            |(category, (count, total, total_current))| ReportCategoryRow {
+                category,
+                operations_count: count,
+                total_base: total,
+                total_current,
+            },
+        )
         .collect();
     let tags = tag_totals
         .into_iter()
@@ -475,7 +470,11 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
         summary,
         operations,
         monthly,
-        categories: if include_categories { categories } else { Vec::new() },
+        categories: if include_categories {
+            categories
+        } else {
+            Vec::new()
+        },
         tags,
         debts,
     })
@@ -512,19 +511,44 @@ pub fn report_export_csv(
     let use_current = report.filters.totals_mode.eq_ignore_ascii_case("current");
     if report.filters.group_by_category {
         let mut writer = csv::Writer::from_writer(Vec::new());
-        writer.write_record([report.title.as_str(), "", ""]).map_err(|err| err.to_string())?;
-        writer.write_record(["Category", "Operations", &format!("Amount ({})", report.base_currency)]).map_err(|err| err.to_string())?;
-        writer.write_record(["", "", &report_amounts_note(&report.filters.totals_mode)]).map_err(|err| err.to_string())?;
+        writer
+            .write_record([report.title.as_str(), "", ""])
+            .map_err(|err| err.to_string())?;
+        writer
+            .write_record([
+                "Category",
+                "Operations",
+                &format!("Amount ({})", report.base_currency),
+            ])
+            .map_err(|err| err.to_string())?;
+        writer
+            .write_record(["", "", &report_amounts_note(&report.filters.totals_mode)])
+            .map_err(|err| err.to_string())?;
         let mut total = 0.0;
         for row in &report.categories {
-            let amount = if use_current { row.total_current } else { row.total_base };
+            let amount = if use_current {
+                row.total_current
+            } else {
+                row.total_base
+            };
             total += amount;
-            writer.write_record([row.category.as_str(), &row.operations_count.to_string(), &format!("{amount:.2}")]).map_err(|err| err.to_string())?;
+            writer
+                .write_record([
+                    row.category.as_str(),
+                    &row.operations_count.to_string(),
+                    &format!("{amount:.2}"),
+                ])
+                .map_err(|err| err.to_string())?;
         }
-        writer.write_record(["Total", "", &format!("{total:.2}")]).map_err(|err| err.to_string())?;
+        writer
+            .write_record(["Total", "", &format!("{total:.2}")])
+            .map_err(|err| err.to_string())?;
         let bytes = writer.into_inner().map_err(|err| err.to_string())?;
         atomic_replace(Path::new(path), &bytes)?;
-        return Ok(ReportExportResult { exported_rows: report.categories.len() as i64, path: path.to_owned() });
+        return Ok(ReportExportResult {
+            exported_rows: report.categories.len() as i64,
+            path: path.to_owned(),
+        });
     }
     let mut writer = csv::Writer::from_writer(Vec::new());
     writer
@@ -563,7 +587,14 @@ pub fn report_export_csv(
                 row.date.as_str(),
                 row.type_label.as_str(),
                 row.category.as_str(),
-                &format!("{:.2}", if use_current { row.amount_current } else { row.amount_base }),
+                &format!(
+                    "{:.2}",
+                    if use_current {
+                        row.amount_current
+                    } else {
+                        row.amount_base
+                    }
+                ),
                 row.tags_text.as_str(),
             ])
             .map_err(|err| err.to_string())?;
@@ -573,7 +604,14 @@ pub fn report_export_csv(
             "",
             "Subtotal",
             "",
-            &format!("{:.2}", if use_current { report.summary.records_total_current } else { report.summary.records_total_fixed }),
+            &format!(
+                "{:.2}",
+                if use_current {
+                    report.summary.records_total_current
+                } else {
+                    report.summary.records_total_fixed
+                }
+            ),
             "",
         ])
         .map_err(|err| err.to_string())?;
@@ -582,7 +620,14 @@ pub fn report_export_csv(
             "",
             "Final balance",
             "",
-            &format!("{:.2}", if use_current { report.summary.final_balance_current } else { report.summary.final_balance_fixed }),
+            &format!(
+                "{:.2}",
+                if use_current {
+                    report.summary.final_balance_current
+                } else {
+                    report.summary.final_balance_fixed
+                }
+            ),
             "",
         ])
         .map_err(|err| err.to_string())?;
@@ -680,7 +725,11 @@ pub fn report_export_xlsx(
         .write_number_with_format(
             subtotal_row,
             3,
-            if use_current { report.summary.records_total_current } else { report.summary.records_total_fixed },
+            if use_current {
+                report.summary.records_total_current
+            } else {
+                report.summary.records_total_fixed
+            },
             &subtotal_amount,
         )
         .map_err(|err| err.to_string())?;
@@ -710,7 +759,11 @@ pub fn report_export_xlsx(
         .write_number_with_format(
             final_row,
             3,
-            if use_current { report.summary.final_balance_current } else { report.summary.final_balance_fixed },
+            if use_current {
+                report.summary.final_balance_current
+            } else {
+                report.summary.final_balance_fixed
+            },
             &total_amount,
         )
         .map_err(|err| err.to_string())?;
@@ -839,31 +892,69 @@ fn report_export_grouped_xlsx(
     let data = report_data_format();
     let amount = report_amount_format();
     let total = report_final_amount_format();
-    worksheet.merge_range(0, 0, 0, 2, &report.title, &title).map_err(|err| err.to_string())?;
-    worksheet.write_string_with_format(1, 0, "Category", &header).map_err(|err| err.to_string())?;
-    worksheet.write_string_with_format(1, 1, "Operations", &header).map_err(|err| err.to_string())?;
-    worksheet.write_string_with_format(1, 2, &format!("Amount ({})", report.base_currency), &header).map_err(|err| err.to_string())?;
-    worksheet.write_string_with_format(2, 2, &report_amounts_note(&report.filters.totals_mode), &report_note_format()).map_err(|err| err.to_string())?;
+    worksheet
+        .merge_range(0, 0, 0, 2, &report.title, &title)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(1, 0, "Category", &header)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(1, 1, "Operations", &header)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(1, 2, &format!("Amount ({})", report.base_currency), &header)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(
+            2,
+            2,
+            &report_amounts_note(&report.filters.totals_mode),
+            &report_note_format(),
+        )
+        .map_err(|err| err.to_string())?;
     let mut total_value = 0.0;
     for (index, row) in report.categories.iter().enumerate() {
         let line = (index + 3) as u32;
-        let amount_value = if use_current { row.total_current } else { row.total_base };
+        let amount_value = if use_current {
+            row.total_current
+        } else {
+            row.total_base
+        };
         total_value += amount_value;
-        worksheet.write_string_with_format(line, 0, &row.category, &data).map_err(|err| err.to_string())?;
-        worksheet.write_number_with_format(line, 1, row.operations_count as f64, &data).map_err(|err| err.to_string())?;
-        worksheet.write_number_with_format(line, 2, amount_value, &amount).map_err(|err| err.to_string())?;
+        worksheet
+            .write_string_with_format(line, 0, &row.category, &data)
+            .map_err(|err| err.to_string())?;
+        worksheet
+            .write_number_with_format(line, 1, row.operations_count as f64, &data)
+            .map_err(|err| err.to_string())?;
+        worksheet
+            .write_number_with_format(line, 2, amount_value, &amount)
+            .map_err(|err| err.to_string())?;
     }
     let total_row = (report.categories.len() + 3) as u32;
-    worksheet.write_string_with_format(total_row, 0, "Total", &total).map_err(|err| err.to_string())?;
-    worksheet.write_number_with_format(total_row, 2, total_value, &total).map_err(|err| err.to_string())?;
-    worksheet.set_freeze_panes(2, 0).map_err(|err| err.to_string())?;
-    worksheet.autofilter(1, 0, total_row, 2).map_err(|err| err.to_string())?;
+    worksheet
+        .write_string_with_format(total_row, 0, "Total", &total)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .write_number_with_format(total_row, 2, total_value, &total)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .set_freeze_panes(2, 0)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .autofilter(1, 0, total_row, 2)
+        .map_err(|err| err.to_string())?;
     for (column, width) in [30.0, 16.0, 18.0].into_iter().enumerate() {
-        worksheet.set_column_width(column as u16, width).map_err(|err| err.to_string())?;
+        worksheet
+            .set_column_width(column as u16, width)
+            .map_err(|err| err.to_string())?;
     }
     let bytes = workbook.save_to_buffer().map_err(|err| err.to_string())?;
     atomic_replace(Path::new(path), &bytes)?;
-    Ok(ReportExportResult { exported_rows: report.categories.len() as i64, path: path.to_owned() })
+    Ok(ReportExportResult {
+        exported_rows: report.categories.len() as i64,
+        path: path.to_owned(),
+    })
 }
 
 fn write_report_summary_sheet(
@@ -903,10 +994,28 @@ fn write_report_summary_sheet(
             .write_string_with_format(line, 0, &row.month, data)
             .map_err(|err| err.to_string())?;
         worksheet
-            .write_number_with_format(line, 1, if use_current { row.income_current } else { row.income }, amount)
+            .write_number_with_format(
+                line,
+                1,
+                if use_current {
+                    row.income_current
+                } else {
+                    row.income
+                },
+                amount,
+            )
             .map_err(|err| err.to_string())?;
         worksheet
-            .write_number_with_format(line, 2, if use_current { row.expenses_current } else { row.expenses }, amount)
+            .write_number_with_format(
+                line,
+                2,
+                if use_current {
+                    row.expenses_current
+                } else {
+                    row.expenses
+                },
+                amount,
+            )
             .map_err(|err| err.to_string())?;
     }
     let total_row = (report.monthly.len() + 1) as u32;
@@ -917,7 +1026,17 @@ fn write_report_summary_sheet(
         .write_number_with_format(
             total_row,
             1,
-            report.monthly.iter().map(|row| if use_current { row.income_current } else { row.income }).sum::<f64>(),
+            report
+                .monthly
+                .iter()
+                .map(|row| {
+                    if use_current {
+                        row.income_current
+                    } else {
+                        row.income
+                    }
+                })
+                .sum::<f64>(),
             &total_amount,
         )
         .map_err(|err| err.to_string())?;
@@ -925,7 +1044,17 @@ fn write_report_summary_sheet(
         .write_number_with_format(
             total_row,
             2,
-            report.monthly.iter().map(|row| if use_current { row.expenses_current } else { row.expenses }).sum::<f64>(),
+            report
+                .monthly
+                .iter()
+                .map(|row| {
+                    if use_current {
+                        row.expenses_current
+                    } else {
+                        row.expenses
+                    }
+                })
+                .sum::<f64>(),
             &total_amount,
         )
         .map_err(|err| err.to_string())?;
@@ -969,7 +1098,16 @@ fn write_report_category_sheet(
             .write_number_with_format(line, 1, row.operations_count as f64, data)
             .map_err(|err| err.to_string())?;
         worksheet
-            .write_number_with_format(line, 2, if use_current { row.total_current } else { row.total_base }, amount)
+            .write_number_with_format(
+                line,
+                2,
+                if use_current {
+                    row.total_current
+                } else {
+                    row.total_base
+                },
+                amount,
+            )
             .map_err(|err| err.to_string())?;
     }
     worksheet
@@ -1012,7 +1150,16 @@ fn write_report_tag_sheet(
             .write_number_with_format(line, 1, row.operations_count as f64, data)
             .map_err(|err| err.to_string())?;
         worksheet
-            .write_number_with_format(line, 2, if use_current { row.total_current } else { row.total_base }, amount)
+            .write_number_with_format(
+                line,
+                2,
+                if use_current {
+                    row.total_current
+                } else {
+                    row.total_base
+                },
+                amount,
+            )
             .map_err(|err| err.to_string())?;
     }
     worksheet
@@ -1137,7 +1284,14 @@ pub fn report_export_pdf(
                 row.date.clone(),
                 row.type_label.clone(),
                 row.category.clone(),
-            format!("{:.2}", if use_current { row.amount_current } else { row.amount_base }),
+                format!(
+                    "{:.2}",
+                    if use_current {
+                        row.amount_current
+                    } else {
+                        row.amount_base
+                    }
+                ),
                 row.tags_text.clone(),
             ],
             PdfRowStyle::Data,
@@ -1148,7 +1302,14 @@ pub fn report_export_pdf(
             String::new(),
             "Subtotal".to_owned(),
             String::new(),
-            format!("{:.2}", if use_current { report.summary.records_total_current } else { report.summary.records_total_fixed }),
+            format!(
+                "{:.2}",
+                if use_current {
+                    report.summary.records_total_current
+                } else {
+                    report.summary.records_total_fixed
+                }
+            ),
             String::new(),
         ],
         PdfRowStyle::Subtotal,
@@ -1158,7 +1319,14 @@ pub fn report_export_pdf(
             String::new(),
             "Final balance".to_owned(),
             String::new(),
-            format!("{:.2}", if use_current { report.summary.final_balance_current } else { report.summary.final_balance_fixed }),
+            format!(
+                "{:.2}",
+                if use_current {
+                    report.summary.final_balance_current
+                } else {
+                    report.summary.final_balance_fixed
+                }
+            ),
             String::new(),
         ],
         PdfRowStyle::Final,
@@ -1175,8 +1343,22 @@ pub fn report_export_pdf(
         rows.push(PdfReportRow::new(
             [
                 row.month.clone(),
-                format!("{:.2}", if use_current { row.income_current } else { row.income }),
-                format!("{:.2}", if use_current { row.expenses_current } else { row.expenses }),
+                format!(
+                    "{:.2}",
+                    if use_current {
+                        row.income_current
+                    } else {
+                        row.income
+                    }
+                ),
+                format!(
+                    "{:.2}",
+                    if use_current {
+                        row.expenses_current
+                    } else {
+                        row.expenses
+                    }
+                ),
                 String::new(),
                 String::new(),
             ],
@@ -1197,7 +1379,14 @@ pub fn report_export_pdf(
                 [
                     row.category.clone(),
                     row.operations_count.to_string(),
-                    format!("{:.2}", if use_current { row.total_current } else { row.total_base }),
+                    format!(
+                        "{:.2}",
+                        if use_current {
+                            row.total_current
+                        } else {
+                            row.total_base
+                        }
+                    ),
                     String::new(),
                     String::new(),
                 ],
@@ -1219,7 +1408,14 @@ pub fn report_export_pdf(
                 [
                     row.tag.clone(),
                     row.operations_count.to_string(),
-                    format!("{:.2}", if use_current { row.total_current } else { row.total_base }),
+                    format!(
+                        "{:.2}",
+                        if use_current {
+                            row.total_current
+                        } else {
+                            row.total_base
+                        }
+                    ),
                     String::new(),
                     String::new(),
                 ],
@@ -1277,20 +1473,42 @@ fn report_export_grouped_pdf(
 ) -> StorageResult<ReportExportResult> {
     let mut rows = vec![
         PdfReportRow::merged(report.title.clone(), PdfRowStyle::Title),
-        PdfReportRow::new(["Category", "Operations", "Amount", "", ""], PdfRowStyle::Header),
-        PdfReportRow::merged(report_amounts_note(&report.filters.totals_mode), PdfRowStyle::Note),
+        PdfReportRow::new(
+            ["Category", "Operations", "Amount", "", ""],
+            PdfRowStyle::Header,
+        ),
+        PdfReportRow::merged(
+            report_amounts_note(&report.filters.totals_mode),
+            PdfRowStyle::Note,
+        ),
     ];
     let mut total = 0.0;
     for row in &report.categories {
-        let amount = if use_current { row.total_current } else { row.total_base };
+        let amount = if use_current {
+            row.total_current
+        } else {
+            row.total_base
+        };
         total += amount;
         rows.push(PdfReportRow::new(
-            [row.category.clone(), row.operations_count.to_string(), format!("{amount:.2}"), String::new(), String::new()],
+            [
+                row.category.clone(),
+                row.operations_count.to_string(),
+                format!("{amount:.2}"),
+                String::new(),
+                String::new(),
+            ],
             PdfRowStyle::Data,
         ));
     }
     rows.push(PdfReportRow::new(
-        ["Total".to_owned(), String::new(), format!("{total:.2}"), String::new(), String::new()],
+        [
+            "Total".to_owned(),
+            String::new(),
+            format!("{total:.2}"),
+            String::new(),
+            String::new(),
+        ],
         PdfRowStyle::Final,
     ));
     let font_bytes = load_report_font()?;
@@ -1299,9 +1517,14 @@ fn report_export_grouped_pdf(
     let mut document = PdfDocument::new(&report.title);
     let font_id = document.add_font(&font);
     let pages = render_pdf_report_pages(&rows, &font_id);
-    let pdf = document.with_pages(pages).save(&PdfSaveOptions::default(), &mut Vec::new());
+    let pdf = document
+        .with_pages(pages)
+        .save(&PdfSaveOptions::default(), &mut Vec::new());
     atomic_replace(Path::new(path), &pdf)?;
-    Ok(ReportExportResult { exported_rows: report.categories.len() as i64, path: path.to_owned() })
+    Ok(ReportExportResult {
+        exported_rows: report.categories.len() as i64,
+        path: path.to_owned(),
+    })
 }
 
 #[derive(Debug, Clone, Copy)]

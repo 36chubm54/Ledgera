@@ -8,6 +8,7 @@ import app.ledgera.model.BudgetResultItem
 import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CreateTransferResult
 import app.ledgera.model.CurrencyTransferRequest
+import app.ledgera.model.CurrencyTransferQuote
 import app.ledgera.model.CurrencyTransferResult
 import app.ledgera.model.CreateWalletRequest
 import app.ledgera.model.FullBackupResult
@@ -103,6 +104,7 @@ interface OperationsEngine {
     suspend fun deleteRecord(recordId: Long): Boolean
     suspend fun createTransfer(request: CreateTransferRequest): CreateTransferResult
     suspend fun createCurrencyTransfer(request: CurrencyTransferRequest): CurrencyTransferResult = error("Currency transfers are unavailable")
+    suspend fun quoteCurrencyTransfer(request: CurrencyTransferRequest): CurrencyTransferQuote = error("Currency transfer quotes are unavailable")
     suspend fun getTransfer(transferId: Long): TransferDetails?
     suspend fun updateTransfer(transferId: Long, request: UpdateTransferRequest): UpdateTransferResult
     suspend fun deleteTransfer(transferId: Long): Boolean

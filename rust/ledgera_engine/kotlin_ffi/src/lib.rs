@@ -44,6 +44,7 @@ use ledgera_engine_storage::{
     tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
     update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
     CurrencyRatePayload, CurrencyRateRow, CurrencyTransferCreatePayload, CurrencyTransferRow,
+    CurrencyTransferQuoteRow, currency_transfer_quote,
     create_currency_transfer, currency_rate_rows, delete_currency_rate,
     set_base_currency, supported_currencies, upsert_currency_rate,
 };
@@ -704,11 +705,8 @@ pub struct CurrencyTransferRequest {
     pub from_wallet_id: i64,
     pub to_wallet_id: i64,
     pub date: String,
-    pub source_amount: String,
-    pub source_currency: String,
-    pub target_amount: String,
-    pub target_currency: String,
-    pub conversion_rate: String,
+    pub amount: String,
+    pub amount_currency: String,
     pub description: String,
     pub commission_amount: String,
     pub commission_currency: String,
@@ -726,6 +724,17 @@ pub struct CurrencyTransferDto {
     pub target_currency: String,
     pub conversion_rate: String,
     pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyTransferQuoteDto {
+    pub source_amount: String,
+    pub source_currency: String,
+    pub target_amount: String,
+    pub target_currency: String,
+    pub conversion_rate: String,
+    pub source_rate: String,
+    pub target_rate: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1214,15 +1223,25 @@ impl LedgeraEngine {
             from_wallet_id: request.from_wallet_id,
             to_wallet_id: request.to_wallet_id,
             date: request.date,
-            source_amount: request.source_amount,
-            source_currency: request.source_currency,
-            target_amount: request.target_amount,
-            target_currency: request.target_currency,
-            conversion_rate: request.conversion_rate,
+            amount: request.amount,
+            amount_currency: request.amount_currency,
             description: request.description,
             commission_amount: request.commission_amount,
             commission_currency: request.commission_currency,
         }).map(currency_transfer_to_dto).map_err(storage_error)
+    }
+
+    pub fn quote_currency_transfer(&self, request: CurrencyTransferRequest) -> Result<CurrencyTransferQuoteDto, LedgeraEngineError> {
+        currency_transfer_quote(&self.db_path, &CurrencyTransferCreatePayload {
+            from_wallet_id: request.from_wallet_id,
+            to_wallet_id: request.to_wallet_id,
+            date: request.date,
+            amount: request.amount,
+            amount_currency: request.amount_currency,
+            description: request.description,
+            commission_amount: request.commission_amount,
+            commission_currency: request.commission_currency,
+        }).map(currency_transfer_quote_to_dto).map_err(storage_error)
     }
 
     pub fn get_transfer(
@@ -2445,6 +2464,18 @@ fn currency_transfer_to_dto(row: CurrencyTransferRow) -> CurrencyTransferDto {
         target_currency: row.target_currency,
         conversion_rate: row.conversion_rate,
         description: row.description,
+    }
+}
+
+fn currency_transfer_quote_to_dto(row: CurrencyTransferQuoteRow) -> CurrencyTransferQuoteDto {
+    CurrencyTransferQuoteDto {
+        source_amount: format_money(row.source_amount),
+        source_currency: row.source_currency,
+        target_amount: format_money(row.target_amount),
+        target_currency: row.target_currency,
+        conversion_rate: row.conversion_rate,
+        source_rate: row.source_rate,
+        target_rate: row.target_rate,
     }
 }
 
@@ -3987,7 +4018,7 @@ mod tests {
             .expect_err("insufficient funds");
         assert!(error.to_string().contains("Insufficient funds"));
 
-        let error = engine
+        let foreign_debt = engine
             .create_debt(CreateDebtRequest {
                 kind: "debt".to_owned(),
                 contact_name: "USD".to_owned(),
@@ -3997,8 +4028,8 @@ mod tests {
                 created_at: "2026-03-01".to_owned(),
                 description: "".to_owned(),
             })
-            .expect_err("non-base currency");
-        assert!(error.to_string().contains("base-currency"));
+            .expect("foreign-currency debt");
+        assert_eq!(foreign_debt.currency, "USD");
         fs::remove_file(db_path).ok();
     }
 
@@ -4593,12 +4624,8 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 description: "".to_owned(),
                 tags: vec![],
             })
-            .unwrap_err();
-        assert!(
-            create_error
-                .to_string()
-                .contains("base-currency records only (KZT)")
-        );
+            .expect_err("missing foreign-currency rate");
+        assert!(create_error.to_string().contains("No currency rate for USD"));
 
         let created = engine
             .create_record(CreateRecordRequest {
@@ -4631,11 +4658,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 },
             )
             .unwrap_err();
-        assert!(
-            update_error
-                .to_string()
-                .contains("base-currency records only (KZT)")
-        );
+        assert!(update_error.to_string().contains("No currency rate for USD"));
         fs::remove_file(db_path).ok();
     }
 
