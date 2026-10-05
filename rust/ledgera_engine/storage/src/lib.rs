@@ -4361,6 +4361,44 @@ pub fn base_currency_code(db_path: &str) -> StorageResult<String> {
     base_currency_code_in_conn(&conn)
 }
 
+pub fn wallet_current_balance_rows(db_path: &str) -> StorageResult<Vec<WalletBalanceRow>> {
+    let rates = current_currency_rates(db_path)?;
+    let base = base_currency_code(db_path)?;
+    let conn = open_sqlite_connection(db_path)?;
+    let wallets = wallet_list_rows(db_path)?
+        .into_iter()
+        .filter(|wallet| wallet.is_active)
+        .collect::<Vec<_>>();
+    let mut result = Vec::with_capacity(wallets.len());
+    for wallet in wallets {
+        let wallet_rate = rates.get(&wallet.currency.trim().to_uppercase()).copied().ok_or_else(|| {
+            format!("Current wallet rate is unavailable for currency {}", wallet.currency)
+        })?;
+        let initial_base = wallet.initial_balance * wallet_rate;
+        let mut stmt = conn.prepare(
+            "SELECT type, amount_original, amount_original_minor, currency FROM records WHERE wallet_id = ?1",
+        ).map_err(sqlite_err)?;
+        let rows = stmt.query_map([wallet.id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                money_value_from_sql_row(row, 1, 2)?,
+                row.get::<_, String>(3)?,
+            ))
+        }).map_err(sqlite_err)?;
+        let mut delta_base = 0.0;
+        for row in rows {
+            let (record_type, amount, currency) = row.map_err(sqlite_err)?;
+            let rate = rates.get(&currency.trim().to_uppercase()).copied().ok_or_else(|| {
+                format!("Current wallet rate is unavailable for currency {}", currency)
+            })?;
+            let signed = if record_type == "expense" || record_type == "mandatory_expense" { -amount } else { amount };
+            delta_base += signed * rate;
+        }
+        result.push((wallet.id, wallet.name, base.clone(), initial_base, delta_base));
+    }
+    Ok(result)
+}
+
 fn ensure_transfer_currency_columns_on_conn(conn: &Connection) -> StorageResult<()> {
     let columns = table_columns_for_connection(conn, "transfers")?;
     for (name, definition) in [

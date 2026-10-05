@@ -898,5 +898,7 @@ interface LedgeraEngine {
     [Throws=LedgeraEngineError]
     sequence<WalletBalanceDto> wallet_balances();
     [Throws=LedgeraEngineError]
+    sequence<WalletBalanceDto> wallet_current_balances();
+    [Throws=LedgeraEngineError]
     WalletBalanceDto? wallet_balance(i64 wallet_id);
 };

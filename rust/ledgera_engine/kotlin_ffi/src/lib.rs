@@ -42,7 +42,7 @@ use ledgera_engine_storage::{
     report_export_xlsx, report_generate, set_system_wallet_details,
     set_system_wallet_initial_balance, standalone_record_get_row, tag_color_palette,
     tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
-    update_transfer, wallet_balance_row, wallet_balance_rows, wallet_list_rows,
+    update_transfer, wallet_balance_row, wallet_balance_rows, wallet_current_balance_rows, wallet_list_rows,
     CurrencyRatePayload, CurrencyRateRow, CurrencyTransferCreatePayload, CurrencyTransferRow,
     CurrencyTransferQuoteRow, currency_transfer_quote,
     create_currency_transfer, currency_rate_rows, delete_currency_rate,
@@ -2054,6 +2054,12 @@ impl LedgeraEngine {
 
     pub fn wallet_balances(&self) -> Result<Vec<WalletBalanceDto>, LedgeraEngineError> {
         wallet_balance_rows(&self.db_path, None)
+            .map(|rows| rows.into_iter().map(wallet_balance_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn wallet_current_balances(&self) -> Result<Vec<WalletBalanceDto>, LedgeraEngineError> {
+        wallet_current_balance_rows(&self.db_path)
             .map(|rows| rows.into_iter().map(wallet_balance_to_dto).collect())
             .map_err(storage_error)
     }

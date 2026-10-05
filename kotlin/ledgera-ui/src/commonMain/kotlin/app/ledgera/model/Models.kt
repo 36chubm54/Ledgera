@@ -215,6 +215,7 @@ data class WalletSettingsItem(
     val system: Boolean,
     val allowNegative: Boolean,
     val active: Boolean,
+    val balanceCurrency: String = currency,
 )
 
 data class CurrencyRate(

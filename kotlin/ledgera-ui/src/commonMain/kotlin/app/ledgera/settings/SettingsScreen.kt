@@ -318,7 +318,7 @@ private fun WalletRow(wallet: WalletSettingsItem, onDeleteWallet: (WalletSetting
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(wallet.name, fontWeight = FontWeight.SemiBold)
-                Text("${wallet.balance} ${wallet.currency}")
+                Text("${wallet.balance} ${wallet.balanceCurrency}")
             }
             Text("Initial ${wallet.initialBalance} ${wallet.currency}")
             Text(

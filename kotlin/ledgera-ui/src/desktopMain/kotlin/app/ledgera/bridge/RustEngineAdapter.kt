@@ -572,7 +572,8 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     }
 
     override suspend fun listWalletsForSettings(): List<WalletSettingsItem> = withContext(Dispatchers.IO) {
-        val balancesById = engine.walletBalances().associateBy { it.walletId }
+        val balancesById = engine.walletCurrentBalances().associateBy { it.walletId }
+        val baseCurrency = engine.baseCurrency()
         engine.listWallets().map { wallet ->
             WalletSettingsItem(
                 id = wallet.id,
@@ -583,6 +584,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 system = wallet.system,
                 allowNegative = wallet.allowNegative,
                 active = wallet.isActive,
+                balanceCurrency = baseCurrency,
             )
         }
     }
