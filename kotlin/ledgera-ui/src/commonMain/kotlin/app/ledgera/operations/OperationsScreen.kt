@@ -514,6 +514,13 @@ private fun CreateTransferDialog(
     val sourceWallet = wallets.firstOrNull { it.id == fromWalletId }
     val targetWallet = wallets.firstOrNull { it.id == toWalletId }
     val crossCurrency = sourceWallet != null && targetWallet != null && sourceWallet.currency != targetWallet.currency
+    LaunchedEffect(amount, conversionRate, crossCurrency) {
+        targetAmount = if (crossCurrency) {
+            val source = amount.toDoubleOrNull()
+            val rate = conversionRate.toDoubleOrNull()
+            if (source != null && rate != null && source > 0.0 && rate > 0.0) "%.2f".format(source * rate) else ""
+        } else ""
+    }
     val validationError = if (crossCurrency) {
         when {
             fromWalletId == toWalletId -> "Select different source and target wallets"
@@ -552,6 +559,8 @@ private fun CreateTransferDialog(
                     Text("From wallet", style = MaterialTheme.typography.labelLarge)
                     WalletChips(wallets, fromWalletId) { wallet ->
                         fromWalletId = wallet.id
+                        currency = wallet.currency
+                        commissionCurrency = wallet.currency
                         if (toWalletId == wallet.id) {
                             toWalletId = wallets.firstOrNull { it.id != wallet.id }?.id ?: 0L
                         }
@@ -559,6 +568,7 @@ private fun CreateTransferDialog(
                     Text("To wallet", style = MaterialTheme.typography.labelLarge)
                     WalletChips(wallets, toWalletId) { wallet ->
                         toWalletId = wallet.id
+                        if (wallet.currency == sourceWallet?.currency) currency = wallet.currency
                     }
                 }
                 LedgerDateField(
@@ -581,8 +591,9 @@ private fun CreateTransferDialog(
                     OutlinedTextField(
                         modifier = dialogFieldModifier(),
                         value = targetAmount,
-                        onValueChange = { targetAmount = it },
+                        onValueChange = {},
                         label = { Text("Target amount (${targetWallet?.currency})") },
+                        readOnly = true,
                         singleLine = true,
                     )
                     OutlinedTextField(

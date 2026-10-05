@@ -1138,18 +1138,26 @@ pub fn create_transfer(
 
     let from_wallet = active_wallet_in_tx(&tx, payload.from_wallet_id, "source")?;
     active_wallet_in_tx(&tx, payload.to_wallet_id, "target")?;
+    let source_wallet_currency = wallet_currency_in_tx(&tx, from_wallet.id)?;
+    let target_wallet_currency = wallet_currency_in_tx(&tx, payload.to_wallet_id)?;
+    if source_wallet_currency != target_wallet_currency {
+        return Err("Wallet currencies differ; use a currency transfer".to_owned());
+    }
 
     let currency = payload.currency.trim().to_uppercase();
     validate_currency_code(&currency)?;
-    let base_currency = base_currency_code_in_tx(&tx)?;
-    validate_transfer_base_currency_only(&currency, &base_currency)?;
+    if currency != source_wallet_currency {
+        return Err("Transfer currency must match both wallet currencies".to_owned());
+    }
     let commission_currency = if payload.commission_currency.trim().is_empty() {
-        base_currency.clone()
+        source_wallet_currency.clone()
     } else {
         payload.commission_currency.trim().to_uppercase()
     };
     validate_currency_code(&commission_currency)?;
-    validate_transfer_base_currency_only(&commission_currency, &base_currency)?;
+    if commission_currency != source_wallet_currency {
+        return Err("Commission currency must match the wallet currency".to_owned());
+    }
 
     let amount_minor = to_minor_units(&payload.amount)?;
     if amount_minor <= 0 {
@@ -1305,11 +1313,17 @@ pub fn update_transfer(
 
     let from_wallet = active_wallet_in_tx(&tx, payload.from_wallet_id, "source")?;
     active_wallet_in_tx(&tx, payload.to_wallet_id, "target")?;
+    let source_wallet_currency = wallet_currency_in_tx(&tx, from_wallet.id)?;
+    let target_wallet_currency = wallet_currency_in_tx(&tx, payload.to_wallet_id)?;
+    if source_wallet_currency != target_wallet_currency {
+        return Err("Wallet currencies differ; use a currency transfer".to_owned());
+    }
 
-    let base_currency = base_currency_code_in_tx(&tx)?;
     let currency = payload.currency.trim().to_uppercase();
     validate_currency_code(&currency)?;
-    validate_transfer_base_currency_only(&currency, &base_currency)?;
+    if currency != source_wallet_currency {
+        return Err("Transfer currency must match both wallet currencies".to_owned());
+    }
 
     let amount_minor = to_minor_units(&payload.amount)?;
     if amount_minor <= 0 {
@@ -9098,7 +9112,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 }
             )
             .unwrap_err()
-            .contains("base-currency transfers only (KZT)")
+            .contains("Transfer currency must match both wallet currencies")
         );
         assert!(
             create_transfer(
