@@ -7,6 +7,8 @@ import app.ledgera.model.BudgetItem
 import app.ledgera.model.BudgetResultItem
 import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CreateTransferResult
+import app.ledgera.model.CurrencyTransferRequest
+import app.ledgera.model.CurrencyTransferResult
 import app.ledgera.model.CreateWalletRequest
 import app.ledgera.model.FullBackupResult
 import app.ledgera.model.AuditFinding
