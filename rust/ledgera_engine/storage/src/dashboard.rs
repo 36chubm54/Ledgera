@@ -412,9 +412,19 @@ fn wallet_total_base(
     rates: &HashMap<String, f64>,
     up_to_date: Option<&str>,
 ) -> StorageResult<f64> {
+    if up_to_date.is_none() {
+        return Ok(crate::wallet_current_balance_rows(db_path)?
+            .iter()
+            .map(|row| row.3 + row.4)
+            .sum());
+    }
+
     Ok(crate::wallet_balance_rows(db_path, up_to_date)?
         .iter()
-        .map(|row| convert_minor(((row.3 + row.4) * 100.0).round() as i64, &row.2, rates))
+        .map(|row| {
+            convert_minor((row.3 * 100.0).round() as i64, &row.2, rates)
+                .map(|initial_base| initial_base + row.4)
+        })
         .collect::<StorageResult<Vec<_>>>()?
         .into_iter()
         .sum())
@@ -430,9 +440,10 @@ fn asset_total_base_at(
             .prepare(
                 "SELECT snapshot.value_minor, snapshot.currency
              FROM assets AS asset JOIN asset_snapshots AS snapshot ON snapshot.asset_id = asset.id
-             WHERE asset.is_active = 1 AND snapshot.snapshot_date = (
-                 SELECT MAX(previous.snapshot_date) FROM asset_snapshots AS previous
+             WHERE asset.is_active = 1 AND snapshot.id = (
+                 SELECT previous.id FROM asset_snapshots AS previous
                  WHERE previous.asset_id = snapshot.asset_id AND previous.snapshot_date <= ?1
+                 ORDER BY previous.snapshot_date DESC, previous.id DESC LIMIT 1
              )",
             )
             .map_err(sqlite_err)?;
@@ -448,6 +459,30 @@ fn asset_total_base_at(
         .collect::<StorageResult<Vec<_>>>()
         .map(|values| values.into_iter().sum())
     })
+}
+
+fn current_asset_total_base(
+    db_path: &str,
+    rates: &HashMap<String, f64>,
+) -> StorageResult<f64> {
+    asset_rows(db_path, true)?
+        .iter()
+        .map(|asset| convert_minor(asset.current_value_minor, &asset.currency, rates))
+        .collect::<StorageResult<Vec<_>>>()
+        .map(|values| values.into_iter().sum())
+}
+
+fn net_worth_base_at(
+    db_path: &str,
+    rates: &HashMap<String, f64>,
+    up_to_date: Option<&str>,
+) -> StorageResult<f64> {
+    let wallet_total = wallet_total_base(db_path, rates, up_to_date)?;
+    let asset_total = match up_to_date {
+        Some(date) => asset_total_base_at(db_path, rates, date)?,
+        None => current_asset_total_base(db_path, rates)?,
+    };
+    Ok(wallet_total + asset_total)
 }
 
 fn capital_points(
@@ -487,11 +522,9 @@ fn capital_points(
         .into_iter()
         .map(|month| {
             let month_end = format!("{month}-31");
-            let wallet = wallet_total_base(db_path, rates, Some(&month_end))?;
-            let assets = asset_total_base_at(db_path, rates, &month_end)?;
             Ok(CapitalPointPayload {
                 month,
-                balance_base: wallet + assets,
+                balance_base: net_worth_base_at(db_path, rates, Some(&month_end))?,
             })
         })
         .collect()
@@ -502,12 +535,7 @@ pub fn dashboard_payload(db_path: &str) -> StorageResult<DashboardPayload> {
     let rates = current_currency_rates(db_path)?;
     let assets = asset_rows(db_path, false)?;
     let active_assets: Vec<_> = assets.iter().filter(|asset| asset.is_active).collect();
-    let total_assets_base: f64 = active_assets
-        .iter()
-        .map(|asset| convert_minor(asset.current_value_minor, &asset.currency, &rates))
-        .collect::<StorageResult<Vec<_>>>()?
-        .into_iter()
-        .sum();
+    let total_assets_base = current_asset_total_base(db_path, &rates)?;
     let mut breakdown = Vec::new();
     for category in ["bank", "crypto", "cash", "other"] {
         let rows: Vec<_> = active_assets
@@ -545,11 +573,10 @@ pub fn dashboard_payload(db_path: &str) -> StorageResult<DashboardPayload> {
         goal.current_amount_minor = asset_minor + wallet_minor;
     }
     let completed_goal_count = goals.iter().filter(|goal| goal.is_completed).count() as i64;
-    let wallet_total = wallet_total_base(db_path, &rates, None)?;
     let capital = capital_points(db_path, &rates)?;
     Ok(DashboardPayload {
         base_currency,
-        net_worth_base: wallet_total + total_assets_base,
+        net_worth_base: net_worth_base_at(db_path, &rates, None)?,
         total_assets_base,
         active_asset_count: active_assets.len() as i64,
         total_asset_count: assets.len() as i64,
@@ -565,8 +592,10 @@ pub fn dashboard_payload(db_path: &str) -> StorageResult<DashboardPayload> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AssetSnapshotUpdatePayload, asset_add_snapshot, asset_add_snapshots_bulk, asset_create,
-        dashboard_payload, goal_create, goal_delete, goal_set_completed, initialize_database,
+        AssetSnapshotUpdatePayload, CurrencyRatePayload, StandaloneRecordCreatePayload,
+        WalletCreatePayload, asset_add_snapshot, asset_add_snapshots_bulk, asset_create,
+        create_standalone_record, create_wallet, dashboard_payload, goal_create, goal_delete,
+        goal_set_completed, initialize_database, upsert_currency_rate,
     };
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -592,6 +621,7 @@ mod tests {
         let snapshot = dashboard_payload(&db_path).expect("dashboard snapshot");
 
         assert_eq!(snapshot.total_assets_base, 1250.0);
+        assert_eq!(snapshot.net_worth_base, 1250.0);
         assert_eq!(snapshot.assets[0].current_value_minor, 125000);
         assert!(snapshot.capital.len() >= 2);
         assert_eq!(snapshot.capital[0].month, "2026-01");
@@ -646,6 +676,54 @@ mod tests {
         assert!(result.is_err());
         let snapshot = dashboard_payload(&db_path).expect("dashboard snapshot");
         assert_eq!(snapshot.assets[0].current_value_minor, 100000);
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn net_worth_does_not_reapply_currency_rate_to_base_record_delta() {
+        let db_path = test_db_path();
+        initialize_database(&db_path).expect("database initialization");
+        upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "KZT".to_owned(),
+                currency: "USD".to_owned(),
+                rate: "457.43".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "test".to_owned(),
+            },
+        )
+        .expect("currency rate");
+        let wallet = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "USD wallet".to_owned(),
+                currency: "USD".to_owned(),
+                initial_balance: "18.01".to_owned(),
+                allow_negative: false,
+            },
+        )
+        .expect("wallet creation");
+        create_standalone_record(
+            &db_path,
+            &StandaloneRecordCreatePayload {
+                record_type: "income".to_owned(),
+                date: "2026-01-01".to_owned(),
+                wallet_id: wallet.id,
+                amount_original: "2988".to_owned(),
+                currency: "KZT".to_owned(),
+                rate_at_operation: "1".to_owned(),
+                amount_base: "2988".to_owned(),
+                category: "Income".to_owned(),
+                description: "base-currency delta".to_owned(),
+                tags: vec![],
+            },
+        )
+        .expect("record creation");
+
+        let snapshot = dashboard_payload(&db_path).expect("dashboard snapshot");
+        assert!((snapshot.net_worth_base - 11226.31).abs() < 0.01);
+
         let _ = std::fs::remove_file(db_path);
     }
 }
