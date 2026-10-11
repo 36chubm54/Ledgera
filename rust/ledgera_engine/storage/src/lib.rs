@@ -4858,8 +4858,7 @@ pub fn distinct_record_descriptions(
            AND related_debt_id IS NULL
            AND TRIM(description) <> ''
            AND TRIM(description) NOT GLOB '[[]transfer:[0-9]*]'
-         ORDER BY description COLLATE NOCASE, description
-         LIMIT 200"
+         ORDER BY description COLLATE NOCASE, description"
     } else {
         "SELECT description
          FROM (
@@ -4875,8 +4874,7 @@ pub fn distinct_record_descriptions(
              FROM transfers
              WHERE TRIM(description) <> ''
          )
-         ORDER BY description COLLATE NOCASE, description
-         LIMIT 200"
+         ORDER BY description COLLATE NOCASE, description"
     };
 
     let mut stmt = conn.prepare(sql).map_err(sqlite_err)?;
@@ -8432,6 +8430,28 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             vec!["Lunch".to_owned()]
         );
         assert!(distinct_record_descriptions(&db_path, Some("transfer")).is_err());
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn operation_suggestions_do_not_hide_descriptions_after_alphabetical_cutoff() {
+        let db_path = create_balance_test_db();
+        let conn = Connection::open(&db_path).unwrap();
+        for index in 0..201 {
+            conn.execute(
+                "INSERT INTO records
+                    (id, type, date, wallet_id, amount_original, amount_original_minor, currency,
+                     rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor,
+                     category, description)
+                 VALUES (?1, 'expense', '2026-02-01', 1, 1, 100, 'KZT', 1, '1', 1, 100, 'Food', ?2)",
+                rusqlite::params![1000 + index, format!("Description {index:03}")],
+            )
+            .unwrap();
+        }
+        drop(conn);
+
+        let suggestions = operation_suggestions(&db_path).unwrap();
+        assert!(suggestions.expense_descriptions.iter().any(|value| value == "Description 200"));
         remove_test_db(&db_path);
     }
 
