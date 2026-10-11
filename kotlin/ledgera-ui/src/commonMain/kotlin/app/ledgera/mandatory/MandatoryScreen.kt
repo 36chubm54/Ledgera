@@ -42,6 +42,7 @@ import app.ledgera.model.MandatoryTemplateDraft
 import app.ledgera.model.MandatoryTemplateItem
 import app.ledgera.model.WalletOption
 import app.ledgera.ui.LedgerDateField
+import app.ledgera.ui.AutocompleteTextField
 import app.ledgera.validation.DateValidation
 
 interface MandatoryFileActions {
@@ -107,6 +108,7 @@ fun MandatoryScreen(
                 draft = draft,
                 wallets = state.wallets,
                 baseCurrency = state.baseCurrency,
+                categorySuggestions = state.categorySuggestions,
                 engineError = state.error,
                 submitting = state.inProgress,
                 onDraftChange = viewModel::updateDraft,
@@ -289,6 +291,7 @@ private fun MandatoryTemplateDialog(
     draft: MandatoryTemplateDraft,
     wallets: List<WalletOption>,
     baseCurrency: String,
+    categorySuggestions: List<String>,
     engineError: String?,
     submitting: Boolean,
     onDraftChange: (MandatoryTemplateDraft) -> Unit,
@@ -317,7 +320,7 @@ private fun MandatoryTemplateDialog(
                 if (draft.id == null) {
                     SingleLineField(
                         value = draft.amountOriginal,
-                        onValueChange = { onDraftChange(draft.copy(amountOriginal = it, amountBase = it)) },
+                        onValueChange = { onDraftChange(draft.copy(amountOriginal = it)) },
                         label = "Amount",
                     )
                     SingleLineField(
@@ -328,13 +331,15 @@ private fun MandatoryTemplateDialog(
                 }
                 SingleLineField(
                     value = draft.amountBase,
-                    onValueChange = { onDraftChange(draft.copy(amountBase = it)) },
+                    onValueChange = { if (draft.id != null) onDraftChange(draft.copy(amountBase = it)) },
                     label = "Amount in base currency",
+                    enabled = draft.id != null,
                 )
-                SingleLineField(
+                AutocompleteTextField(
                     value = draft.category,
                     onValueChange = { onDraftChange(draft.copy(category = it)) },
                     label = "Category",
+                    suggestions = categorySuggestions,
                     enabled = draft.id == null,
                 )
                 SingleLineField(

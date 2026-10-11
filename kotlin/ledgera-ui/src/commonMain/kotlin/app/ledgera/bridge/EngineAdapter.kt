@@ -168,6 +168,8 @@ interface DebtsEngine {
 
 interface MandatoryEngine {
     suspend fun baseCurrency(): String
+    suspend fun currencyRates(): List<CurrencyRate> = emptyList()
+    suspend fun operationSuggestions(): OperationSuggestions = OperationSuggestions()
     suspend fun listWallets(): List<WalletOption>
     suspend fun listMandatoryTemplates(): List<MandatoryTemplateItem>
     suspend fun getMandatoryTemplate(templateId: Long): MandatoryTemplateItem?
@@ -211,4 +213,7 @@ interface DistributionEngine {
     suspend fun frozenDistributionRows(startMonth: String? = null, endMonth: String? = null): List<DistributionFrozenRow> = emptyList()
 }
 
-interface EngineAdapter : RuntimeEngine, ReportsEngine, AnalyticsEngine, DashboardEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine, BudgetEngine, DistributionEngine
+interface EngineAdapter : RuntimeEngine, ReportsEngine, AnalyticsEngine, DashboardEngine, OperationsEngine, SettingsEngine, DebtsEngine, MandatoryEngine, BudgetEngine, DistributionEngine {
+    override suspend fun currencyRates(): List<CurrencyRate> = emptyList()
+    override suspend fun operationSuggestions(): OperationSuggestions = OperationSuggestions()
+}

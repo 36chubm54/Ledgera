@@ -3,6 +3,7 @@ package app.ledgera.mandatory
 import app.ledgera.bridge.MandatoryEngine
 import app.ledgera.model.AddMandatoryToRecordsRequest
 import app.ledgera.model.CreateMandatoryTemplateRequest
+import app.ledgera.model.CurrencyRate
 import app.ledgera.model.MandatoryAddToRecordsDraft
 import app.ledgera.model.MandatoryAutoPayPopup
 import app.ledgera.model.MandatoryImportResult
@@ -27,6 +28,8 @@ data class MandatoryUiState(
     val selectedTemplateId: Long? = null,
     val wallets: List<WalletOption> = emptyList(),
     val baseCurrency: String = "KZT",
+    val currencyRates: List<CurrencyRate> = emptyList(),
+    val categorySuggestions: List<String> = emptyList(),
     val editDraft: MandatoryTemplateDraft? = null,
     val addToRecordsDraft: MandatoryAddToRecordsDraft? = null,
     val deleteTemplateId: Long? = null,
@@ -60,6 +63,8 @@ class MandatoryViewModel(
                 val baseCurrency = engine.baseCurrency()
                 val wallets = engine.listWallets()
                 val templates = engine.listMandatoryTemplates()
+                val currencyRates = engine.currencyRates()
+                val suggestions = engine.operationSuggestions()
                 val selectedTemplateId = previous.selectedTemplateId?.takeIf { id ->
                     templates.any { it.id == id }
                 } ?: templates.firstOrNull()?.id
@@ -70,6 +75,12 @@ class MandatoryViewModel(
                     selectedTemplateId = selectedTemplateId,
                     wallets = wallets,
                     baseCurrency = baseCurrency,
+                    currencyRates = currencyRates,
+                    categorySuggestions = (suggestions.expenseCategories + templates.map { it.category })
+                        .map(String::trim)
+                        .filter(String::isNotEmpty)
+                        .distinct()
+                        .sorted(),
                     editDraft = previous.editDraft,
                     addToRecordsDraft = previous.addToRecordsDraft,
                     deleteTemplateId = previous.deleteTemplateId?.takeIf { id ->
@@ -128,7 +139,12 @@ class MandatoryViewModel(
     }
 
     fun updateDraft(draft: MandatoryTemplateDraft) {
-        mutableState.value = mutableState.value.copy(editDraft = draft, error = null, notice = null)
+        val current = mutableState.value
+        mutableState.value = current.copy(
+            editDraft = recalculateDraft(draft, current.baseCurrency, current.currencyRates),
+            error = null,
+            notice = null,
+        )
     }
 
     fun saveTemplate() {
@@ -557,6 +573,38 @@ class MandatoryViewModel(
             period = period,
             date = date.toDisplayDate(),
         )
+
+    private fun recalculateDraft(
+        draft: MandatoryTemplateDraft,
+        baseCurrency: String,
+        rates: List<CurrencyRate>,
+    ): MandatoryTemplateDraft {
+        if (draft.id != null) return draft
+        val amount = draft.amountOriginal.trim().toDoubleOrNull()
+        if (amount == null || amount <= 0.0) {
+            return draft.copy(amountBase = "", rateAtOperation = "")
+        }
+        val currency = draft.currency.trim().uppercase()
+        val effectiveDate = draft.date.toStorageDate().ifBlank { todayStorageText() }
+        val rate = if (currency == baseCurrency.uppercase()) {
+            1.0
+        } else {
+            rates.asSequence()
+                .filter { it.baseCurrency.equals(baseCurrency, ignoreCase = true) }
+                .filter { it.currency.equals(currency, ignoreCase = true) }
+                .filter { it.effectiveDate <= effectiveDate }
+                .maxWithOrNull(compareBy<CurrencyRate> { it.effectiveDate }.thenBy { it.id })
+                ?.rate
+                ?.toDoubleOrNull()
+        }
+        if (rate == null || rate <= 0.0) {
+            return draft.copy(amountBase = "", rateAtOperation = "")
+        }
+        return draft.copy(
+            amountBase = "%.2f".format(amount * rate),
+            rateAtOperation = "%.10f".format(rate),
+        )
+    }
 
     private fun todayDisplayText(): String =
         currentLedgerDate().let { "%02d.%02d.%04d".format(it.day, it.month, it.year) }

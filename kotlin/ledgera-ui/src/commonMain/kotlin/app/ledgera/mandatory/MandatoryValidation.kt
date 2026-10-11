@@ -14,8 +14,11 @@ object MandatoryValidation {
         if (draft.category.trim().isEmpty()) return "Category is required"
         if (draft.description.trim().isEmpty()) return "Description is required"
         MoneyValidation.validatePositiveAmount(draft.amountOriginal.trim())?.let { return it }
-        MoneyValidation.validatePositiveAmount(draft.amountBase.trim())?.let { return it }
         CurrencyValidation.validateSupportedCurrency(draft.currency.trim())?.let { return it }
+        if (draft.amountBase.trim().isEmpty() && !draft.currency.trim().equals(baseCurrency.trim(), ignoreCase = true)) {
+            return "Currency rate is unavailable for the selected currency and date"
+        }
+        MoneyValidation.validatePositiveAmount(draft.amountBase.trim())?.let { return it }
         validatePeriod(draft.period)?.let { return it }
         validateOptionalDate(draft.date)?.let { return it }
         return null

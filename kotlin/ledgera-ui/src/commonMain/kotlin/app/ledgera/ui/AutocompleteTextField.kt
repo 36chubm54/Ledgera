@@ -50,6 +50,7 @@ fun AutocompleteTextField(
     menuWidth: Dp? = null,
     maxSuggestions: Int = 6,
     showSuggestionsOnBlank: Boolean = true,
+    enabled: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
@@ -86,6 +87,7 @@ fun AutocompleteTextField(
             },
             label = { Text(label) },
             singleLine = true,
+            enabled = enabled,
         )
         SuggestionMenu(
             expanded = expanded && filteredSuggestions.isNotEmpty(),
@@ -256,7 +258,8 @@ private fun SuggestionMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
         modifier = if (menuWidth == null) Modifier else Modifier.width(menuWidth),
-            properties = PopupProperties(focusable = true),
+            // Keep keyboard focus in the text field while the suggestions are open.
+            properties = PopupProperties(focusable = false),
     ) {
         suggestions.forEach { suggestion ->
             DropdownMenuItem(
