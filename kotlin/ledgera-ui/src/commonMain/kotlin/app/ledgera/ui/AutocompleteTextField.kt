@@ -286,8 +286,7 @@ internal fun autocompleteSuggestions(
         .filter(String::isNotEmpty)
         .distinctBy(String::lowercase)
         .filter { suggestion ->
-            (query.isEmpty() || suggestion.contains(query, ignoreCase = true)) &&
-                !suggestion.equals(query, ignoreCase = true)
+            query.isEmpty() || suggestion.contains(query, ignoreCase = true)
         }
         .take(maxSuggestions.coerceAtLeast(1))
         .toList()

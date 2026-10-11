@@ -55,9 +55,9 @@ class AutocompleteTextFieldTest {
     }
 
     @Test
-    fun excludesExactMatchAndRespectsLimit() {
+    fun keepsExactMatchAndRespectsLimit() {
         assertEquals(
-            listOf("Food delivery", "Food market"),
+            listOf("Food", "Food delivery"),
             autocompleteSuggestions(
                 value = "Food",
                 suggestions = listOf("Food", "Food delivery", "Food market", "Food court"),
