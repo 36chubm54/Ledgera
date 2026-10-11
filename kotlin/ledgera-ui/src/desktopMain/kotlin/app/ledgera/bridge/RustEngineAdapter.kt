@@ -571,6 +571,19 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         }
     }
 
+    override suspend fun walletCurrentBalances(): List<WalletOption> = withContext(Dispatchers.IO) {
+        val currenciesById = engine.listWallets().associate { it.id to it.currency }
+        engine.walletCurrentBalances().map {
+            WalletOption(
+                id = it.walletId,
+                name = it.name,
+                currency = currenciesById[it.walletId] ?: it.currency,
+                balance = it.balance,
+                balanceCurrency = it.currency,
+            )
+        }
+    }
+
     override suspend fun listWalletsForSettings(): List<WalletSettingsItem> = withContext(Dispatchers.IO) {
         val balancesById = engine.walletCurrentBalances().associateBy { it.walletId }
         val baseCurrency = engine.baseCurrency()

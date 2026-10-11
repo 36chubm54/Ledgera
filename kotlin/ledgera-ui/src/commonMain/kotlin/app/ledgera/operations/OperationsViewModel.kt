@@ -94,7 +94,9 @@ class OperationsViewModel(
         mutableState.value = mutableState.value.copy(loading = true, error = null, notice = notice, filter = filter)
         launchSafely {
             runCatching {
-                val wallets = engine.walletBalances().ifEmpty { engine.listWallets() }
+                val wallets = engine.walletCurrentBalances().ifEmpty {
+                    engine.walletBalances().ifEmpty { engine.listWallets() }
+                }
                 val baseCurrency = engine.baseCurrency()
                 val records = engine.listRecords(engineFilter)
                 val currentState = mutableState.value

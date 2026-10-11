@@ -351,7 +351,7 @@ private fun AddOperationLauncher(
                     wallets.forEach { wallet ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(wallet.name)
-                            Text("${wallet.balance} ${wallet.currency}")
+                            Text("${wallet.balance} ${wallet.balanceCurrency}")
                         }
                     }
                 }

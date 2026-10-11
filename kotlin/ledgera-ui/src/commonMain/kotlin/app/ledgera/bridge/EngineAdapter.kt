@@ -124,6 +124,7 @@ interface OperationsEngine {
     suspend fun tagColorPalette(): List<String>
     suspend fun listWallets(): List<WalletOption>
     suspend fun walletBalances(): List<WalletOption>
+    suspend fun walletCurrentBalances(): List<WalletOption> = emptyList()
 }
 
 interface SettingsEngine {

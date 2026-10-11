@@ -204,6 +204,7 @@ data class WalletOption(
     val name: String,
     val currency: String,
     val balance: String = "0.00",
+    val balanceCurrency: String = currency,
 )
 
 data class WalletSettingsItem(
