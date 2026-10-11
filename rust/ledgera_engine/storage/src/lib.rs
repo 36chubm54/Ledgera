@@ -11,8 +11,8 @@ use calamine::{Data, Reader, open_workbook_auto};
 use csv::{normalize_tabular_key, read_csv_rows, write_csv_rows};
 use excel::StyledWorksheet;
 use ledgera_engine_core::{
-    minor_to_money_value, quantize_money_text, quantize_rate_text, rate_float_from_text,
-    to_minor_units,
+    convert_minor_units_by_rate_ratio, minor_to_money_value, quantize_money_text,
+    quantize_rate_text, rate_float_from_text, to_minor_units,
 };
 use rusqlite::{Connection, OptionalExtension};
 use std::cell::RefCell;
@@ -4474,16 +4474,10 @@ pub fn create_currency_transfer(
     }
     let source_base_minor = ((source_minor as f64 / 100.0) * source_rate_text.parse::<f64>().unwrap() * 100.0).round() as i64;
     let target_base_minor = ((target_minor as f64 / 100.0) * target_rate_text.parse::<f64>().unwrap() * 100.0).round() as i64;
-    let commission_minor = if payload.commission_amount.trim().is_empty() { 0 } else { to_minor_units(&payload.commission_amount)? };
-    let commission_currency = if payload.commission_currency.trim().is_empty() { source_currency.clone() } else { payload.commission_currency.trim().to_uppercase() };
-    validate_currency_code(&commission_currency)?;
-    let commission_base_minor = if commission_minor == 0 { 0 } else {
-        let rate = resolve_currency_rate_in_tx(&tx, &base_currency, &commission_currency, payload.date.trim())?;
-        ((commission_minor as f64 / 100.0) * rate.parse::<f64>().unwrap() * 100.0).round() as i64
-    };
-    if !from_wallet.allow_negative && wallet_balance_minor_in_tx(&tx, payload.from_wallet_id)? < source_base_minor + commission_base_minor {
-        return Err("Insufficient funds in source wallet".to_owned());
-    }
+    let validation = validate_currency_transfer_in_tx(&tx, payload, &resolved, &from_wallet)?;
+    let commission_minor = validation.commission_minor;
+    let commission_currency = validation.commission_currency;
+    let commission_base_minor = validation.commission_base_minor;
     let source_value = source_minor as f64 / 100.0;
     let target_value = target_minor as f64 / 100.0;
     tx.execute(
@@ -4519,6 +4513,53 @@ struct ResolvedCurrencyTransfer {
     conversion_rate: String,
 }
 
+struct CurrencyTransferValidation {
+    commission_minor: i64,
+    commission_currency: String,
+    commission_base_minor: i64,
+}
+
+fn validate_currency_transfer_in_tx(
+    tx: &rusqlite::Transaction<'_>,
+    payload: &CurrencyTransferCreatePayload,
+    resolved: &ResolvedCurrencyTransfer,
+    from_wallet: &TransferWallet,
+) -> StorageResult<CurrencyTransferValidation> {
+    let base_currency = base_currency_code_in_tx(tx)?;
+    let commission_minor = if payload.commission_amount.trim().is_empty() {
+        0
+    } else {
+        to_minor_units(&payload.commission_amount)?
+    };
+    if commission_minor < 0 {
+        return Err("Commission amount must be non-negative".to_owned());
+    }
+    let commission_currency = if payload.commission_currency.trim().is_empty() {
+        resolved.source_currency.clone()
+    } else {
+        payload.commission_currency.trim().to_uppercase()
+    };
+    validate_currency_code(&commission_currency)?;
+    if commission_currency != resolved.source_currency {
+        return Err("Commission currency must match the source wallet currency".to_owned());
+    }
+    let commission_base_minor = if commission_minor == 0 {
+        0
+    } else {
+        let rate = resolve_currency_rate_in_tx(tx, &base_currency, &commission_currency, payload.date.trim())?;
+        ((commission_minor as f64 / 100.0)
+            * rate.parse::<f64>().map_err(|_| "Invalid commission currency rate".to_owned())?
+            * 100.0)
+            .round() as i64
+    };
+    if !from_wallet.allow_negative
+        && wallet_balance_minor_in_tx(tx, from_wallet.id)? < resolved.source_amount_minor + commission_base_minor
+    {
+        return Err("Insufficient funds in source wallet".to_owned());
+    }
+    Ok(CurrencyTransferValidation { commission_minor, commission_currency, commission_base_minor })
+}
+
 fn resolve_currency_transfer_in_tx(
     tx: &rusqlite::Transaction<'_>,
     payload: &CurrencyTransferCreatePayload,
@@ -4545,13 +4586,18 @@ fn resolve_currency_transfer_in_tx(
     }
     let conversion_rate = source_rate_value / target_rate_value;
     let conversion_rate = normalize_currency_rate_text(&format_rate_text(conversion_rate))?;
-    let conversion_rate_value = conversion_rate.parse::<f64>().map_err(|_| "Invalid conversion rate".to_owned())?;
     let (source_amount_minor, target_amount_minor) = if source_currency == target_currency {
         (entered_minor, entered_minor)
     } else if amount_currency == source_currency {
-        (entered_minor, ((entered_minor as f64) * conversion_rate_value).round() as i64)
+        (
+            entered_minor,
+            convert_minor_units_by_rate_ratio(entered_minor, &source_rate, &target_rate)?,
+        )
     } else {
-        (((entered_minor as f64) / conversion_rate_value).round() as i64, entered_minor)
+        (
+            convert_minor_units_by_rate_ratio(entered_minor, &target_rate, &source_rate)?,
+            entered_minor,
+        )
     };
     if source_amount_minor <= 0 || target_amount_minor <= 0 {
         return Err("Calculated transfer amounts must be positive".to_owned());
@@ -4572,6 +4618,7 @@ pub fn currency_transfer_quote(
     let from_wallet = active_wallet_in_tx(&tx, payload.from_wallet_id, "source")?;
     let to_wallet = active_wallet_in_tx(&tx, payload.to_wallet_id, "target")?;
     let resolved = resolve_currency_transfer_in_tx(&tx, payload, &from_wallet, &to_wallet)?;
+    validate_currency_transfer_in_tx(&tx, payload, &resolved, &from_wallet)?;
     Ok(CurrencyTransferQuoteRow {
         source_amount: resolved.source_amount_minor as f64 / 100.0,
         source_currency: resolved.source_currency,
@@ -4666,7 +4713,8 @@ pub fn set_base_currency(db_path: &str, currency: &str) -> StorageResult<String>
             (SELECT COUNT(*) FROM mandatory_expenses) + (SELECT COUNT(*) FROM debts) +
             (SELECT COUNT(*) FROM debt_payments) + (SELECT COUNT(*) FROM assets) +
             (SELECT COUNT(*) FROM goals) + (SELECT COUNT(*) FROM budgets) +
-            (SELECT COUNT(*) FROM distribution_items)", [], |row| row.get(0),
+            (SELECT COUNT(*) FROM distribution_items) +
+            (SELECT COUNT(*) FROM currency_rates)", [], |row| row.get(0),
     ).map_err(sqlite_err)?;
     if data_count > 0 { return Err("Base currency can only be changed before user data exists".to_owned()); }
     tx.execute("INSERT INTO schema_meta (key, value) VALUES ('base_currency', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [normalized.as_str()]).map_err(sqlite_err)?;
@@ -6268,11 +6316,13 @@ pub fn current_currency_rates(db_path: &str) -> StorageResult<HashMap<String, f6
     let mut rates = HashMap::new();
     rates.insert(base.clone(), 1.0);
     for row in currency_rate_rows(db_path)? {
-        if row.base_currency.eq_ignore_ascii_case(&base)
-            && row.rate.is_finite()
-            && row.rate > 0.0
-        {
-            rates.entry(row.currency.trim().to_uppercase()).or_insert(row.rate);
+        if row.base_currency.eq_ignore_ascii_case(&base) {
+            let rate = rate_float_from_text(row.rate_text.trim())
+                .map_err(|error| format!("Invalid stored currency rate: {error}"))?;
+            if !rate.is_finite() || rate <= 0.0 {
+                return Err("Invalid stored currency rate".to_owned());
+            }
+            rates.entry(row.currency.trim().to_uppercase()).or_insert(rate);
         }
     }
     Ok(rates)
@@ -8642,7 +8692,34 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         )
         .unwrap();
         let error = set_base_currency(&db_path, "USD").unwrap_err();
-        assert!(error.contains("before user data exists"));
+        assert!(error.contains("before user data exists"), "unexpected error: {error}");
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn base_currency_cannot_change_after_rate_configuration() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("ledgera_currency_rate_base_test_{unique}.db"));
+        let db_path = path.to_string_lossy().into_owned();
+        initialize_database(&db_path).unwrap();
+        upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "KZT".to_owned(),
+                currency: "USD".to_owned(),
+                rate: "500.25".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "manual".to_owned(),
+            },
+        )
+        .unwrap();
+
+        let error = set_base_currency(&db_path, "EUR").unwrap_err();
+
+        assert!(error.contains("before user data exists"), "unexpected error: {error}");
         remove_test_db(&db_path);
     }
 
@@ -8906,6 +8983,21 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(reverse_quote.source_amount, 0.1);
         assert_eq!(reverse_quote.target_amount, 50.0);
         assert_eq!(reverse_quote.conversion_rate, "500");
+        let invalid_commission = currency_transfer_quote(
+            &db_path,
+            &CurrencyTransferCreatePayload {
+                from_wallet_id: 2,
+                to_wallet_id: usd_wallet.id,
+                date: "2026-01-10".to_owned(),
+                amount: "100".to_owned(),
+                amount_currency: "KZT".to_owned(),
+                description: "Invalid commission currency".to_owned(),
+                commission_amount: "1".to_owned(),
+                commission_currency: "USD".to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert!(invalid_commission.contains("Commission currency must match"));
         remove_test_db(&db_path);
     }
 

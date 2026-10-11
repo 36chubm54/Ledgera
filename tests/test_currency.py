@@ -38,3 +38,9 @@ class TestCurrencyService:
         service = CurrencyService(rates={"USD": 500.0}, base="KZT")
         with pytest.raises(KeyError):
             service.convert(100.0, "EUR")
+
+    def test_currency_codes_are_normalized(self):
+        service = CurrencyService(rates={" usd ": 500.0}, base=" kzt ")
+
+        assert service.get_rate(" USD ") == 500.0
+        assert service.convert(100.0, " kzt ") == 100.0

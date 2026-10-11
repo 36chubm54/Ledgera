@@ -158,6 +158,66 @@ pub fn to_minor_units(value: &str) -> CoreResult<i64> {
     i64::try_from(scaled).map_err(|_| "minor units overflow".to_owned())
 }
 
+fn parse_exact_decimal(text: &str) -> CoreResult<(i128, u32)> {
+    let trimmed = text.trim();
+    let (sign, unsigned) = if let Some(rest) = trimmed.strip_prefix('-') {
+        (-1_i128, rest)
+    } else if let Some(rest) = trimmed.strip_prefix('+') {
+        (1_i128, rest)
+    } else {
+        (1_i128, trimmed)
+    };
+    let mut parts = unsigned.split('.');
+    let integer = parts.next().unwrap_or_default();
+    let fraction = parts.next().unwrap_or_default();
+    if parts.next().is_some()
+        || integer.is_empty()
+        || !integer.chars().all(|ch| ch.is_ascii_digit())
+        || !fraction.chars().all(|ch| ch.is_ascii_digit())
+    {
+        return Err("invalid decimal value".to_owned());
+    }
+    let scale = fraction.len() as u32;
+    let scale_base = pow10(scale)?;
+    let whole = integer
+        .parse::<i128>()
+        .map_err(|_| "decimal value too large".to_owned())?;
+    let fractional = if fraction.is_empty() {
+        0
+    } else {
+        fraction
+            .parse::<i128>()
+            .map_err(|_| "decimal value too large".to_owned())?
+    };
+    let value = whole
+        .checked_mul(scale_base)
+        .and_then(|value| value.checked_add(fractional))
+        .and_then(|value| value.checked_mul(sign))
+        .ok_or_else(|| "decimal value too large".to_owned())?;
+    Ok((value, scale))
+}
+
+pub fn convert_minor_units_by_rate_ratio(
+    amount_minor: i64,
+    source_rate: &str,
+    target_rate: &str,
+) -> CoreResult<i64> {
+    let (source_value, source_scale) = parse_exact_decimal(source_rate)?;
+    let (target_value, target_scale) = parse_exact_decimal(target_rate)?;
+    if source_value <= 0 || target_value <= 0 {
+        return Err("currency rates must be positive".to_owned());
+    }
+    let numerator = (amount_minor as i128)
+        .checked_mul(source_value)
+        .and_then(|value| value.checked_mul(pow10(target_scale).ok()?))
+        .ok_or_else(|| "currency conversion overflow".to_owned())?;
+    let denominator = pow10(source_scale)?
+        .checked_mul(target_value)
+        .ok_or_else(|| "currency conversion overflow".to_owned())?;
+    let converted = round_div_half_up(numerator, denominator)?;
+    i64::try_from(converted).map_err(|_| "minor units overflow".to_owned())
+}
+
 pub fn minor_to_money(value: &str) -> CoreResult<f64> {
     let units = parse_scaled_decimal(value, 0)?;
     scaled_to_float(units, MONEY_SCALE)
@@ -368,6 +428,13 @@ mod tests {
     fn minor_units_round_trip() {
         assert_eq!(to_minor_units("123.455").unwrap(), 12346);
         assert_eq!(minor_to_money("12346").unwrap(), 123.46);
+    }
+
+    #[test]
+    fn converts_minor_units_using_exact_rate_ratio() {
+        assert_eq!(convert_minor_units_by_rate_ratio(100, "1.25", "2.50").unwrap(), 50);
+        assert_eq!(convert_minor_units_by_rate_ratio(1, "1", "2").unwrap(), 1);
+        assert_eq!(convert_minor_units_by_rate_ratio(100, "500.123456789", "1").unwrap(), 50012);
     }
 
     #[test]

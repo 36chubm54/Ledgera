@@ -19,6 +19,7 @@ import app.ledgera.validation.DateValidation
 import app.ledgera.validation.CurrencyValidation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -70,6 +71,8 @@ class OperationsViewModel(
     private val importFileSnapshotProvider: ImportFileSnapshotProvider = NoImportFileSnapshotProvider,
 ) {
     private val mutableState = MutableStateFlow(OperationsUiState(loading = true))
+    private var quoteJob: Job? = null
+    private var quoteGeneration = 0L
     val state: StateFlow<OperationsUiState> = mutableState.asStateFlow()
 
     fun refresh(filter: OperationFilter = mutableState.value.filter) {
@@ -547,11 +550,21 @@ class OperationsViewModel(
     }
 
     fun quoteCurrencyTransfer(request: CurrencyTransferRequest) {
+        quoteJob?.cancel()
+        val generation = ++quoteGeneration
         mutableState.value = mutableState.value.copy(error = null, currencyTransferQuote = null)
-        launchSafely {
+        quoteJob = scope.launch {
             runCatching { engine.quoteCurrencyTransfer(request.copy(date = request.date.toStorageDate())) }
-                .onSuccess { quote -> mutableState.value = mutableState.value.copy(currencyTransferQuote = quote) }
-                .onFailure { failure -> mutableState.value = mutableState.value.copy(error = failure.message ?: "Unable to calculate transfer") }
+                .onSuccess { quote ->
+                    if (generation == quoteGeneration) {
+                        mutableState.value = mutableState.value.copy(currencyTransferQuote = quote)
+                    }
+                }
+                .onFailure { failure ->
+                    if (generation == quoteGeneration && failure !is kotlinx.coroutines.CancellationException) {
+                        mutableState.value = mutableState.value.copy(error = failure.message ?: "Unable to calculate transfer")
+                    }
+                }
         }
     }
 

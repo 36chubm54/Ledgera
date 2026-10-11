@@ -1,7 +1,10 @@
 class CurrencyService:
     def __init__(self, rates: dict[str, float], base: str = "KZT"):
-        self._rates = rates
-        self._base = base
+        self._base = (base or "KZT").strip().upper()
+        self._rates = {
+            str(currency).strip().upper(): rate
+            for currency, rate in rates.items()
+        }
 
     @property
     def base_currency(self) -> str:
@@ -11,9 +14,10 @@ class CurrencyService:
         return dict(self._rates)
 
     def get_rate(self, currency: str) -> float:
-        if currency == self._base:
+        code = str(currency).strip().upper()
+        if code == self._base:
             return 1.0
-        return self._rates[currency]
+        return self._rates[code]
 
     def convert(self, amount: float, currency: str) -> float:
         """Convert amount to base currency.

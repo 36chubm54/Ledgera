@@ -638,8 +638,10 @@ private fun CreateTransferDialog(
                 OutlinedTextField(
                     modifier = dialogFieldModifier(),
                     value = commissionCurrency,
-                    onValueChange = { commissionCurrency = OperationValidation.normalizeCurrency(it) },
+                    onValueChange = {},
                     label = { Text("Commission currency") },
+                    enabled = false,
+                    readOnly = true,
                     singleLine = true,
                 )
                 AutocompleteTextField(
