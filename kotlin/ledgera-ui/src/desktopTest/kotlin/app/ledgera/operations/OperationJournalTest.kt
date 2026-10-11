@@ -30,7 +30,7 @@ class OperationJournalTest {
 
         assertEquals(1, items.size)
         assertEquals("record:3", items.single().key)
-        assertEquals("Food · selected", items.single().title)
+        assertEquals("Food", items.single().title)
         assertEquals(3, items.single().selectableRecordId)
         assertEquals(null, items.single().transferId)
     }

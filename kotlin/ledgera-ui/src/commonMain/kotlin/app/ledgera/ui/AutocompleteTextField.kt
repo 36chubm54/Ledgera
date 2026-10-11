@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,15 +52,19 @@ fun AutocompleteTextField(
     showSuggestionsOnBlank: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val filteredSuggestions = remember(value, suggestions, showSuggestionsOnBlank) {
+    var focused by remember { mutableStateOf(false) }
+    val filteredSuggestions = remember(value, suggestions, maxSuggestions, showSuggestionsOnBlank) {
         autocompleteSuggestions(value, suggestions, maxSuggestions, showSuggestionsOnBlank)
+    }
+    LaunchedEffect(suggestions, maxSuggestions, showSuggestionsOnBlank, focused) {
+        expanded = focused && filteredSuggestions.isNotEmpty()
     }
     Box(modifier = modifier) {
         OutlinedTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { state ->
-                    expanded = state.isFocused && filteredSuggestions.isNotEmpty()
+                    focused = state.isFocused
                 }
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) {
@@ -251,7 +256,7 @@ private fun SuggestionMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
         modifier = if (menuWidth == null) Modifier else Modifier.width(menuWidth),
-        properties = PopupProperties(focusable = false),
+            properties = PopupProperties(focusable = true),
     ) {
         suggestions.forEach { suggestion ->
             DropdownMenuItem(

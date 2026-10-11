@@ -56,11 +56,7 @@ private fun standaloneJournalItem(
     val selected = selectedBulkRecordIds.contains(record.id)
     return OperationJournalItem(
         key = "record:${record.id}",
-        title = if (selectedRecordId == record.id || selected) {
-            "${record.category} · selected"
-        } else {
-            record.category
-        },
+        title = record.category,
         amount = "${record.amountOriginal} ${record.currency}",
         meta = "${record.date} · ${record.type} · wallet #${record.walletId}",
         description = record.description,
@@ -89,11 +85,7 @@ private fun transferJournalItem(
     }
     return OperationJournalItem(
         key = "transfer:$transferId",
-        title = if (selectedBulkTransferIds.contains(transferId)) {
-            "Transfer · transfer #$transferId · selected"
-        } else {
-            "Transfer · transfer #$transferId"
-        },
+        title = "Transfer · transfer #$transferId",
         amount = "${primary.amountOriginal} ${primary.currency}",
         meta = "${primary.date} · transfer · $direction",
         description = primary.description,

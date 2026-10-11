@@ -4804,7 +4804,8 @@ pub fn distinct_record_categories(db_path: &str, record_type: &str) -> StorageRe
                AND TRIM(category) <> ''
                AND transfer_id IS NULL
                AND related_debt_id IS NULL
-             ORDER BY category COLLATE NOCASE, category",
+             ORDER BY category COLLATE NOCASE, category
+             LIMIT 200",
         )
         .map_err(sqlite_err)?;
     let rows = stmt
