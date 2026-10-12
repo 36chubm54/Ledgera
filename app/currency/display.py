@@ -7,6 +7,8 @@ def get_rate(service, currency: str) -> float:
     code = (currency or "").upper()
     if not code:
         raise ValueError("Currency is required")
+    if code != code.strip():
+        raise ValueError(f"Unsupported currency: {currency}")
     try:
         return float(service.get_rate(code))
     except KeyError as err:

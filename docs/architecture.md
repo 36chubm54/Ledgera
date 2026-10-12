@@ -173,6 +173,14 @@ Current contract:
 - `exchange_rate_api_key` should be persisted through OS-backed secure storage rather than plaintext `currency_config.json`
 - env var `LEDGERA_EXCHANGE_RATE_API_KEY` is now the primary runtime override, while `FINACCOUNTING_EXCHANGE_RATE_API_KEY` remains a compatibility fallback rather than the preferred default persistence path
 
+Automatic refresh compatibility:
+
+- `refresh_backend` accepts `python`, `rust`, and `shadow`; Python remains the default until the parity gate is complete, and `LEDGERA_FORCE_PYTHON_FALLBACK=1` always wins
+- Rust stores provider observations in `currency_rate_snapshots` and refresh diagnostics in `currency_refresh_runs`; the manual `currency_rates` table remains authoritative for the same effective date
+- UniFFI exposes refresh requests/results/status, provider statuses, and snapshots without changing the existing manual rate CRUD methods
+- a Kotlin `CurrencyRefreshCoordinator` owns cancellation and serializes automatic/manual refresh calls; it is intentionally independent from the existing manual rate editor
+- old databases and legacy JSON cache values remain usable because historical operation rates are never recalculated and snapshot storage is additive
+
 ## 3. Key Runtime Flows
 
 ### 3.0 Resource and runtime path ownership

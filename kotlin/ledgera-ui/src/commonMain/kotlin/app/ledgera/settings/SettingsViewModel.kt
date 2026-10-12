@@ -7,6 +7,8 @@ import app.ledgera.model.CreateWalletRequest
 import app.ledgera.model.FullBackupResult
 import app.ledgera.model.WalletSettingsItem
 import app.ledgera.model.CurrencyRate
+import app.ledgera.model.CurrencyProviderStatus
+import app.ledgera.model.CurrencyRefreshStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,6 +23,8 @@ data class SettingsUiState(
     val baseCurrency: String = "KZT",
     val supportedCurrencies: List<String> = listOf("KZT"),
     val currencyRates: List<CurrencyRate> = emptyList(),
+    val currencyRefreshStatus: CurrencyRefreshStatus? = null,
+    val currencyProviderStatuses: List<CurrencyProviderStatus> = emptyList(),
     val auditRunning: Boolean = false,
     val auditFindings: List<AuditFinding> = emptyList(),
     val auditSummary: AuditSummary? = null,
@@ -46,12 +50,16 @@ class SettingsViewModel(
                 val wallets = engine.listWalletsForSettings()
                 val currencies = engine.supportedCurrencies()
                 val rates = engine.currencyRates()
+                val refreshStatus = runCatching { engine.currencyRefreshStatus() }.getOrNull()
+                val providerStatuses = runCatching { engine.currencyProviderStatuses() }.getOrDefault(emptyList())
                 mutableState.value = mutableState.value.copy(
                     loading = false,
                     wallets = wallets,
                     baseCurrency = baseCurrency,
                     supportedCurrencies = currencies.ifEmpty { listOf(baseCurrency) },
                     currencyRates = rates,
+                    currencyRefreshStatus = refreshStatus,
+                    currencyProviderStatuses = providerStatuses,
                 )
             }.onFailure(::showError)
         }

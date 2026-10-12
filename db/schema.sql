@@ -18,6 +18,36 @@ CREATE TABLE IF NOT EXISTS currency_rates (
     CHECK(base_currency <> currency)
 );
 
+CREATE TABLE IF NOT EXISTS currency_refresh_runs (
+    refresh_id TEXT PRIMARY KEY,
+    backend TEXT NOT NULL,
+    requested_provider TEXT NOT NULL,
+    selected_provider TEXT NOT NULL,
+    status TEXT NOT NULL,
+    effective_date TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    fallback_chain TEXT NOT NULL DEFAULT '',
+    diagnostic TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS currency_rate_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    refresh_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    base_currency TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    rate REAL NOT NULL,
+    rate_text TEXT NOT NULL,
+    effective_date TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'success',
+    diagnostic TEXT NOT NULL DEFAULT '',
+    UNIQUE(refresh_id, provider, base_currency, currency, effective_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_currency_snapshots_lookup
+    ON currency_rate_snapshots(base_currency, currency, effective_date DESC, fetched_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS wallets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL CHECK(length(trim(name)) > 0),

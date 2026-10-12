@@ -47,6 +47,9 @@ use ledgera_engine_storage::{
     CurrencyTransferQuoteRow, currency_transfer_quote,
     create_currency_transfer, currency_rate_rows, delete_currency_rate,
     set_base_currency, supported_currencies, upsert_currency_rate,
+    CurrencyRateSnapshotRow, CurrencyRefreshRequestPayload, CurrencyRefreshResultRow,
+    CurrencyRefreshStatusRow, currency_rate_snapshot_rows, latest_currency_refresh_status,
+    refresh_currency_rates,
 };
 use std::fmt;
 use std::path::Path;
@@ -701,6 +704,79 @@ pub struct CurrencyRateRequest {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyProviderConfig {
+    pub backend: String,
+    pub primary_provider: String,
+    pub fallback_provider: String,
+    pub timeout_seconds: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyRefreshRequest {
+    pub refresh_id: String,
+    pub backend: String,
+    pub base_currency: String,
+    pub primary_provider: String,
+    pub fallback_provider: String,
+    pub effective_date: String,
+    pub fetched_at: String,
+    pub provider_payload: String,
+    pub payload_format: String,
+    pub api_key: String,
+    pub timeout_seconds: i64,
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyRefreshResultDto {
+    pub refresh_id: String,
+    pub status: String,
+    pub selected_provider: String,
+    pub rates_count: i64,
+    pub effective_date: String,
+    pub fetched_at: String,
+    pub fallback_chain: String,
+    pub diagnostic: String,
+    pub stale: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyRefreshStatusDto {
+    pub refresh_id: String,
+    pub backend: String,
+    pub requested_provider: String,
+    pub selected_provider: String,
+    pub status: String,
+    pub effective_date: String,
+    pub fetched_at: String,
+    pub fallback_chain: String,
+    pub diagnostic: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyProviderStatusDto {
+    pub name: String,
+    pub configured: bool,
+    pub selected: bool,
+    pub last_status: String,
+    pub diagnostic: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyRateSnapshotDto {
+    pub id: i64,
+    pub refresh_id: String,
+    pub provider: String,
+    pub base_currency: String,
+    pub currency: String,
+    pub rate: String,
+    pub effective_date: String,
+    pub fetched_at: String,
+    pub status: String,
+    pub diagnostic: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct CurrencyTransferRequest {
     pub from_wallet_id: i64,
     pub to_wallet_id: i64,
@@ -1094,6 +1170,48 @@ impl LedgeraEngine {
 
     pub fn delete_currency_rate(&self, rate_id: i64) -> Result<bool, LedgeraEngineError> {
         delete_currency_rate(&self.db_path, rate_id).map_err(storage_error)
+    }
+
+    pub fn refresh_currency_rates(&self, request: CurrencyRefreshRequest) -> Result<CurrencyRefreshResultDto, LedgeraEngineError> {
+        let refresh_id = if request.refresh_id.trim().is_empty() {
+            format!("{}-{}", request.effective_date, request.fetched_at)
+        } else {
+            request.refresh_id.clone()
+        };
+        refresh_currency_rates(&self.db_path, &CurrencyRefreshRequestPayload {
+            refresh_id,
+            backend: request.backend,
+            base_currency: request.base_currency,
+            primary_provider: request.primary_provider,
+            fallback_provider: request.fallback_provider,
+            effective_date: request.effective_date,
+            fetched_at: request.fetched_at,
+            provider_payload: request.provider_payload,
+            payload_format: request.payload_format,
+            api_key: request.api_key,
+            timeout_seconds: request.timeout_seconds,
+            dry_run: request.dry_run,
+        }).map(currency_refresh_result_to_dto).map_err(storage_error)
+    }
+
+    pub fn currency_refresh_status(&self) -> Result<CurrencyRefreshStatusDto, LedgeraEngineError> {
+        latest_currency_refresh_status(&self.db_path).map(currency_refresh_status_to_dto).map_err(storage_error)
+    }
+
+    pub fn currency_rate_snapshots(&self) -> Result<Vec<CurrencyRateSnapshotDto>, LedgeraEngineError> {
+        currency_rate_snapshot_rows(&self.db_path)
+            .map(|rows| rows.into_iter().map(currency_rate_snapshot_to_dto).collect())
+            .map_err(storage_error)
+    }
+
+    pub fn currency_provider_statuses(&self) -> Result<Vec<CurrencyProviderStatusDto>, LedgeraEngineError> {
+        let status = latest_currency_refresh_status(&self.db_path).ok();
+        let selected = status.as_ref().map(|value| value.selected_provider.as_str()).unwrap_or_default();
+        let last_status = status.as_ref().map(|value| value.status.clone()).unwrap_or_else(|| "never".to_owned());
+        let diagnostic = status.as_ref().map(|value| value.diagnostic.clone()).unwrap_or_default();
+        Ok(["nbk", "exchange_rate", "cbr", "static", "cache"].into_iter().map(|name| CurrencyProviderStatusDto {
+            name: name.to_owned(), configured: true, selected: selected == name, last_status: last_status.clone(), diagnostic: diagnostic.clone(),
+        }).collect())
     }
 
     pub fn list_records(
@@ -2455,6 +2573,49 @@ fn currency_rate_to_dto(row: CurrencyRateRow) -> CurrencyRateDto {
         effective_date: row.effective_date,
         source: row.source,
         created_at: row.created_at,
+    }
+}
+
+fn currency_refresh_result_to_dto(row: CurrencyRefreshResultRow) -> CurrencyRefreshResultDto {
+    CurrencyRefreshResultDto {
+        refresh_id: row.refresh_id,
+        status: row.status,
+        selected_provider: row.selected_provider,
+        rates_count: row.rates_count,
+        effective_date: row.effective_date,
+        fetched_at: row.fetched_at,
+        fallback_chain: row.fallback_chain,
+        diagnostic: row.diagnostic,
+        stale: row.stale,
+    }
+}
+
+fn currency_refresh_status_to_dto(row: CurrencyRefreshStatusRow) -> CurrencyRefreshStatusDto {
+    CurrencyRefreshStatusDto {
+        refresh_id: row.refresh_id,
+        backend: row.backend,
+        requested_provider: row.requested_provider,
+        selected_provider: row.selected_provider,
+        status: row.status,
+        effective_date: row.effective_date,
+        fetched_at: row.fetched_at,
+        fallback_chain: row.fallback_chain,
+        diagnostic: row.diagnostic,
+    }
+}
+
+fn currency_rate_snapshot_to_dto(row: CurrencyRateSnapshotRow) -> CurrencyRateSnapshotDto {
+    CurrencyRateSnapshotDto {
+        id: row.id,
+        refresh_id: row.refresh_id,
+        provider: row.provider,
+        base_currency: row.base_currency,
+        currency: row.currency,
+        rate: row.rate_text,
+        effective_date: row.effective_date,
+        fetched_at: row.fetched_at,
+        status: row.status,
+        diagnostic: row.diagnostic,
     }
 }
 

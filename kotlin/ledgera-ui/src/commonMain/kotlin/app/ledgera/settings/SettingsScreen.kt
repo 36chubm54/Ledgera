@@ -107,6 +107,8 @@ fun SettingsScreen(
             baseCurrency = state.baseCurrency,
             currencies = state.supportedCurrencies,
             rates = state.currencyRates,
+            refreshStatus = state.currencyRefreshStatus,
+            providerStatuses = state.currencyProviderStatuses,
             loading = state.loading,
             error = state.error,
             onAddRate = { viewModel.clearFeedback(); editingCurrencyRate = null; showCurrencyRateDialog = true },
@@ -211,6 +213,8 @@ private fun CurrencySection(
     baseCurrency: String,
     currencies: List<String>,
     rates: List<app.ledgera.model.CurrencyRate>,
+    refreshStatus: app.ledgera.model.CurrencyRefreshStatus?,
+    providerStatuses: List<app.ledgera.model.CurrencyProviderStatus>,
     loading: Boolean,
     error: String?,
     onAddRate: () -> Unit,
@@ -228,6 +232,19 @@ private fun CurrencySection(
                 Button(onClick = onAddRate, enabled = !loading) { Text("Add rate") }
             }
             Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall)
+            refreshStatus?.let { status ->
+                Text(
+                    "Automatic refresh: ${status.status} · ${status.selectedProvider.ifBlank { "none" }} · ${status.effectiveDate}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (status.status == "success") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                )
+            }
+            if (providerStatuses.isNotEmpty()) {
+                Text(
+                    "Providers: ${providerStatuses.filter { it.selected }.joinToString { it.name }.ifBlank { "not selected" }}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             rates.forEach { rate ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("${rate.currency}/${rate.baseCurrency} = ${rate.rate} · ${rate.effectiveDate}")

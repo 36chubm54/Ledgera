@@ -3,6 +3,7 @@ mod dashboard;
 mod csv;
 mod excel;
 mod tag_palette;
+mod currency_refresh;
 
 pub use backup::{
     FullBackupResult, export_full_backup_json, import_full_backup_json, preview_full_backup_json,
@@ -21,6 +22,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 pub use tag_palette::{NO_COLOR, TAG_PALETTE, is_valid_tag_color};
+pub use currency_refresh::{
+    CurrencyRateSnapshotPayload, CurrencyRateSnapshotRow, CurrencyRefreshRunPayload,
+    CurrencyRefreshRequestPayload, CurrencyRefreshResultRow, CurrencyRefreshStatusRow,
+    ProviderRate, currency_rate_snapshot_rows,
+    ensure_currency_refresh_schema, latest_currency_refresh_status, normalize_rate_text,
+    parse_cbr_xml, parse_exchange_rate_json, parse_nbk_xml, provider_order, record_currency_refresh,
+    refresh_currency_rates, static_provider_rates, upsert_currency_rate_snapshot,
+};
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
     MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
@@ -531,6 +540,7 @@ pub fn initialize_database(db_path: &str) -> StorageResult<()> {
     }
     let conn = open_sqlite_connection(db_path)?;
     conn.execute_batch(INITIAL_SCHEMA).map_err(sqlite_err)?;
+    ensure_currency_refresh_schema(&conn)?;
     ensure_transfer_currency_columns_on_conn(&conn)?;
     conn.execute(
         "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('base_currency', 'KZT')",
@@ -6292,7 +6302,7 @@ fn resolve_currency_rate_in_tx(
     if currency.eq_ignore_ascii_case(base_currency) {
         return Ok("1".to_owned());
     }
-    let rate_text = tx
+    let manual_rate = tx
         .query_row(
             "SELECT rate_text
              FROM currency_rates
@@ -6303,15 +6313,45 @@ fn resolve_currency_rate_in_tx(
             |row| row.get::<_, String>(0),
         )
         .optional()
+        .map_err(sqlite_err)?;
+    if let Some(rate_text) = manual_rate {
+        return normalize_currency_rate_text(&rate_text);
+    }
+    let has_snapshots = tx
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'currency_rate_snapshots'",
+            [],
+            |_row| Ok(()),
+        )
+        .optional()
         .map_err(sqlite_err)?
-        .ok_or_else(|| format!("No currency rate for {currency} on {date}"))?;
-    normalize_currency_rate_text(&rate_text)
+        .is_some();
+    if has_snapshots {
+        let snapshot_rate = tx
+            .query_row(
+                "SELECT rate_text
+                 FROM currency_rate_snapshots
+                 WHERE base_currency = ?1 AND currency = ?2 AND effective_date <= ?3 AND status = 'success'
+                 ORDER BY effective_date DESC, fetched_at DESC, id DESC
+                 LIMIT 1",
+                (base_currency, currency, date),
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(sqlite_err)?;
+        if let Some(rate_text) = snapshot_rate {
+            return normalize_currency_rate_text(&rate_text);
+        }
+    }
+    Err(format!("No currency rate for {currency} on {date}"))
 }
 
 /// Returns the latest configured rate for each currency from the SQLite rate table.
 /// The base currency is always present with a rate of one.
 pub fn current_currency_rates(db_path: &str) -> StorageResult<HashMap<String, f64>> {
     let base = base_currency_code(db_path)?.to_uppercase();
+    let conn = open_sqlite_connection(db_path)?;
+    ensure_currency_refresh_schema(&conn)?;
     let mut rates = HashMap::new();
     rates.insert(base.clone(), 1.0);
     for row in currency_rate_rows(db_path)? {
@@ -6323,6 +6363,24 @@ pub fn current_currency_rates(db_path: &str) -> StorageResult<HashMap<String, f6
             }
             rates.entry(row.currency.trim().to_uppercase()).or_insert(rate);
         }
+    }
+    let mut stmt = conn.prepare(
+        "SELECT currency, rate_text
+         FROM currency_rate_snapshots
+         WHERE base_currency = ?1 AND status = 'success'
+         ORDER BY effective_date DESC, fetched_at DESC, id DESC",
+    ).map_err(sqlite_err)?;
+    let snapshots = stmt.query_map([base.as_str()], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).map_err(sqlite_err)?;
+    for snapshot in snapshots {
+        let (currency, rate_text) = snapshot.map_err(sqlite_err)?;
+        let currency = currency.trim().to_uppercase();
+        if rates.contains_key(&currency) { continue; }
+        let rate = rate_float_from_text(rate_text.trim())
+            .map_err(|error| format!("Invalid stored currency snapshot rate: {error}"))?;
+        if !rate.is_finite() || rate <= 0.0 {
+            return Err("Invalid stored currency snapshot rate".to_owned());
+        }
+        rates.insert(currency, rate);
     }
     Ok(rates)
 }

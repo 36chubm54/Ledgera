@@ -73,6 +73,11 @@ import app.ledgera.model.WalletDeleteResult
 import app.ledgera.model.WalletOption
 import app.ledgera.model.WalletSettingsItem
 import app.ledgera.model.CurrencyRate
+import app.ledgera.model.CurrencyRefreshRequest
+import app.ledgera.model.CurrencyRefreshResult
+import app.ledgera.model.CurrencyRefreshStatus
+import app.ledgera.model.CurrencyRateSnapshot
+import app.ledgera.model.CurrencyProviderStatus
 import app.ledgera.model.ReportCategoryRow
 import app.ledgera.model.ReportDebtRow
 import app.ledgera.model.ReportMonthlyRow
@@ -295,6 +300,45 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         }
     }
     override suspend fun deleteCurrencyRate(rateId: Long): Boolean = withContext(Dispatchers.IO) { engine.deleteCurrencyRate(rateId) }
+
+    override suspend fun refreshCurrencyRates(request: CurrencyRefreshRequest): CurrencyRefreshResult = withContext(Dispatchers.IO) {
+        engine.refreshCurrencyRates(
+            app.ledgera.engine.CurrencyRefreshRequest(
+                refreshId = request.refreshId,
+                backend = request.backend,
+                baseCurrency = request.baseCurrency,
+                primaryProvider = request.primaryProvider,
+                fallbackProvider = request.fallbackProvider,
+                effectiveDate = request.effectiveDate,
+                fetchedAt = request.fetchedAt,
+                providerPayload = request.providerPayload,
+                payloadFormat = request.payloadFormat,
+                apiKey = request.apiKey,
+                timeoutSeconds = request.timeoutSeconds,
+                dryRun = request.dryRun,
+            )
+        ).let {
+            CurrencyRefreshResult(it.refreshId, it.status, it.selectedProvider, it.ratesCount, it.effectiveDate, it.fetchedAt, it.fallbackChain, it.diagnostic, it.stale)
+        }
+    }
+
+    override suspend fun currencyRefreshStatus(): CurrencyRefreshStatus = withContext(Dispatchers.IO) {
+        engine.currencyRefreshStatus().let {
+            CurrencyRefreshStatus(it.refreshId, it.backend, it.requestedProvider, it.selectedProvider, it.status, it.effectiveDate, it.fetchedAt, it.fallbackChain, it.diagnostic)
+        }
+    }
+
+    override suspend fun currencyRateSnapshots(): List<CurrencyRateSnapshot> = withContext(Dispatchers.IO) {
+        engine.currencyRateSnapshots().map {
+            CurrencyRateSnapshot(it.id, it.refreshId, it.provider, it.baseCurrency, it.currency, it.rate, it.effectiveDate, it.fetchedAt, it.status, it.diagnostic)
+        }
+    }
+
+    override suspend fun currencyProviderStatuses(): List<CurrencyProviderStatus> = withContext(Dispatchers.IO) {
+        engine.currencyProviderStatuses().map {
+            CurrencyProviderStatus(it.name, it.configured, it.selected, it.lastStatus, it.diagnostic)
+        }
+    }
 
     override suspend fun listRecords(filter: OperationFilter): List<OperationRecord> =
         withContext(Dispatchers.IO) {

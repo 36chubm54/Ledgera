@@ -137,6 +137,10 @@ def get_runtime_currency_config(
     api_key_status: Mapping[str, object],
 ) -> dict[str, object]:
     provider_mode = str(config.get("provider_mode", "personal") or "personal").lower()
+    try:
+        provider_timeout_seconds = max(1, int(config.get("provider_timeout_seconds", 10) or 10))
+    except (TypeError, ValueError):
+        provider_timeout_seconds = 10
     fallback_key = (
         "commercial_fallback_provider" if provider_mode == "commercial" else "fallback_provider"
     )
@@ -154,6 +158,8 @@ def get_runtime_currency_config(
         "update_interval_minutes": normalize_update_interval_minutes(
             config.get("update_interval_minutes", 60)
         ),
+        "refresh_backend": str(config.get("refresh_backend", "python") or "python").lower(),
+        "provider_timeout_seconds": provider_timeout_seconds,
     }
 
 

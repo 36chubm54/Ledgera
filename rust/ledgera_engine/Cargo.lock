@@ -935,6 +935,7 @@ dependencies = [
  "ledgera_engine_core",
  "libc",
  "printpdf",
+ "quick-xml",
  "rusqlite",
  "rust_xlsxwriter",
  "serde_json",

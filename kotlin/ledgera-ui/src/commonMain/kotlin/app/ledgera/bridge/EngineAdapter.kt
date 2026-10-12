@@ -44,6 +44,11 @@ import app.ledgera.model.WalletOption
 import app.ledgera.model.WalletDeleteResult
 import app.ledgera.model.WalletSettingsItem
 import app.ledgera.model.CurrencyRate
+import app.ledgera.model.CurrencyRefreshRequest
+import app.ledgera.model.CurrencyRefreshResult
+import app.ledgera.model.CurrencyRefreshStatus
+import app.ledgera.model.CurrencyRateSnapshot
+import app.ledgera.model.CurrencyProviderStatus
 import app.ledgera.model.CreateDistributionItemRequest
 import app.ledgera.model.CreateDistributionSubitemRequest
 import app.ledgera.model.DistributionFrozenRow
@@ -134,6 +139,10 @@ interface SettingsEngine {
     suspend fun currencyRates(): List<CurrencyRate> = emptyList()
     suspend fun upsertCurrencyRate(baseCurrency: String, currency: String, rate: String, effectiveDate: String, source: String): CurrencyRate = error("Currency settings are unavailable")
     suspend fun deleteCurrencyRate(rateId: Long): Boolean = false
+    suspend fun refreshCurrencyRates(request: CurrencyRefreshRequest): CurrencyRefreshResult = error("Currency refresh is unavailable")
+    suspend fun currencyRefreshStatus(): CurrencyRefreshStatus = error("Currency refresh status is unavailable")
+    suspend fun currencyRateSnapshots(): List<CurrencyRateSnapshot> = emptyList()
+    suspend fun currencyProviderStatuses(): List<CurrencyProviderStatus> = emptyList()
     suspend fun listWalletsForSettings(): List<WalletSettingsItem>
     suspend fun createWallet(request: CreateWalletRequest): WalletSettingsItem
     suspend fun setSystemWalletInitialBalance(initialBalance: String): WalletSettingsItem = error("Initial balance setup is unavailable")

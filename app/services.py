@@ -36,6 +36,17 @@ from app.currency.file_store import (
     write_config_file,
 )
 from app.currency.online_mode import refresh_online_rates, set_online_mode
+from app.currency.backend import (
+    BACKEND_PYTHON,
+    BACKEND_RUST,
+    BACKEND_SHADOW,
+    SUPPORTED_BACKENDS,
+    build_refresh_request,
+    call_rust_refresh,
+    compare_refresh_rates,
+    normalize_backend,
+    python_result,
+)
 from app.currency.runtime_config import (
     build_api_key_status,
     default_rates_for_base,
@@ -127,11 +138,14 @@ class CurrencyService:
         "enable_cbr": False,
         "auto_update": True,
         "update_interval_minutes": 60,
+        "refresh_backend": BACKEND_PYTHON,
+        "provider_timeout_seconds": 10,
     }
     API_KEY_SOURCE_FIELD = "_exchange_rate_api_key_source"
     API_KEY_PERSISTED_FIELD = "_exchange_rate_api_key_persisted_value"
     SUPPORTED_SETUP_CURRENCIES = ("KZT", "USD", "EUR", "RUB")
     SUPPORTED_PROVIDER_MODES = ("personal", "commercial")
+    SUPPORTED_REFRESH_BACKENDS = SUPPORTED_BACKENDS
 
     @staticmethod
     def _cleanup_temp_file(temp_path: str | None, *, context: str) -> None:
@@ -148,6 +162,7 @@ class CurrencyService:
         use_online: bool = False,
         aggregator: RateAggregator | None = None,
         provider_registry: CurrencyProviderRegistry | None = None,
+        rust_refresh_backend: object | None = None,
     ):
         self._base = (base or "KZT").upper()
         self._display_currency = self._base
@@ -158,6 +173,7 @@ class CurrencyService:
         self._api_key_status = self._build_api_key_status(self._config)
         self._default_rates = self.default_rates_for_base(self._base)
         self._provider_registry = provider_registry or DEFAULT_PROVIDER_REGISTRY
+        self._rust_refresh_backend = rust_refresh_backend
         self._aggregator: RateAggregator = aggregator or self._build_default_aggregator()
 
         if rates is not None:
@@ -286,7 +302,9 @@ class CurrencyService:
             raise ValueError(f"Unsupported currency: {currency}") from err
 
     def get_rate(self, currency: str) -> float:
-        if _RUST_CURRENCY_CORE is not None:
+        # Keep the public Python validation contract: the Rust helper may normalize
+        # whitespace, while the legacy service deliberately rejects it.
+        if _RUST_CURRENCY_CORE is not None and currency == currency.strip():
             try:
                 return _RUST_CURRENCY_CORE.currency_rate_for(
                     currency, self._service.base_currency, self._service.get_all_rates()
@@ -378,6 +396,7 @@ class CurrencyService:
         exchange_rate_api_key: str,
         auto_update: bool,
         update_interval_minutes: int | str,
+        refresh_backend: str | None = None,
     ) -> None:
         update = prepare_runtime_currency_config_update(
             current_config=self._config,
@@ -397,6 +416,9 @@ class CurrencyService:
             supported_setup_currencies=self.SUPPORTED_SETUP_CURRENCIES,
             supported_provider_modes=self.SUPPORTED_PROVIDER_MODES,
         )
+
+        if refresh_backend is not None:
+            update.next_config["refresh_backend"] = normalize_backend(refresh_backend)
 
         self.save_config_payload(update.next_config)
         self._config = update.next_config
@@ -463,12 +485,54 @@ class CurrencyService:
 
     def refresh_rates(self) -> bool:
         with self._online_lock:
+            backend = normalize_backend(self._config.get("refresh_backend", BACKEND_PYTHON))
+            forced_python = os.environ.get("LEDGERA_FORCE_PYTHON_FALLBACK", "").strip() == "1"
+            if not forced_python and backend in {BACKEND_RUST, BACKEND_SHADOW}:
+                try:
+                    timeout_seconds = max(1, int(self._config.get("provider_timeout_seconds", 10)))
+                except (TypeError, ValueError):
+                    timeout_seconds = 10
+                rust_result = call_rust_refresh(
+                    self._rust_refresh_backend or _RUST_CURRENCY_CORE,
+                    build_refresh_request(
+                        base_currency=self._base,
+                        primary_provider=str(self._config.get("primary_provider", "") or ""),
+                        fallback_provider=str(self._config.get("fallback_provider", "") or ""),
+                        backend=backend,
+                        api_key=get_exchange_rate_api_key() or self._read_api_key_env(),
+                        timeout_seconds=timeout_seconds,
+                    ),
+                )
+                if rust_result is not None:
+                    if backend == BACKEND_SHADOW:
+                        python_rates = self._fetch_online_rates()
+                        if not python_rates:
+                            return False
+                        differences = compare_refresh_rates(
+                            python_result(python_rates), rust_result
+                        )
+                        if differences:
+                            logger.warning(
+                                "Currency refresh shadow mismatch: %s",
+                                ", ".join(differences),
+                            )
+                        return True
+                    self._apply_fetched_rates(rust_result.rates)
+                    self._last_fetched_at = rust_result.fetched_at or datetime.now()
+                    return True
+                logger.warning("Rust currency refresh is unavailable; using Python fallback")
             return refresh_online_rates(
                 is_online=self._use_online,
                 refresh_online_service=lambda log_context: self._refresh_online_service(
                     log_context=log_context
                 ),
             )
+
+    def set_refresh_backend(self, backend: str) -> str:
+        normalized = normalize_backend(backend)
+        self._config["refresh_backend"] = normalized
+        self.save_config_payload(self._config)
+        return normalized
 
     def _load_offline_rates(self) -> None:
         self._service = load_offline_rates(

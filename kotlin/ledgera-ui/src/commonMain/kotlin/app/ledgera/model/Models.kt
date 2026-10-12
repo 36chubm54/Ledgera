@@ -229,6 +229,73 @@ data class CurrencyRate(
     val createdAt: String,
 )
 
+data class CurrencyRefreshRequest(
+    val refreshId: String = "",
+    val backend: String = "python",
+    val baseCurrency: String,
+    val primaryProvider: String = "nbk",
+    val fallbackProvider: String = "exchange_rate",
+    val effectiveDate: String,
+    val fetchedAt: String,
+    val providerPayload: String = "",
+    val payloadFormat: String = "",
+    val apiKey: String = "",
+    val timeoutSeconds: Long = 10,
+    val dryRun: Boolean = false,
+)
+
+data class CurrencyProviderConfig(
+    val backend: String = "python",
+    val primaryProvider: String = "nbk",
+    val fallbackProvider: String = "exchange_rate",
+    val timeoutSeconds: Long = 10,
+)
+
+data class CurrencyRefreshResult(
+    val refreshId: String,
+    val status: String,
+    val selectedProvider: String,
+    val ratesCount: Long,
+    val effectiveDate: String,
+    val fetchedAt: String,
+    val fallbackChain: String,
+    val diagnostic: String,
+    val stale: Boolean,
+)
+
+data class CurrencyRefreshStatus(
+    val refreshId: String,
+    val backend: String,
+    val requestedProvider: String,
+    val selectedProvider: String,
+    val status: String,
+    val effectiveDate: String,
+    val fetchedAt: String,
+    val fallbackChain: String,
+    val diagnostic: String,
+)
+
+data class CurrencyRateSnapshot(
+    val id: Long,
+    val refreshId: String,
+    val provider: String,
+    val baseCurrency: String,
+    val currency: String,
+    val rate: String,
+    val effectiveDate: String,
+    val fetchedAt: String,
+    val status: String,
+    val diagnostic: String,
+)
+
+data class CurrencyProviderStatus(
+    val name: String,
+    val configured: Boolean,
+    val selected: Boolean,
+    val lastStatus: String,
+    val diagnostic: String,
+)
+
 data class CreateWalletRequest(
     val name: String,
     val currency: String,
