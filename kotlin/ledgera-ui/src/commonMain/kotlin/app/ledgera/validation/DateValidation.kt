@@ -26,6 +26,11 @@ object DateValidation {
         return if (parsed > today) "Date cannot be in the future" else null
     }
 
+    fun validateGuiNotFuture(value: String, today: LedgerDate = currentLedgerDate()): String? {
+        val parsed = parseGuiDate(value.trim()) ?: return "Date must use a valid date"
+        return if (parsed > today) "Date cannot be in the future" else null
+    }
+
     fun validateOptionalDmy(value: String): String? {
         val normalized = value.trim()
         if (normalized.isEmpty()) {

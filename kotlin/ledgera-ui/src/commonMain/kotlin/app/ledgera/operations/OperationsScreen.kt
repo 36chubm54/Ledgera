@@ -44,7 +44,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.ledgera.model.CreateOperationRequest
-import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CurrencyTransferRequest
 import app.ledgera.model.CurrencyTransferQuote
 import app.ledgera.model.OperationDraft
@@ -212,7 +211,6 @@ fun OperationsScreen(
             descriptionSuggestions = state.descriptionSuggestions,
             engineError = state.error,
             submitting = state.loading,
-            onSubmit = viewModel::createTransfer,
             onCurrencySubmit = viewModel::createCurrencyTransfer,
             onQuote = viewModel::quoteCurrencyTransfer,
             quote = state.currencyTransferQuote,
@@ -484,7 +482,6 @@ private fun CreateTransferDialog(
     descriptionSuggestions: List<String>,
     engineError: String?,
     submitting: Boolean,
-    onSubmit: (CreateTransferRequest) -> Unit,
     onCurrencySubmit: (CurrencyTransferRequest) -> Unit,
     onQuote: (CurrencyTransferRequest) -> Unit,
     quote: CurrencyTransferQuote?,
@@ -521,28 +518,23 @@ private fun CreateTransferDialog(
     LaunchedEffect(sourceWallet?.id, targetWallet?.id) {
         if (currency !in amountCurrencies) currency = amountCurrencies.firstOrNull() ?: baseCurrency
     }
-    val validationError = if (crossCurrency) {
-        when {
-            fromWalletId == toWalletId -> "Select different source and target wallets"
-            DateValidation.validateDmyNotFuture(date) != null -> DateValidation.validateDmyNotFuture(date)
-            amount.toDoubleOrNull()?.let { it > 0 } != true -> "Transfer amount must be positive"
-            currency !in amountCurrencies -> "Amount currency must match one of the selected wallets"
-            quote == null -> "Calculating transfer"
-            else -> null
-        }
-    } else OperationValidation.validateTransferFields(
-        fromWalletId = fromWalletId,
-        toWalletId = toWalletId,
-        date = date,
-        amount = amount,
-        currency = currency,
-        commissionAmount = commissionAmount,
-        commissionCurrency = commissionCurrency,
-        baseCurrency = baseCurrency,
-    )
+    val validationError = when {
+        fromWalletId == toWalletId -> "Select different source and target wallets"
+        DateValidation.validateDmyNotFuture(date) != null -> DateValidation.validateDmyNotFuture(date)
+        amount.toDoubleOrNull()?.let { it > 0 } != true -> "Transfer amount must be positive"
+        currency !in amountCurrencies -> "Amount currency must match one of the selected wallets"
+        quote == null -> "Calculating transfer"
+        else -> null
+    }
 
     LaunchedEffect(fromWalletId, toWalletId, date, amount, currency, commissionAmount, commissionCurrency, crossCurrency) {
-        if (crossCurrency && amount.toDoubleOrNull()?.let { it > 0 } == true && DateValidation.validateDmyNotFuture(date) == null && currency in amountCurrencies) {
+        if (amount.toDoubleOrNull()?.let { it > 0 } == true &&
+            DateValidation.validateDmyNotFuture(date) == null &&
+            currency in amountCurrencies &&
+            fromWalletId > 0 &&
+            toWalletId > 0 &&
+            fromWalletId != toWalletId
+        ) {
             onQuote(
                 CurrencyTransferRequest(
                     fromWalletId = fromWalletId,
@@ -661,7 +653,7 @@ private fun CreateTransferDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (crossCurrency) onCurrencySubmit(
+                    onCurrencySubmit(
                         CurrencyTransferRequest(
                             fromWalletId = fromWalletId,
                             toWalletId = toWalletId,
@@ -672,7 +664,7 @@ private fun CreateTransferDialog(
                             commissionAmount = commissionAmount.ifBlank { "0" },
                             commissionCurrency = commissionCurrency.ifBlank { sourceWallet?.currency ?: baseCurrency },
                         )
-                    ) else onSubmit(CreateTransferRequest(fromWalletId, toWalletId, date, amount, currency, description, commissionAmount.ifBlank { "0" }, commissionCurrency.ifBlank { baseCurrency }))
+                    )
                 },
                 enabled = validationError == null && !submitting,
             ) {

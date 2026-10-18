@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 import tkinter as tk
 from collections.abc import Callable, Mapping
@@ -23,6 +24,10 @@ from infrastructure.currency_providers import DEFAULT_PROVIDER_REGISTRY, Currenc
 SUPPORTED_SETUP_CURRENCIES = ("KZT", "USD", "EUR", "RUB")
 SETUP_PROVIDER_MODES = ("personal", "commercial")
 logger = logging.getLogger(__name__)
+
+
+def _is_currency_code(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z]{3}", str(value or "").strip()))
 
 
 @dataclass(frozen=True)
@@ -184,9 +189,9 @@ def validate_initial_setup_selection(
     update_interval_raw = raw.get("update_interval_minutes", 60)
     update_interval_minutes = CurrencyService.parse_update_interval_minutes(update_interval_raw)
 
-    if base_currency not in SUPPORTED_SETUP_CURRENCIES:
+    if not _is_currency_code(base_currency):
         raise ValueError("Unsupported base currency")
-    if display_currency not in SUPPORTED_SETUP_CURRENCIES:
+    if not _is_currency_code(display_currency):
         raise ValueError("Unsupported display currency")
     if provider_mode not in SETUP_PROVIDER_MODES:
         raise ValueError("Unsupported provider mode")
@@ -295,12 +300,12 @@ def run_initial_setup_wizard(
         config.update(dict(current_config))
 
     base_currency = str(config.get("base_currency", "KZT") or "KZT").strip().upper()
-    if base_currency not in SUPPORTED_SETUP_CURRENCIES:
+    if not _is_currency_code(base_currency):
         base_currency = "KZT"
     display_currency = (
         str(config.get("display_currency", base_currency) or base_currency).strip().upper()
     )
-    if display_currency not in SUPPORTED_SETUP_CURRENCIES:
+    if not _is_currency_code(display_currency):
         display_currency = base_currency
 
     root = tk.Tk(className=APP_LINUX_WM_CLASS)
@@ -377,10 +382,12 @@ def run_initial_setup_wizard(
 
     _add_label("setup.base_currency", "Базовая валюта")
     base_combo = _add_combo(base_var, SUPPORTED_SETUP_CURRENCIES)
+    base_combo.configure(state="normal")
     row += 1
 
     _add_label("setup.display_currency", "Валюта отображения")
-    _add_combo(display_var, SUPPORTED_SETUP_CURRENCIES)
+    display_combo = _add_combo(display_var, SUPPORTED_SETUP_CURRENCIES)
+    display_combo.configure(state="normal")
     row += 1
 
     _add_label("setup.provider_mode", "Режим провайдера")
@@ -461,7 +468,7 @@ def run_initial_setup_wizard(
             fallback_provider_var.set(preferred_fallback)
         fallback_combo.config(values=list(fallback_values))
 
-        if display_var.get().strip().upper() not in SUPPORTED_SETUP_CURRENCIES:
+        if not _is_currency_code(display_var.get().strip().upper()):
             display_var.set(base_var.get().strip().upper())
 
     base_combo.bind("<<ComboboxSelected>>", _refresh_provider_choices, add="+")

@@ -42,8 +42,8 @@ class SettingsViewModel(
     private val mutableState = MutableStateFlow(SettingsUiState(loading = true))
     val state: StateFlow<SettingsUiState> = mutableState.asStateFlow()
 
-    fun refresh() {
-        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+    fun refresh(preserveNotice: String? = null) {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = preserveNotice)
         launchSafely {
             runCatching {
                 val baseCurrency = engine.baseCurrency()
@@ -86,7 +86,7 @@ class SettingsViewModel(
         mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
         launchSafely {
             runCatching { engine.upsertCurrencyRate(baseCurrency, currency, rate, effectiveDate, source) }
-                .onSuccess { mutableState.value = mutableState.value.copy(notice = "Currency rate saved"); refresh() }
+                .onSuccess { refresh("Currency rate saved") }
                 .onFailure(::showError)
         }
     }
@@ -95,7 +95,7 @@ class SettingsViewModel(
         mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
         launchSafely {
             runCatching { engine.deleteCurrencyRate(rateId) }
-                .onSuccess { mutableState.value = mutableState.value.copy(notice = "Currency rate deleted"); refresh() }
+                .onSuccess { refresh("Currency rate deleted") }
                 .onFailure(::showError)
         }
     }
@@ -173,14 +173,7 @@ class SettingsViewModel(
         launchSafely {
             runCatching {
                 val created = engine.createWallet(request.copy(initialBalance = request.initialBalance.ifBlank { "0" }))
-                val baseCurrency = engine.baseCurrency()
-                val wallets = engine.listWalletsForSettings()
-                mutableState.value = SettingsUiState(
-                    loading = false,
-                    wallets = wallets,
-                    baseCurrency = baseCurrency,
-                    notice = "Wallet created (id=${created.id})",
-                )
+                refresh("Wallet created (id=${created.id})")
             }.onFailure(::showError)
         }
     }
@@ -194,14 +187,7 @@ class SettingsViewModel(
         launchSafely {
             runCatching {
                 val result = engine.deleteWallet(walletId)
-                val baseCurrency = engine.baseCurrency()
-                val wallets = engine.listWalletsForSettings()
-                mutableState.value = SettingsUiState(
-                    loading = false,
-                    wallets = wallets,
-                    baseCurrency = baseCurrency,
-                    notice = walletDeleteNotice(result.walletId, result.action),
-                )
+                refresh(walletDeleteNotice(result.walletId, result.action))
             }.onFailure(::showError)
         }
     }

@@ -41,6 +41,7 @@ import app.ledgera.model.AuditSummary
 import app.ledgera.model.CreateWalletRequest
 import app.ledgera.model.CurrencyRate
 import app.ledgera.model.WalletSettingsItem
+import app.ledgera.ui.LedgerDateField
 import app.ledgera.validation.CurrencyValidation
 import app.ledgera.validation.DateValidation
 
@@ -73,6 +74,12 @@ fun SettingsScreen(
     LaunchedEffect(showCreateWalletDialog, state.notice) {
         if (showCreateWalletDialog && state.notice?.startsWith("Wallet created") == true) {
             showCreateWalletDialog = false
+        }
+    }
+    LaunchedEffect(showCurrencyRateDialog, state.notice) {
+        if (showCurrencyRateDialog && state.notice?.startsWith("Currency rate saved") == true) {
+            showCurrencyRateDialog = false
+            editingCurrencyRate = null
         }
     }
     LaunchedEffect(walletPendingDelete, state.notice) {
@@ -140,6 +147,7 @@ fun SettingsScreen(
     if (showCreateWalletDialog) {
         CreateWalletDialog(
             baseCurrency = state.baseCurrency,
+            supportedCurrencies = state.supportedCurrencies,
             engineError = state.error,
             submitting = state.loading,
             onSubmit = viewModel::createWallet,
@@ -150,13 +158,10 @@ fun SettingsScreen(
         CurrencyRateDialog(
             baseCurrency = state.baseCurrency,
             existingRate = editingCurrencyRate,
+            existingRates = state.currencyRates,
             error = state.error,
             submitting = state.loading,
-            onSave = { base, currency, rate, date, source ->
-                viewModel.saveCurrencyRate(base, currency, rate, date, source)
-                showCurrencyRateDialog = false
-                editingCurrencyRate = null
-            },
+            onSave = { base, currency, rate, date, source -> viewModel.saveCurrencyRate(base, currency, rate, date, source) },
             onCancel = { showCurrencyRateDialog = false; editingCurrencyRate = null },
         )
     }
@@ -223,7 +228,7 @@ private fun CurrencySection(
     onSetBase: (String) -> Unit,
 ) {
     var requestedBase by remember(baseCurrency) { mutableStateOf(baseCurrency) }
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth().height(360.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Currencies", style = MaterialTheme.typography.titleMedium)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -231,30 +236,44 @@ private fun CurrencySection(
                 Button(onClick = { onSetBase(requestedBase) }, enabled = !loading && requestedBase.length == 3) { Text("Set") }
                 Button(onClick = onAddRate, enabled = !loading) { Text("Add rate") }
             }
-            Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall)
-            refreshStatus?.let { status ->
-                Text(
-                    "Automatic refresh: ${status.status} · ${status.selectedProvider.ifBlank { "none" }} · ${status.effectiveDate}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (status.status == "success") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                )
-            }
-            if (providerStatuses.isNotEmpty()) {
-                Text(
-                    "Providers: ${providerStatuses.filter { it.selected }.joinToString { it.name }.ifBlank { "not selected" }}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            rates.forEach { rate ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("${rate.currency}/${rate.baseCurrency} = ${rate.rate} · ${rate.effectiveDate}")
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TextButton(onClick = { onUpdateRate(rate) }, enabled = !loading) { Text("Update") }
-                        TextButton(onClick = { onDeleteRate(rate.id) }, enabled = !loading) { Text("Delete") }
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item { Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall) }
+                refreshStatus?.let { status ->
+                    item {
+                        Text(
+                            "Automatic refresh: ${status.status} · ${status.selectedProvider.ifBlank { "none" }} · ${status.effectiveDate}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (status.status == "success") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
+                if (providerStatuses.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Providers: ${providerStatuses.filter { it.selected }.joinToString { it.name }.ifBlank { "not selected" }}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                val visibleRates = rates
+                    .groupBy { it.baseCurrency.uppercase() to it.currency.uppercase() }
+                    .values
+                    .mapNotNull { group -> group.maxWithOrNull(compareBy<CurrencyRate> { it.effectiveDate }.thenBy { it.id }) }
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.currency })
+                items(visibleRates, key = { it.id }) { rate ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("${rate.currency}/${rate.baseCurrency} = ${rate.rate} · ${rate.effectiveDate}")
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            TextButton(onClick = { onUpdateRate(rate) }, enabled = !loading) { Text("Update") }
+                            TextButton(onClick = { onDeleteRate(rate.id) }, enabled = !loading) { Text("Delete") }
+                        }
+                    }
+                }
+                error?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
             }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
     }
 }
@@ -263,6 +282,7 @@ private fun CurrencySection(
 private fun CurrencyRateDialog(
     baseCurrency: String,
     existingRate: CurrencyRate? = null,
+    existingRates: List<CurrencyRate> = emptyList(),
     error: String?,
     submitting: Boolean,
     onSave: (String, String, String, String, String) -> Unit,
@@ -274,23 +294,50 @@ private fun CurrencyRateDialog(
     var source by remember(existingRate?.id) { mutableStateOf(existingRate?.source ?: "manual") }
     val currencyError = CurrencyValidation.validateSupportedCurrency(currency)
         ?.takeIf { currency != baseCurrency }
-    val dateError = if (DateValidation.parseYmd(date) == null) "Date must use a valid YYYY-MM-DD value" else null
+    val dateError = DateValidation.validateGuiNotFuture(date)
     val rateError = if (rate.toDoubleOrNull()?.let { it > 0.0 } == true) null else "Rate must be greater than zero"
-    val valid = currencyError == null && currency != baseCurrency && dateError == null && rateError == null
+    val providerError = when {
+        source.trim().isEmpty() -> "Provider is required"
+        source.trim().length > 64 -> "Provider must be 64 characters or fewer"
+        !Regex("[A-Za-z0-9_. -]+").matches(source.trim()) -> "Provider contains unsupported characters"
+        else -> null
+    }
+    val replacesExisting = existingRates.any {
+        it.id != existingRate?.id &&
+            it.baseCurrency.equals(baseCurrency, ignoreCase = true) &&
+            it.currency.equals(currency.trim(), ignoreCase = true) &&
+            it.effectiveDate == (DateValidation.formatGuiDateToYmd(date) ?: date.trim())
+    }
+    val valid = currencyError == null && currency != baseCurrency && dateError == null && rateError == null && providerError == null
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(if (existingRate == null) "Add currency rate" else "Update currency rate") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(currency, { currency = it.uppercase().take(3) }, label = { Text("Currency") }, singleLine = true)
-                OutlinedTextField(rate, { rate = it }, label = { Text("Rate to $baseCurrency") }, singleLine = true)
-                OutlinedTextField(date, { date = it }, label = { Text("Effective date YYYY-MM-DD") }, singleLine = true)
-                OutlinedTextField(source, { source = it }, label = { Text("Source") }, singleLine = true)
-                listOfNotNull(currencyError, rateError, dateError).firstOrNull()?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Column(Modifier.width(DialogContentWidth), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(currency, { currency = it.uppercase().take(3) }, label = { Text("Currency") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(rate, { rate = it }, label = { Text("Rate to $baseCurrency") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                LedgerDateField(
+                    value = date,
+                    onValueChange = { date = it },
+                    label = "Effective date",
+                    externalError = dateError,
+                    showErrorOutline = false,
+                    showErrorText = false,
+                )
+                OutlinedTextField(source, { source = it }, label = { Text("Source") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                if (replacesExisting) {
+                    Text("A rate for this date already exists. Saving will replace it.", color = MaterialTheme.colorScheme.error)
+                }
+                listOfNotNull(currencyError, rateError, dateError, providerError).firstOrNull()?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { Button(onClick = { onSave(baseCurrency, currency, rate, date, source) }, enabled = valid && !submitting) { Text(if (existingRate == null) "Save" else "Update") } },
+        confirmButton = {
+            Button(
+                onClick = { onSave(baseCurrency, currency, rate, DateValidation.formatGuiDateToYmd(date).orEmpty(), source) },
+                enabled = valid && !submitting,
+            ) { Text(if (existingRate == null) "Save" else "Update") }
+        },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
     )
 }
@@ -496,6 +543,7 @@ private fun DeleteWalletConfirmDialog(
 @Composable
 private fun CreateWalletDialog(
     baseCurrency: String,
+    supportedCurrencies: List<String>,
     engineError: String?,
     submitting: Boolean,
     onSubmit: (CreateWalletRequest) -> Unit,
@@ -504,7 +552,9 @@ private fun CreateWalletDialog(
     var name by remember { mutableStateOf("") }
     var initialBalance by remember { mutableStateOf("0") }
     var allowNegative by remember { mutableStateOf(false) }
-    val currency = baseCurrency.ifBlank { "KZT" }
+    var currency by remember(baseCurrency, supportedCurrencies) {
+        mutableStateOf(baseCurrency.ifBlank { supportedCurrencies.firstOrNull() ?: "KZT" })
+    }
     val validationError = SettingsValidation.validateWalletFields(
         name = name,
         currency = currency,
@@ -530,10 +580,10 @@ private fun CreateWalletDialog(
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
                     value = currency,
-                    onValueChange = {},
+                    onValueChange = { currency = it.uppercase().filter(Char::isLetter).take(3) },
                     label = { Text("Currency") },
-                    enabled = false,
                     singleLine = true,
+                    supportingText = { Text("Supported: ${supportedCurrencies.joinToString()}") },
                 )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),

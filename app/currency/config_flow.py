@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 from app.runtime.secret_storage import SecretStorageUnavailableError
 
@@ -12,6 +13,10 @@ class RuntimeCurrencyConfigUpdate:
     next_config: dict[str, object]
     validated_display: str
     provider_settings_changed: bool
+
+
+def is_currency_code(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z]{3}", str(value or "").strip()))
 
 
 def load_config_payload(
@@ -165,10 +170,8 @@ def prepare_runtime_currency_config_update(
     normalized_key = str(exchange_rate_api_key or "").strip()
     normalized_interval = parse_update_interval_minutes(update_interval_minutes)
 
-    if normalized_display not in supported_setup_currencies:
+    if not is_currency_code(normalized_display):
         raise ValueError("Unsupported display currency")
-    if normalized_display != base_currency and normalized_display not in default_rates:
-        raise ValueError("Display currency is not supported for the selected base currency")
     if normalized_mode not in supported_provider_modes:
         raise ValueError("Unsupported provider mode")
     ensure_api_key_storage_available_for_value(

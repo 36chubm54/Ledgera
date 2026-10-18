@@ -1035,7 +1035,7 @@ pub fn delete_wallet(db_path: &str, wallet_id: i64) -> StorageResult<WalletDelet
         return Err(format!("Wallet already inactive: {wallet_id}"));
     }
 
-    let balance_minor = wallet_balance_minor_in_tx(&tx, wallet_id)?;
+    let balance_minor = wallet_native_balance_minor_in_tx(&tx, wallet_id)?;
     if balance_minor != 0 {
         return Err("Wallet with non-zero balance cannot be deleted".to_owned());
     }
@@ -1191,7 +1191,7 @@ pub fn create_transfer(
         return Err("Commission amount must be non-negative".to_owned());
     }
     if !from_wallet.allow_negative {
-        let balance_minor = wallet_balance_minor_in_tx(&tx, payload.from_wallet_id)?;
+        let balance_minor = wallet_native_balance_minor_in_tx(&tx, payload.from_wallet_id)?;
         if balance_minor - amount_minor - commission_minor < 0 {
             return Err("Insufficient funds in source wallet".to_owned());
         }
@@ -4563,7 +4563,7 @@ fn validate_currency_transfer_in_tx(
             .round() as i64
     };
     if !from_wallet.allow_negative
-        && wallet_balance_minor_in_tx(tx, from_wallet.id)? < resolved.source_amount_minor + commission_base_minor
+        && wallet_native_balance_minor_in_tx(tx, from_wallet.id)? < resolved.source_amount_minor + commission_minor
     {
         return Err("Insufficient funds in source wallet".to_owned());
     }
@@ -4690,6 +4690,7 @@ pub fn upsert_currency_rate(db_path: &str, payload: &CurrencyRatePayload) -> Sto
     let rate = rate_text.parse::<f64>().map_err(|_| "Invalid currency rate".to_owned())?;
     if rate <= 0.0 { return Err("Currency rate must be positive".to_owned()); }
     let source = if payload.source.trim().is_empty() { "manual" } else { payload.source.trim() };
+    validate_provider_name(source)?;
     let conn = open_sqlite_connection(db_path)?;
     conn.execute(
         "INSERT INTO currency_rates (base_currency, currency, rate, rate_text, effective_date, source)
@@ -6084,6 +6085,27 @@ fn wallet_balance_minor_in_tx(
     Ok(initial_minor + delta_minor)
 }
 
+fn wallet_native_balance_minor_in_tx(
+    tx: &rusqlite::Transaction<'_>,
+    wallet_id: i64,
+) -> StorageResult<i64> {
+    let initial_minor = tx
+        .query_row(
+            "SELECT COALESCE(initial_balance_minor, CAST(ROUND(initial_balance * 100.0) AS INTEGER), 0)
+             FROM wallets
+             WHERE id = ?1 AND is_active = 1",
+            [wallet_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(sqlite_err)?;
+    let signed_expr = signed_minor_amount_expr("amount_original", "type");
+    let sql = format!("SELECT COALESCE(SUM({signed_expr}), 0) FROM records WHERE wallet_id = ?1");
+    let delta_minor = tx
+        .query_row(&sql, [wallet_id], |row| row.get::<_, i64>(0))
+        .map_err(sqlite_err)?;
+    Ok(initial_minor + delta_minor)
+}
+
 fn wallet_history_count_in_tx(
     tx: &rusqlite::Transaction<'_>,
     wallet_id: i64,
@@ -6548,17 +6570,24 @@ fn validate_currency_code(value: &str) -> StorageResult<()> {
     if value.len() != 3 || !value.bytes().all(|byte| byte.is_ascii_alphabetic()) {
         return Err("Currency code must contain 3 letters".to_owned());
     }
-    if !is_supported_currency(value) {
-        return Err("Unsupported currency".to_owned());
-    }
     Ok(())
 }
 
-fn is_supported_currency(value: &str) -> bool {
-    matches!(
-        value.to_ascii_uppercase().as_str(),
-        "KZT" | "USD" | "EUR" | "RUB"
-    )
+fn validate_provider_name(value: &str) -> StorageResult<()> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err("Provider is required".to_owned());
+    }
+    if normalized.len() > 64 {
+        return Err("Provider must be 64 characters or fewer".to_owned());
+    }
+    if !normalized
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-' | b' '))
+    {
+        return Err("Provider contains unsupported characters".to_owned());
+    }
+    Ok(())
 }
 
 pub fn current_local_date() -> (i32, i32, i32) {
@@ -7482,12 +7511,12 @@ mod tests {
             create_wallet(
                 &db_path,
                 &WalletCreatePayload {
-                    currency: "AAA".to_owned(),
+                    currency: "US".to_owned(),
                     ..request.clone()
                 }
             )
             .unwrap_err()
-            .contains("Unsupported currency")
+            .contains("3 letters")
         );
         let foreign_wallet = create_wallet(
             &db_path,
@@ -8649,7 +8678,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-01".to_owned(),
                 wallet_id: 1,
                 amount_original: "10".to_owned(),
-                currency: "AAA".to_owned(),
+                currency: "US".to_owned(),
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
@@ -8658,7 +8687,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             },
         )
         .unwrap_err();
-        assert!(create_error.contains("Unsupported currency"));
+        assert!(create_error.contains("3 letters"));
 
         let update_error = update_standalone_record(
             &db_path,
@@ -8668,7 +8697,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-01".to_owned(),
                 wallet_id: 1,
                 amount_original: "10".to_owned(),
-                currency: "AAA".to_owned(),
+                currency: "US".to_owned(),
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
@@ -8677,7 +8706,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             },
         )
         .unwrap_err();
-        assert!(update_error.contains("Unsupported currency"));
+        assert!(update_error.contains("3 letters"));
         remove_test_db(&db_path);
     }
 
@@ -8759,6 +8788,25 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         )
         .unwrap();
         assert_eq!(rate.rate_text, "542.123456789");
+        let replacement = upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "EUR".to_owned(),
+                currency: "KZT".to_owned(),
+                rate: "543.25".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "manual".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(replacement.rate_text, "543.25");
+        let same_date_rows = currency_rate_rows(&db_path)
+            .unwrap()
+            .into_iter()
+            .filter(|row| row.base_currency == "EUR" && row.currency == "KZT" && row.effective_date == "2026-01-01")
+            .collect::<Vec<_>>();
+        assert_eq!(same_date_rows.len(), 1);
+        assert_eq!(same_date_rows[0].rate_text, "543.25");
         assert!(supported_currencies(&db_path).unwrap().contains(&"KZT".to_owned()));
         create_wallet(
             &db_path,
@@ -8772,6 +8820,41 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         .unwrap();
         let error = set_base_currency(&db_path, "USD").unwrap_err();
         assert!(error.contains("before user data exists"), "unexpected error: {error}");
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn foreign_wallet_can_start_before_rate_exists_and_provider_is_validated() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("ledgera_foreign_wallet_without_rate_{unique}.db"));
+        let db_path = path.to_string_lossy().into_owned();
+        initialize_database(&db_path).unwrap();
+        let wallet = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "USD wallet".to_owned(),
+                currency: "USD".to_owned(),
+                initial_balance: "10".to_owned(),
+                allow_negative: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(wallet.currency, "USD");
+        let provider_error = upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "KZT".to_owned(),
+                currency: "USD".to_owned(),
+                rate: "500".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "bad/provider".to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert!(provider_error.contains("Provider"), "unexpected error: {provider_error}");
         remove_test_db(&db_path);
     }
 
@@ -9021,7 +9104,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             &WalletCreatePayload {
                 name: "USD wallet".to_owned(),
                 currency: "USD".to_owned(),
-                initial_balance: "0".to_owned(),
+                initial_balance: "1".to_owned(),
                 allow_negative: false,
             },
         )
@@ -9062,6 +9145,21 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(reverse_quote.source_amount, 0.1);
         assert_eq!(reverse_quote.target_amount, 50.0);
         assert_eq!(reverse_quote.conversion_rate, "500");
+        let insufficient_quote = currency_transfer_quote(
+            &db_path,
+            &CurrencyTransferCreatePayload {
+                from_wallet_id: usd_wallet.id,
+                to_wallet_id: 2,
+                date: "2026-01-10".to_owned(),
+                amount: "2".to_owned(),
+                amount_currency: "USD".to_owned(),
+                description: "Insufficient funds".to_owned(),
+                commission_amount: "0".to_owned(),
+                commission_currency: "USD".to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert!(insufficient_quote.contains("Insufficient funds"));
         let invalid_commission = currency_transfer_quote(
             &db_path,
             &CurrencyTransferCreatePayload {

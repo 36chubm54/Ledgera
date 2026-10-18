@@ -2292,9 +2292,6 @@ fn validate_currency_code(value: &str) -> Result<(), LedgeraEngineError> {
     if currency.len() != 3 || !currency.bytes().all(|byte| byte.is_ascii_alphabetic()) {
         return Err(validation_error("Currency code must contain 3 letters"));
     }
-    if !is_supported_currency(currency) {
-        return Err(validation_error("Unsupported currency"));
-    }
     Ok(())
 }
 
@@ -2525,13 +2522,6 @@ fn report_debt_to_dto(row: ReportDebtRow) -> ReportDebtRowDto {
         settled_amount: row.settled_amount,
         progress_percent: row.progress_percent,
     }
-}
-
-fn is_supported_currency(value: &str) -> bool {
-    matches!(
-        value.to_ascii_uppercase().as_str(),
-        "KZT" | "USD" | "EUR" | "RUB"
-    )
 }
 
 fn record_to_dto(row: RecordRow) -> RecordDto {
@@ -4727,7 +4717,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-01".to_owned(),
                 wallet_id: 1,
                 amount_original: "10".to_owned(),
-                currency: "AAA".to_owned(),
+                currency: "US".to_owned(),
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
@@ -4735,7 +4725,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 tags: vec![],
             })
             .unwrap_err();
-        assert!(create_error.to_string().contains("Unsupported currency"));
+        assert!(create_error.to_string().contains("3 letters"));
 
         let created = engine
             .create_record(CreateRecordRequest {
@@ -4759,7 +4749,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                     date: "2026-01-01".to_owned(),
                     wallet_id: 1,
                     amount_original: "10".to_owned(),
-                    currency: "AAA".to_owned(),
+                    currency: "US".to_owned(),
                     rate_at_operation: "1".to_owned(),
                     amount_base: "10".to_owned(),
                     category: "Food".to_owned(),
@@ -4768,7 +4758,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 },
             )
             .unwrap_err();
-        assert!(update_error.to_string().contains("Unsupported currency"));
+        assert!(update_error.to_string().contains("3 letters"));
         fs::remove_file(db_path).ok();
     }
 
