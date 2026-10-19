@@ -255,8 +255,12 @@ private fun CurrencySection(
                 Button(onClick = { onSetBase(requestedBase) }, enabled = !loading && requestedBase.length == 3) { Text("Set") }
                 Button(onClick = onAddRate, enabled = !loading) { Text("Add rate") }
             }
-            Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = onShowHistory, enabled = !loading && rates.size > 1) { Text("Rate history") }
             }
             refreshStatus?.let { status ->
