@@ -4562,8 +4562,14 @@ fn validate_currency_transfer_in_tx(
             * 100.0)
             .round() as i64
     };
+    let source_base_minor = convert_minor_units_by_rate_ratio(
+        resolved.source_amount_minor,
+        &resolved.source_rate,
+        "1",
+    )?;
     if !from_wallet.allow_negative
-        && wallet_native_balance_minor_in_tx(tx, from_wallet.id)? < resolved.source_amount_minor + commission_minor
+        && wallet_balance_minor_in_tx(tx, from_wallet.id)?
+            < source_base_minor + commission_base_minor
     {
         return Err("Insufficient funds in source wallet".to_owned());
     }
@@ -9175,6 +9181,64 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         )
         .unwrap_err();
         assert!(invalid_commission.contains("Commission currency must match"));
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn currency_transfer_rejects_insufficient_funds_after_foreign_currency_record() {
+        let db_path = create_balance_test_db();
+        upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "KZT".to_owned(),
+                currency: "USD".to_owned(),
+                rate: "500".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "test".to_owned(),
+            },
+        )
+        .unwrap();
+        let usd_wallet = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "USD wallet".to_owned(),
+                currency: "USD".to_owned(),
+                initial_balance: "0".to_owned(),
+                allow_negative: false,
+            },
+        )
+        .unwrap();
+
+        // Simulate a legacy record written with the wrong operation currency.
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO records (
+                type, date, wallet_id, amount_original, amount_original_minor,
+                currency, rate_at_operation, rate_at_operation_text,
+                amount_base, amount_base_minor, category, description
+             ) VALUES ('income', '2026-01-05', ?1, 10000, 1000000,
+                       'KZT', 1, '1', 10000, 1000000, 'Legacy', 'Legacy record')",
+            [usd_wallet.id],
+        )
+        .unwrap();
+        drop(conn);
+
+        let error = currency_transfer_quote(
+            &db_path,
+            &CurrencyTransferCreatePayload {
+                from_wallet_id: usd_wallet.id,
+                to_wallet_id: 1,
+                date: "2026-01-10".to_owned(),
+                amount: "1000".to_owned(),
+                amount_currency: "USD".to_owned(),
+                description: "Should be rejected".to_owned(),
+                commission_amount: "0".to_owned(),
+                commission_currency: "USD".to_owned(),
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.contains("Insufficient funds"), "unexpected error: {error}");
         remove_test_db(&db_path);
     }
 

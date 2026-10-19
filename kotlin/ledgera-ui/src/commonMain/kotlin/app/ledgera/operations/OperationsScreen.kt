@@ -645,7 +645,7 @@ private fun CreateTransferDialog(
                     menuWidth = DialogContentWidth,
                     showSuggestionsOnBlank = false,
                 )
-                (validationError ?: engineError)?.let {
+                (engineError ?: validationError)?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)
                 }
             }
