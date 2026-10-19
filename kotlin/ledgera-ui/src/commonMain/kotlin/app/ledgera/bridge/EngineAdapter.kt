@@ -151,6 +151,9 @@ interface SettingsEngine {
     suspend fun currencyProviderStatuses(): List<CurrencyProviderStatus> = emptyList()
     suspend fun currencyProviderDefinitions(): List<CurrencyProviderDefinition> = emptyList()
     suspend fun currencyProviderSettings(): List<CurrencyProviderSetting> = emptyList()
+    suspend fun currencyProviderCredentialStatus(providerId: String): String = "Missing"
+    suspend fun resolveCurrencyProviderCredential(providerId: String): String = ""
+    suspend fun setCurrencyProviderCredential(providerId: String, secret: String): String = error("Credential storage is unavailable")
     suspend fun upsertCurrencyProviderSetting(request: CurrencyProviderSettingRequest): CurrencyProviderSetting = error("Currency provider settings are unavailable")
     suspend fun upsertCurrencyProviderDefinition(request: CurrencyProviderDefinitionRequest): CurrencyProviderDefinition = error("Currency provider settings are unavailable")
     suspend fun deleteCurrencyProviderDefinition(providerId: String): Boolean = false

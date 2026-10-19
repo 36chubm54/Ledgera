@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -74,6 +75,7 @@ fun SettingsScreen(
     var walletPendingDelete by remember { mutableStateOf<WalletSettingsItem?>(null) }
     var showAuditReport by remember { mutableStateOf(false) }
     var showProviderDialog by remember { mutableStateOf(false) }
+    var showExchangeRateCredentialDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -139,9 +141,11 @@ fun SettingsScreen(
         OnlineProvidersSection(
             definitions = state.currencyProviderDefinitions,
             statuses = state.currencyProviderStatuses,
+            exchangeRateCredentialStatus = state.exchangeRateCredentialStatus,
             loading = state.loading,
             onAdd = { viewModel.clearFeedback(); showProviderDialog = true },
             onDelete = viewModel::deleteCurrencyProvider,
+            onConfigureExchangeRate = { viewModel.clearFeedback(); showExchangeRateCredentialDialog = true },
             onTest = { provider ->
                 viewModel.testCurrencyProvider(
                     CurrencyProviderTestRequest(
@@ -213,6 +217,18 @@ fun SettingsScreen(
             error = state.error,
             onSave = { request -> viewModel.saveCurrencyProvider(request); showProviderDialog = false },
             onCancel = { showProviderDialog = false },
+        )
+    }
+    if (showExchangeRateCredentialDialog) {
+        ExchangeRateCredentialDialog(
+            status = state.exchangeRateCredentialStatus,
+            loading = state.loading,
+            error = state.error,
+            onSave = { secret ->
+                viewModel.saveCurrencyProviderCredential("exchange_rate", secret)
+                showExchangeRateCredentialDialog = false
+            },
+            onCancel = { showExchangeRateCredentialDialog = false },
         )
     }
     walletPendingDelete?.let { wallet ->
@@ -344,9 +360,11 @@ private fun CurrencySection(
 private fun OnlineProvidersSection(
     definitions: List<CurrencyProviderDefinition>,
     statuses: List<app.ledgera.model.CurrencyProviderStatus>,
+    exchangeRateCredentialStatus: String,
     loading: Boolean,
     onAdd: () -> Unit,
     onDelete: (String) -> Unit,
+    onConfigureExchangeRate: () -> Unit,
     onTest: (CurrencyProviderDefinition) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
@@ -356,6 +374,10 @@ private fun OnlineProvidersSection(
                 Button(onClick = onAdd, enabled = !loading) { Text("Add custom") }
             }
             Text("Built-in: ${statuses.filter { !it.name.startsWith("custom:") }.joinToString { it.name }}", style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("exchange_rate credential: $exchangeRateCredentialStatus", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = onConfigureExchangeRate, enabled = !loading) { Text("Configure key") }
+            }
             if (definitions.isEmpty()) {
                 Text("No custom providers configured.", style = MaterialTheme.typography.bodySmall)
             } else {
@@ -381,6 +403,40 @@ private fun OnlineProvidersSection(
             }
         }
     }
+}
+
+@Composable
+private fun ExchangeRateCredentialDialog(
+    status: String,
+    loading: Boolean,
+    error: String?,
+    onSave: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var secret by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("ExchangeRate API key") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Status: $status", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = secret,
+                    onValueChange = { secret = it },
+                    label = { Text("API key") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("The key is stored in Windows Credential Manager and is not included in backups.", style = MaterialTheme.typography.bodySmall)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(secret) }, enabled = secret.isNotBlank() && !loading) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onCancel, enabled = !loading) { Text("Cancel") } },
+    )
 }
 
 @Composable

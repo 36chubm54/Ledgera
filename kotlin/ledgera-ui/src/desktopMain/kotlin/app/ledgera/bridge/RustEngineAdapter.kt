@@ -93,6 +93,7 @@ import app.ledgera.model.ReportExportResult
 import app.ledgera.model.ReportSummary
 import app.ledgera.model.ReportTagRow
 import app.ledgera.model.AnalyticsFilters
+import app.ledgera.runtime.DesktopCredentialStore
 import app.ledgera.model.AnalyticsSnapshot
 import app.ledgera.model.AnalyticsSummary
 import app.ledgera.model.AnalyticsCapitalPoint
@@ -294,6 +295,16 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
 
     override suspend fun baseCurrency(): String = withContext(Dispatchers.IO) {
         engine.baseCurrency()
+    }
+    override suspend fun currencyProviderCredentialStatus(providerId: String): String = withContext(Dispatchers.IO) {
+        DesktopCredentialStore.status(providerId)
+    }
+    override suspend fun resolveCurrencyProviderCredential(providerId: String): String = withContext(Dispatchers.IO) {
+        DesktopCredentialStore.resolve(providerId)
+    }
+    override suspend fun setCurrencyProviderCredential(providerId: String, secret: String): String = withContext(Dispatchers.IO) {
+        DesktopCredentialStore.save(providerId, secret)
+        DesktopCredentialStore.status(providerId)
     }
     override suspend fun setBaseCurrency(currency: String): String = withContext(Dispatchers.IO) { engine.setBaseCurrency(currency) }
     override suspend fun supportedCurrencies(): List<String> = withContext(Dispatchers.IO) { engine.supportedCurrencies() }

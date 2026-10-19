@@ -38,6 +38,7 @@ data class SettingsUiState(
     val currencyProviderStatuses: List<CurrencyProviderStatus> = emptyList(),
     val currencyProviderDefinitions: List<CurrencyProviderDefinition> = emptyList(),
     val currencyProviderSettings: List<CurrencyProviderSetting> = emptyList(),
+    val exchangeRateCredentialStatus: String = "Missing",
     val auditRunning: Boolean = false,
     val auditFindings: List<AuditFinding> = emptyList(),
     val auditSummary: AuditSummary? = null,
@@ -75,6 +76,9 @@ class SettingsViewModel(
                 val providerStatuses = runCatching { engine.currencyProviderStatuses() }.getOrDefault(emptyList())
                 val providerDefinitions = runCatching { engine.currencyProviderDefinitions() }.getOrDefault(emptyList())
                 val providerSettings = runCatching { engine.currencyProviderSettings() }.getOrDefault(emptyList())
+                val exchangeRateCredentialStatus = runCatching {
+                    engine.currencyProviderCredentialStatus("exchange_rate")
+                }.getOrDefault("Missing")
                 mutableState.value = mutableState.value.copy(
                     loading = false,
                     wallets = wallets,
@@ -85,6 +89,7 @@ class SettingsViewModel(
                     currencyProviderStatuses = providerStatuses,
                     currencyProviderDefinitions = providerDefinitions,
                     currencyProviderSettings = providerSettings,
+                    exchangeRateCredentialStatus = exchangeRateCredentialStatus,
                 )
             }.onFailure(::showError)
         }
@@ -170,7 +175,12 @@ class SettingsViewModel(
     fun testCurrencyProvider(request: CurrencyProviderTestRequest) {
         mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
         launchSafely {
-            runCatching { engine.testCurrencyProvider(request) }
+            val resolvedRequest = if (request.apiKey.isBlank()) {
+                request.copy(apiKey = engine.resolveCurrencyProviderCredential(request.providerId))
+            } else {
+                request
+            }
+            runCatching { engine.testCurrencyProvider(resolvedRequest) }
                 .onSuccess { result ->
                     mutableState.value = mutableState.value.copy(
                         loading = false,
@@ -179,6 +189,19 @@ class SettingsViewModel(
                     )
                     refresh(mutableState.value.notice)
                 }
+                .onFailure(::showError)
+        }
+    }
+
+    fun saveCurrencyProviderCredential(providerId: String, secret: String) {
+        if (secret.isBlank()) {
+            showError(IllegalArgumentException("API key is required"))
+            return
+        }
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.setCurrencyProviderCredential(providerId, secret.trim()) }
+                .onSuccess { refresh("Credential saved") }
                 .onFailure(::showError)
         }
     }
@@ -307,6 +330,16 @@ class SettingsViewModel(
         val primary = providers.firstOrNull { it.selected }?.name ?: "nbk"
         val fallback = providers.firstOrNull { it.name == "exchange_rate" && it.name != primary }?.name
             ?: "static"
+        val credentialProvider = when {
+            primary == "exchange_rate" -> primary
+            fallback == "exchange_rate" -> fallback
+            else -> ""
+        }
+        val apiKey = if (credentialProvider.isBlank()) {
+            ""
+        } else {
+            runCatching { engine.resolveCurrencyProviderCredential(credentialProvider) }.getOrDefault("")
+        }
         return CurrencyRefreshRequest(
             refreshId = "desktop-${date}-${Random.nextLong().toString(16)}",
             backend = "rust",
@@ -315,6 +348,7 @@ class SettingsViewModel(
             fallbackProvider = fallback,
             effectiveDate = date,
             fetchedAt = date,
+            apiKey = apiKey,
         )
     }
 
