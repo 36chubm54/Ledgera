@@ -29,6 +29,7 @@ pub use currency_refresh::{
     ensure_currency_refresh_schema, latest_currency_refresh_status, normalize_rate_text,
     parse_cbr_xml, parse_exchange_rate_json, parse_nbk_xml, provider_order, record_currency_refresh,
     refresh_currency_rates, static_provider_rates, upsert_currency_rate_snapshot,
+    SUPPORTED_CURRENCY_PROVIDER_NAMES,
 };
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
@@ -6381,12 +6382,14 @@ fn resolve_currency_rate_in_tx(
 /// The base currency is always present with a rate of one.
 pub fn current_currency_rates(db_path: &str) -> StorageResult<HashMap<String, f64>> {
     let base = base_currency_code(db_path)?.to_uppercase();
+    let (year, month, day) = current_local_date();
+    let current_date = format!("{year:04}-{month:02}-{day:02}");
     let conn = open_sqlite_connection(db_path)?;
     ensure_currency_refresh_schema(&conn)?;
     let mut rates = HashMap::new();
     rates.insert(base.clone(), 1.0);
     for row in currency_rate_rows(db_path)? {
-        if row.base_currency.eq_ignore_ascii_case(&base) {
+        if row.base_currency.eq_ignore_ascii_case(&base) && row.effective_date <= current_date {
             let rate = rate_float_from_text(row.rate_text.trim())
                 .map_err(|error| format!("Invalid stored currency rate: {error}"))?;
             if !rate.is_finite() || rate <= 0.0 {
@@ -6398,10 +6401,14 @@ pub fn current_currency_rates(db_path: &str) -> StorageResult<HashMap<String, f6
     let mut stmt = conn.prepare(
         "SELECT currency, rate_text
          FROM currency_rate_snapshots
-         WHERE base_currency = ?1 AND status = 'success'
+         WHERE base_currency = ?1 AND effective_date <= ?2 AND status = 'success'
          ORDER BY effective_date DESC, fetched_at DESC, id DESC",
     ).map_err(sqlite_err)?;
-    let snapshots = stmt.query_map([base.as_str()], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).map_err(sqlite_err)?;
+    let snapshots = stmt
+        .query_map(rusqlite::params![base.as_str(), current_date.as_str()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(sqlite_err)?;
     for snapshot in snapshots {
         let (currency, rate_text) = snapshot.map_err(sqlite_err)?;
         let currency = currency.trim().to_uppercase();
@@ -7309,10 +7316,35 @@ mod tests {
         )
         .unwrap();
         drop(conn);
+        let conn = Connection::open(&db_path).unwrap();
+        ensure_currency_refresh_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO currency_refresh_runs (
+                refresh_id, backend, requested_provider, selected_provider, status,
+                effective_date, fetched_at, fallback_chain, diagnostic
+             ) VALUES ('backup-refresh', 'rust', 'nbk', 'static', 'success',
+                       '2026-01-01', '2026-01-01T10:00:00Z', 'nbk,static', '')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO currency_rate_snapshots (
+                refresh_id, provider, base_currency, currency, rate, rate_text,
+                effective_date, fetched_at, status, diagnostic
+             ) VALUES ('backup-refresh', 'static', 'KZT', 'USD', 500.0, '500',
+                       '2026-01-01', '2026-01-01T10:00:00Z', 'success', '')",
+            [],
+        )
+        .unwrap();
+        drop(conn);
 
         let exported = export_full_backup_json(&db_path, backup_path.to_str().unwrap()).unwrap();
         assert_eq!(exported.budget_rows, 1);
         assert!(exported.checksum.starts_with("sha256:"));
+        let exported_json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&backup_path).unwrap()).unwrap();
+        assert_eq!(exported_json["currency_rate_snapshots"].as_array().unwrap().len(), 1);
+        assert_eq!(exported_json["currency_refresh_runs"].as_array().unwrap().len(), 1);
         assert_eq!(
             preview_full_backup_json(&db_path, backup_path.to_str().unwrap())
                 .unwrap()
@@ -7324,6 +7356,8 @@ mod tests {
         let imported = import_full_backup_json(&db_path, backup_path.to_str().unwrap()).unwrap();
         assert_eq!(imported.budget_rows, 1);
         assert_eq!(budget_rows(&db_path).unwrap()[0].id, 7);
+        assert_eq!(currency_rate_snapshot_rows(&db_path).unwrap().len(), 1);
+        assert_eq!(latest_currency_refresh_status(&db_path).unwrap().selected_provider, "static");
 
         let legacy_path = temp_test_path("ledgera_legacy_budget_backup", "json");
         let mut payload: serde_json::Value =
@@ -8829,6 +8863,38 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         .unwrap();
         let error = set_base_currency(&db_path, "USD").unwrap_err();
         assert!(error.contains("before user data exists"), "unexpected error: {error}");
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn current_currency_rates_ignore_future_dated_rows() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("ledgera_currency_current_rate_test_{unique}.db"));
+        let db_path = path.to_string_lossy().into_owned();
+        initialize_database(&db_path).unwrap();
+        upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "KZT".to_owned(),
+                currency: "USD".to_owned(),
+                rate: "500".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "manual".to_owned(),
+            },
+        )
+        .unwrap();
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO currency_rates (base_currency, currency, rate, rate_text, effective_date, source)
+             VALUES ('KZT', 'USD', 999, '999', '2999-01-01', 'legacy')",
+            [],
+        )
+        .unwrap();
+
+        assert_eq!(current_currency_rates(&db_path).unwrap().get("USD"), Some(&500.0));
         remove_test_db(&db_path);
     }
 

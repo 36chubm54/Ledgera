@@ -41,6 +41,7 @@ def test_rust_adapter_result_is_normalized_without_partial_rates():
     result = call_rust_refresh(Adapter(), {"backend": BACKEND_RUST})
     assert result is not None
     assert result.rates == {"USD": 500.0, "EUR": 590.0}
+    assert result.rate_texts == {"USD": "500", "EUR": "590"}
     assert result.fallback_chain == ("nbk", "static")
 
 
@@ -48,6 +49,12 @@ def test_shadow_comparison_reports_provider_and_rate_mismatches():
     python = python_result({"USD": 500.0}, selected_provider="nbk")
     rust = python_result({"USD": 501.0}, selected_provider="static")
     assert compare_refresh_rates(python, rust) == ["selected_provider", "rate:USD"]
+
+
+def test_shadow_comparison_keeps_decimal_scale_differences_visible():
+    python = python_result({"USD": 500.000000001})
+    rust = python_result({"USD": 500.000000002})
+    assert compare_refresh_rates(python, rust) == ["rate:USD"]
 
 
 def test_shadow_backend_is_a_supported_mode():

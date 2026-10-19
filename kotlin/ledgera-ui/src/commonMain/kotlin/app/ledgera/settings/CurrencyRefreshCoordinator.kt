@@ -25,14 +25,14 @@ class CurrencyRefreshCoordinator(
         if (!autoUpdate || intervalMinutes <= 0) return
         scheduledJob = scope.launch {
             while (isActive) {
-                refreshNow()
+                runCatching { refreshNow() }
                 delay(intervalMinutes.toLong() * 60_000L)
             }
         }
     }
 
-    suspend fun refreshNow(): CurrencyRefreshResult? = refreshMutex.withLock {
-        runCatching { engine.refreshCurrencyRates(requestFactory()) }.getOrNull()
+    suspend fun refreshNow(): CurrencyRefreshResult = refreshMutex.withLock {
+        engine.refreshCurrencyRates(requestFactory())
     }
 
     fun stop() {

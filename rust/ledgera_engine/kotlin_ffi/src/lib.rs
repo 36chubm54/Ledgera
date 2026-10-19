@@ -49,7 +49,7 @@ use ledgera_engine_storage::{
     set_base_currency, supported_currencies, upsert_currency_rate,
     CurrencyRateSnapshotRow, CurrencyRefreshRequestPayload, CurrencyRefreshResultRow,
     CurrencyRefreshStatusRow, currency_rate_snapshot_rows, latest_currency_refresh_status,
-    refresh_currency_rates,
+    refresh_currency_rates, SUPPORTED_CURRENCY_PROVIDER_NAMES,
 };
 use std::fmt;
 use std::path::Path;
@@ -1209,7 +1209,7 @@ impl LedgeraEngine {
         let selected = status.as_ref().map(|value| value.selected_provider.as_str()).unwrap_or_default();
         let last_status = status.as_ref().map(|value| value.status.clone()).unwrap_or_else(|| "never".to_owned());
         let diagnostic = status.as_ref().map(|value| value.diagnostic.clone()).unwrap_or_default();
-        Ok(["nbk", "exchange_rate", "cbr", "static", "cache"].into_iter().map(|name| CurrencyProviderStatusDto {
+        Ok(SUPPORTED_CURRENCY_PROVIDER_NAMES.iter().map(|name| *name).map(|name| CurrencyProviderStatusDto {
             name: name.to_owned(), configured: true, selected: selected == name, last_status: last_status.clone(), diagnostic: diagnostic.clone(),
         }).collect())
     }

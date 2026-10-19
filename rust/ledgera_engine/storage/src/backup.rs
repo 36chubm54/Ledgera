@@ -31,6 +31,8 @@ const BACKUP_TABLES: &[&str] = &[
     "distribution_snapshots",
     "distribution_snapshot_values",
     "currency_rates",
+    "currency_rate_snapshots",
+    "currency_refresh_runs",
 ];
 
 const DISTRIBUTION_RESULT_TABLES: &[&str] = &[
@@ -238,7 +240,9 @@ fn validate_scalar_type(
             column.name
         ));
     }
-    if column.name == "id" || column.name.ends_with("_id") {
+    if column.name == "id"
+        || (column.name.ends_with("_id") && column.declared_type.contains("INT"))
+    {
         if value.as_i64().map(|id| id <= 0).unwrap_or(true) {
             return Err(format!(
                 "{table} row {row_index} column '{}' must be a positive integer",
@@ -718,7 +722,9 @@ fn validate_payload(conn: &Connection, payload: &JsonValue) -> StorageResult<Vec
             || *table == "distribution_subitems"
             || *table == "distribution_snapshots"
             || *table == "distribution_snapshot_values"
-            || *table == "currency_rates")
+            || *table == "currency_rates"
+            || *table == "currency_rate_snapshots"
+            || *table == "currency_refresh_runs")
             && !object.contains_key(*table)
         {
             continue;
@@ -984,6 +990,8 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "distribution_snapshots",
         "distribution_subitems",
         "distribution_items",
+        "currency_rate_snapshots",
+        "currency_refresh_runs",
         "wallets",
         "currency_rates",
     ] {
@@ -1008,6 +1016,8 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "distribution_snapshots",
         "distribution_snapshot_values",
         "currency_rates",
+        "currency_rate_snapshots",
+        "currency_refresh_runs",
     ] {
         let rows = object
             .get(table)

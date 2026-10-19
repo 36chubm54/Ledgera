@@ -65,6 +65,7 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsState()
     var showCreateWalletDialog by remember { mutableStateOf(false) }
     var showCurrencyRateDialog by remember { mutableStateOf(false) }
+    var showCurrencyRateHistory by remember { mutableStateOf(false) }
     var editingCurrencyRate by remember { mutableStateOf<CurrencyRate?>(null) }
     var walletPendingDelete by remember { mutableStateOf<WalletSettingsItem?>(null) }
     var showAuditReport by remember { mutableStateOf(false) }
@@ -127,6 +128,7 @@ fun SettingsScreen(
             },
             onDeleteRate = viewModel::deleteCurrencyRate,
             onSetBase = viewModel::setBaseCurrency,
+            onShowHistory = { showCurrencyRateHistory = true },
         )
         AuditSection(
             running = state.auditRunning,
@@ -164,6 +166,21 @@ fun SettingsScreen(
             submitting = state.loading,
             onSave = { base, currency, rate, date, source -> viewModel.saveCurrencyRate(base, currency, rate, date, source) },
             onCancel = { showCurrencyRateDialog = false; editingCurrencyRate = null },
+        )
+    }
+    if (showCurrencyRateHistory) {
+        CurrencyRateHistoryDialog(
+            rates = state.currencyRates,
+            loading = state.loading,
+            error = state.error,
+            onUpdate = { rate ->
+                viewModel.clearFeedback()
+                editingCurrencyRate = rate
+                showCurrencyRateHistory = false
+                showCurrencyRateDialog = true
+            },
+            onDelete = viewModel::deleteCurrencyRate,
+            onClose = { showCurrencyRateHistory = false },
         )
     }
     walletPendingDelete?.let { wallet ->
@@ -227,6 +244,7 @@ private fun CurrencySection(
     onUpdateRate: (CurrencyRate) -> Unit,
     onDeleteRate: (Long) -> Unit,
     onSetBase: (String) -> Unit,
+    onShowHistory: () -> Unit,
 ) {
     var requestedBase by remember(baseCurrency) { mutableStateOf(baseCurrency) }
     Card(Modifier.fillMaxWidth().height(360.dp)) {
@@ -238,6 +256,9 @@ private fun CurrencySection(
                 Button(onClick = onAddRate, enabled = !loading) { Text("Add rate") }
             }
             Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onShowHistory, enabled = !loading && rates.size > 1) { Text("Rate history") }
+            }
             refreshStatus?.let { status ->
                 Text(
                     "Automatic refresh: ${status.status} · ${status.selectedProvider.ifBlank { "none" }} · ${status.effectiveDate}",
@@ -246,10 +267,16 @@ private fun CurrencySection(
                 )
             }
             if (providerStatuses.isNotEmpty()) {
-                Text(
-                    "Providers: ${providerStatuses.filter { it.selected }.joinToString { it.name }.ifBlank { "not selected" }}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "Available providers: ${providerStatuses.joinToString { it.name }}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "Selected provider: ${providerStatuses.filter { it.selected }.joinToString { it.name }.ifBlank { "not selected" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -276,6 +303,63 @@ private fun CurrencySection(
 }
 
 @Composable
+private fun CurrencyRateHistoryDialog(
+    rates: List<CurrencyRate>,
+    loading: Boolean,
+    error: String?,
+    onUpdate: (CurrencyRate) -> Unit,
+    onDelete: (Long) -> Unit,
+    onClose: () -> Unit,
+) {
+    val history = rates.sortedWith(
+        compareByDescending<CurrencyRate> { it.effectiveDate }
+            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.currency }
+            .thenByDescending { it.id },
+    )
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Currency rate history") },
+        text = {
+            Column(Modifier.width(DialogContentWidth), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (history.isEmpty()) {
+                    Text("No saved currency rates.")
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(history, key = { it.id }) { rate ->
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("${rate.currency}/${rate.baseCurrency} = ${rate.rate}")
+                                        Text(
+                                            "${rate.effectiveDate} · ${rate.source}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        TextButton(onClick = { onUpdate(rate) }, enabled = !loading) { Text("Update") }
+                                        TextButton(onClick = { onDelete(rate.id) }, enabled = !loading) { Text("Delete") }
+                                    }
+                                }
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+    )
+}
+
+@Composable
 private fun CurrencyRateDialog(
     baseCurrency: String,
     existingRate: CurrencyRate? = null,
@@ -293,10 +377,10 @@ private fun CurrencyRateDialog(
         ?.takeIf { currency != baseCurrency }
     val dateError = DateValidation.validateGuiNotFuture(date)
     val rateError = if (rate.toDoubleOrNull()?.let { it > 0.0 } == true) null else "Rate must be greater than zero"
-    val providerError = when {
-        source.trim().isEmpty() -> "Provider is required"
-        source.trim().length > 64 -> "Provider must be 64 characters or fewer"
-        !Regex("[A-Za-z0-9_. -]+").matches(source.trim()) -> "Provider contains unsupported characters"
+    val sourceError = when {
+        source.trim().isEmpty() -> "Manual source label is required"
+        source.trim().length > 64 -> "Manual source label must be 64 characters or fewer"
+        !Regex("[A-Za-z0-9_. -]+").matches(source.trim()) -> "Manual source label contains unsupported characters"
         else -> null
     }
     val replacesExisting = existingRates.any {
@@ -305,7 +389,7 @@ private fun CurrencyRateDialog(
             it.currency.equals(currency.trim(), ignoreCase = true) &&
             it.effectiveDate == (DateValidation.formatGuiDateToYmd(date) ?: date.trim())
     }
-    val valid = currencyError == null && currency != baseCurrency && dateError == null && rateError == null && providerError == null
+    val valid = currencyError == null && currency != baseCurrency && dateError == null && rateError == null && sourceError == null
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(if (existingRate == null) "Add currency rate" else "Update currency rate") },
@@ -321,11 +405,18 @@ private fun CurrencyRateDialog(
                     showErrorOutline = false,
                     showErrorText = false,
                 )
-                OutlinedTextField(source, { source = it }, label = { Text("Source") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(
+                    source,
+                    { source = it },
+                    label = { Text("Manual source label") },
+                    supportingText = { Text("Use a short label such as manual or bank") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
                 if (replacesExisting) {
                     Text("A rate for this date already exists. Saving will replace it.", color = MaterialTheme.colorScheme.error)
                 }
-                listOfNotNull(currencyError, rateError, dateError, providerError).firstOrNull()?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                listOfNotNull(currencyError, rateError, dateError, sourceError).firstOrNull()?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },

@@ -8,6 +8,9 @@ use std::process::Command;
 
 use crate::{StorageResult, sqlite_err, validate_currency_code, validate_ymd_date};
 
+pub const SUPPORTED_CURRENCY_PROVIDER_NAMES: &[&str] =
+    &["nbk", "exchange_rate", "cbr", "static", "cache"];
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CurrencyRateSnapshotPayload {
     pub refresh_id: String,
@@ -160,6 +163,17 @@ pub fn provider_order(primary: &str, fallback: &str, enable_cbr: bool) -> Vec<St
         }
     }
     result
+}
+
+fn validate_requested_provider(value: &str, field: &str) -> StorageResult<()> {
+    let normalized = value.trim().to_lowercase();
+    if normalized.is_empty() || SUPPORTED_CURRENCY_PROVIDER_NAMES.contains(&normalized.as_str()) {
+        return Ok(());
+    }
+    Err(format!(
+        "Unsupported {field} provider '{normalized}'. Supported providers: {}",
+        SUPPORTED_CURRENCY_PROVIDER_NAMES.join(", ")
+    ))
 }
 
 pub fn parse_nbk_xml(xml: &str) -> StorageResult<Vec<ProviderRate>> {
@@ -524,6 +538,8 @@ pub fn refresh_currency_rates(db_path: &str, request: &CurrencyRefreshRequestPay
     let base = request.base_currency.trim().to_uppercase();
     validate_currency_code(&base)?;
     validate_ymd_date(request.effective_date.trim())?;
+    validate_requested_provider(&request.primary_provider, "primary")?;
+    validate_requested_provider(&request.fallback_provider, "fallback")?;
     if request.refresh_id.trim().is_empty() { return Err("Refresh id is required".to_owned()); }
     let _refresh_guard = acquire_refresh_guard(request.refresh_id.trim())?;
     let order = provider_order(&request.primary_provider, &request.fallback_provider, false);
@@ -648,6 +664,30 @@ mod tests {
     #[test]
     fn provider_order_is_deduplicated_and_ends_with_static_cache() {
         assert_eq!(provider_order("nbk", "nbk", true), vec!["nbk", "cbr", "static", "cache"]);
+    }
+
+    #[test]
+    fn rejects_unknown_refresh_provider_instead_of_silently_falling_back() {
+        let path = std::env::temp_dir().join(format!("ledgera-currency-provider-{}.db", std::process::id()));
+        let path_text = path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&path);
+        crate::initialize_database(&path_text).unwrap();
+        let error = refresh_currency_rates(&path_text, &CurrencyRefreshRequestPayload {
+            refresh_id: "provider-validation".to_owned(),
+            backend: "rust".to_owned(),
+            base_currency: "KZT".to_owned(),
+            primary_provider: "typo_provider".to_owned(),
+            fallback_provider: "static".to_owned(),
+            effective_date: "2026-10-12".to_owned(),
+            fetched_at: "2026-10-12T10:00:00Z".to_owned(),
+            provider_payload: String::new(),
+            payload_format: String::new(),
+            api_key: String::new(),
+            timeout_seconds: 10,
+            dry_run: true,
+        }).unwrap_err();
+        assert!(error.contains("Unsupported primary provider"), "unexpected error: {error}");
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
