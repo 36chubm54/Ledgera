@@ -43,6 +43,7 @@ import app.ledgera.model.CreateWalletRequest
 import app.ledgera.model.CurrencyRate
 import app.ledgera.model.CurrencyProviderDefinition
 import app.ledgera.model.CurrencyProviderDefinitionRequest
+import app.ledgera.model.CurrencyProviderSettingRequest
 import app.ledgera.model.CurrencyProviderTestRequest
 import app.ledgera.model.WalletSettingsItem
 import app.ledgera.ui.LedgerDateField
@@ -75,7 +76,9 @@ fun SettingsScreen(
     var walletPendingDelete by remember { mutableStateOf<WalletSettingsItem?>(null) }
     var showAuditReport by remember { mutableStateOf(false) }
     var showProviderDialog by remember { mutableStateOf(false) }
+    var editingProvider by remember { mutableStateOf<CurrencyProviderDefinition?>(null) }
     var showExchangeRateCredentialDialog by remember { mutableStateOf(false) }
+    var credentialProvider by remember { mutableStateOf<CurrencyProviderDefinition?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -98,6 +101,16 @@ fun SettingsScreen(
                 state.notice?.startsWith("Wallet deactivated") == true)
         ) {
             walletPendingDelete = null
+        }
+    }
+    LaunchedEffect(state.notice) {
+        if (state.notice?.startsWith("Provider saved") == true) {
+            showProviderDialog = false
+            editingProvider = null
+        }
+        if (state.notice == "Credential saved") {
+            showExchangeRateCredentialDialog = false
+            credentialProvider = null
         }
     }
 
@@ -141,11 +154,30 @@ fun SettingsScreen(
         OnlineProvidersSection(
             definitions = state.currencyProviderDefinitions,
             statuses = state.currencyProviderStatuses,
+            settings = state.currencyProviderSettings,
+            credentialStatuses = state.currencyProviderCredentialStatuses,
             exchangeRateCredentialStatus = state.exchangeRateCredentialStatus,
             loading = state.loading,
-            onAdd = { viewModel.clearFeedback(); showProviderDialog = true },
+            onAdd = { viewModel.clearFeedback(); editingProvider = null; showProviderDialog = true },
+            onEdit = { provider -> viewModel.clearFeedback(); editingProvider = provider; showProviderDialog = true },
             onDelete = viewModel::deleteCurrencyProvider,
             onConfigureExchangeRate = { viewModel.clearFeedback(); showExchangeRateCredentialDialog = true },
+            onConfigureCredential = { provider ->
+                viewModel.clearFeedback()
+                credentialProvider = provider
+            },
+            onSetMode = { provider, mode ->
+                viewModel.setCurrencyProviderMode(
+                    CurrencyProviderSettingRequest(
+                        providerId = provider.providerId,
+                        mode = mode,
+                        primaryEnabled = mode == "primary",
+                        fallbackEnabled = mode == "fallback",
+                        credentialStatus = state.currencyProviderCredentialStatuses[provider.providerId]
+                            .toProviderCredentialStatus(),
+                    )
+                )
+            },
             onTest = { provider ->
                 viewModel.testCurrencyProvider(
                     CurrencyProviderTestRequest(
@@ -213,10 +245,11 @@ fun SettingsScreen(
     if (showProviderDialog) {
         CustomProviderDialog(
             baseCurrency = state.baseCurrency,
+            existingProvider = editingProvider,
             loading = state.loading,
             error = state.error,
-            onSave = { request -> viewModel.saveCurrencyProvider(request); showProviderDialog = false },
-            onCancel = { showProviderDialog = false },
+            onSave = { request -> viewModel.saveCurrencyProvider(request) },
+            onCancel = { showProviderDialog = false; editingProvider = null },
         )
     }
     if (showExchangeRateCredentialDialog) {
@@ -226,9 +259,18 @@ fun SettingsScreen(
             error = state.error,
             onSave = { secret ->
                 viewModel.saveCurrencyProviderCredential("exchange_rate", secret)
-                showExchangeRateCredentialDialog = false
             },
             onCancel = { showExchangeRateCredentialDialog = false },
+        )
+    }
+    credentialProvider?.let { provider ->
+        ExchangeRateCredentialDialog(
+            status = state.currencyProviderCredentialStatuses[provider.providerId] ?: "Missing",
+            loading = state.loading,
+            error = state.error,
+            title = "${provider.displayName} API key",
+            onSave = { secret -> viewModel.saveCurrencyProviderCredential(provider.providerId, secret) },
+            onCancel = { credentialProvider = null },
         )
     }
     walletPendingDelete?.let { wallet ->
@@ -356,15 +398,27 @@ private fun CurrencySection(
     }
 }
 
+private fun String?.toProviderCredentialStatus(): String = when {
+    this.orEmpty().startsWith("Environment", ignoreCase = true) -> "environment"
+    this.orEmpty().startsWith("Configured", ignoreCase = true) -> "configured"
+    this.orEmpty().startsWith("Invalid", ignoreCase = true) -> "invalid"
+    else -> "missing"
+}
+
 @Composable
 private fun OnlineProvidersSection(
     definitions: List<CurrencyProviderDefinition>,
     statuses: List<app.ledgera.model.CurrencyProviderStatus>,
+    settings: List<app.ledgera.model.CurrencyProviderSetting>,
+    credentialStatuses: Map<String, String>,
     exchangeRateCredentialStatus: String,
     loading: Boolean,
     onAdd: () -> Unit,
+    onEdit: (CurrencyProviderDefinition) -> Unit,
     onDelete: (String) -> Unit,
     onConfigureExchangeRate: () -> Unit,
+    onConfigureCredential: (CurrencyProviderDefinition) -> Unit,
+    onSetMode: (CurrencyProviderDefinition, String) -> Unit,
     onTest: (CurrencyProviderDefinition) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
@@ -387,14 +441,30 @@ private fun OnlineProvidersSection(
                 ) {
                     definitions.forEach { provider ->
                         val status = statuses.firstOrNull { it.name == provider.providerId }
+                        val setting = settings.firstOrNull { it.providerId == provider.providerId }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(provider.displayName, fontWeight = FontWeight.Medium)
                                 Text("${provider.providerId} · ${provider.authMode} · ${if (provider.active) "active" else "test required"}", style = MaterialTheme.typography.bodySmall)
+                                if (provider.authMode != "none") {
+                                    Text("Credential: ${credentialStatuses[provider.providerId] ?: "Missing"}", style = MaterialTheme.typography.bodySmall)
+                                }
                                 status?.let { Text("Status: ${it.lastStatus}${it.diagnostic.takeIf(String::isNotBlank)?.let { detail -> " · $detail" } ?: ""}", style = MaterialTheme.typography.bodySmall) }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (provider.authMode != "none") {
+                                    TextButton(onClick = { onConfigureCredential(provider) }, enabled = !loading) { Text("Configure key") }
+                                }
+                                TextButton(
+                                    onClick = { onSetMode(provider, if (setting?.mode == "primary") "fallback" else "primary") },
+                                    enabled = !loading && provider.active,
+                                ) { Text(if (setting?.mode == "primary") "Fallback" else "Primary") }
+                                TextButton(
+                                    onClick = { onSetMode(provider, if (setting?.mode == "fallback") "manual-only" else "fallback") },
+                                    enabled = !loading && provider.active,
+                                ) { Text(if (setting?.mode == "fallback") "Manual" else "Fallback") }
                                 TextButton(onClick = { onTest(provider) }, enabled = !loading) { Text("Test") }
+                                TextButton(onClick = { onEdit(provider) }, enabled = !loading) { Text("Edit") }
                                 TextButton(onClick = { onDelete(provider.providerId) }, enabled = !loading) { Text("Delete") }
                             }
                         }
@@ -410,13 +480,14 @@ private fun ExchangeRateCredentialDialog(
     status: String,
     loading: Boolean,
     error: String?,
+    title: String = "ExchangeRate API key",
     onSave: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
     var secret by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("ExchangeRate API key") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Status: $status", style = MaterialTheme.typography.bodySmall)
@@ -442,40 +513,63 @@ private fun ExchangeRateCredentialDialog(
 @Composable
 private fun CustomProviderDialog(
     baseCurrency: String,
+    existingProvider: CurrencyProviderDefinition? = null,
     loading: Boolean,
     error: String?,
     onSave: (CurrencyProviderDefinitionRequest) -> Unit,
     onCancel: () -> Unit,
 ) {
-    var slug by remember { mutableStateOf("") }
-    var displayName by remember { mutableStateOf("") }
-    var endpoint by remember { mutableStateOf("") }
-    var responseFormat by remember { mutableStateOf("json") }
-    var currencyPath by remember { mutableStateOf("$.rates") }
-    var ratePath by remember { mutableStateOf("$.rates") }
-    var responseBase by remember { mutableStateOf("USD") }
-    var semantics by remember { mutableStateOf("quote_per_base") }
-    var authMode by remember { mutableStateOf("none") }
-    var credentialRef by remember { mutableStateOf("") }
+    var slug by remember(existingProvider) { mutableStateOf(existingProvider?.providerId?.removePrefix("custom:") ?: "") }
+    var displayName by remember(existingProvider) { mutableStateOf(existingProvider?.displayName ?: "") }
+    var endpoint by remember(existingProvider) { mutableStateOf(existingProvider?.endpoint ?: "") }
+    var responseFormat by remember(existingProvider) { mutableStateOf(existingProvider?.responseFormat ?: "json") }
+    var currencyPath by remember(existingProvider) { mutableStateOf(existingProvider?.currencyPath ?: "$.rates") }
+    var ratePath by remember(existingProvider) { mutableStateOf(existingProvider?.ratePath ?: "$.rates") }
+    var effectiveDatePath by remember(existingProvider) { mutableStateOf(existingProvider?.effectiveDatePath ?: "") }
+    var aliasesJson by remember(existingProvider) { mutableStateOf(existingProvider?.aliasesJson ?: "{}") }
+    var responseBase by remember(existingProvider) { mutableStateOf(existingProvider?.responseBaseCurrency ?: "USD") }
+    var semantics by remember(existingProvider) { mutableStateOf(existingProvider?.rateSemantics ?: "quote_per_base") }
+    var authMode by remember(existingProvider) { mutableStateOf(existingProvider?.authMode ?: "none") }
+    var credentialRef by remember(existingProvider) { mutableStateOf(existingProvider?.credentialRef ?: "") }
+    var requestBody by remember(existingProvider) { mutableStateOf(existingProvider?.requestBody ?: "") }
+    var timeoutSeconds by remember(existingProvider) { mutableStateOf((existingProvider?.timeoutSeconds ?: 10).toString()) }
+    var retryCount by remember(existingProvider) { mutableStateOf((existingProvider?.retryCount ?: 0).toString()) }
+    var redirectLimit by remember(existingProvider) { mutableStateOf((existingProvider?.redirectLimit ?: 3).toString()) }
+    var showAdvanced by remember { mutableStateOf(false) }
     val valid = slug.matches(Regex("[a-z0-9][a-z0-9_-]{1,63}")) &&
         displayName.isNotBlank() && endpoint.startsWith("https://") &&
         currencyPath.isNotBlank() && ratePath.isNotBlank() && responseBase.matches(Regex("[A-Za-z]{3}")) &&
-        (authMode == "none" || credentialRef.isNotBlank())
+        (authMode == "none" || credentialRef.isNotBlank()) &&
+        timeoutSeconds.toLongOrNull()?.let { it in 1..120 } == true &&
+        retryCount.toLongOrNull()?.let { it in 0..3 } == true &&
+        redirectLimit.toLongOrNull()?.let { it in 0..5 } == true
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Add custom provider") },
+        title = { Text(if (existingProvider == null) "Add custom provider" else "Edit custom provider") },
         text = {
             Column(Modifier.width(DialogContentWidth).heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(slug, { slug = it.lowercase() }, label = { Text("Slug") }, placeholder = { Text("my-provider") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(endpoint, { endpoint = it }, label = { Text("HTTPS endpoint") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(responseFormat, { responseFormat = it.lowercase() }, label = { Text("Format: json or xml") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(currencyPath, { currencyPath = it }, label = { Text("Currency path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(ratePath, { ratePath = it }, label = { Text("Rate path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(responseBase, { responseBase = it.uppercase().take(3) }, label = { Text("Response base") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(semantics, { semantics = it.lowercase() }, label = { Text("Rate semantics") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(authMode, { authMode = it.lowercase() }, label = { Text("Auth: none, api_key_header, api_key_query, bearer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (authMode != "none") OutlinedTextField(credentialRef, { credentialRef = it }, label = { Text("Credential reference") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (!showAdvanced) {
+                    OutlinedTextField(slug, { slug = it.lowercase() }, label = { Text("Slug") }, placeholder = { Text("my-provider") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = existingProvider == null)
+                    OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(endpoint, { endpoint = it }, label = { Text("HTTPS endpoint") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(responseFormat, { responseFormat = it.lowercase() }, label = { Text("Format: json or xml") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(currencyPath, { currencyPath = it }, label = { Text("Currency path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(ratePath, { ratePath = it }, label = { Text("Rate path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(responseBase, { responseBase = it.uppercase().take(3) }, label = { Text("Response base") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(semantics, { semantics = it.lowercase() }, label = { Text("Rate semantics") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(authMode, { authMode = it.lowercase() }, label = { Text("Auth: none, api_key_header, api_key_query, bearer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (authMode != "none") OutlinedTextField(credentialRef, { credentialRef = it }, label = { Text("Credential reference") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    TextButton(onClick = { showAdvanced = true }) { Text("Advanced provider parameters") }
+                } else {
+                    Text("Advanced provider parameters", style = MaterialTheme.typography.titleMedium)
+                    OutlinedTextField(effectiveDatePath, { effectiveDatePath = it }, label = { Text("Effective date path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(aliasesJson, { aliasesJson = it }, label = { Text("Currency aliases JSON") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(requestBody, { requestBody = it }, label = { Text("POST request body") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(timeoutSeconds, { timeoutSeconds = it.filter(Char::isDigit) }, label = { Text("Timeout seconds (1-120)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(retryCount, { retryCount = it.filter(Char::isDigit) }, label = { Text("Retries (0-3)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(redirectLimit, { redirectLimit = it.filter(Char::isDigit) }, label = { Text("Redirects (0-5)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    TextButton(onClick = { showAdvanced = false }) { Text("Back to provider settings") }
+                }
                 Text("Base currency: $baseCurrency. Provider stays inactive until Test succeeds.", style = MaterialTheme.typography.bodySmall)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -483,9 +577,28 @@ private fun CustomProviderDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(CurrencyProviderDefinitionRequest("custom:$slug", displayName, endpoint, responseFormat = responseFormat, currencyPath = currencyPath, ratePath = ratePath, responseBaseCurrency = responseBase, rateSemantics = semantics, authMode = authMode, credentialRef = credentialRef))
+                    onSave(
+                        CurrencyProviderDefinitionRequest(
+                            providerId = "custom:$slug",
+                            displayName = displayName,
+                            endpoint = endpoint,
+                            responseFormat = responseFormat,
+                            currencyPath = currencyPath,
+                            ratePath = ratePath,
+                            effectiveDatePath = effectiveDatePath,
+                            aliasesJson = aliasesJson,
+                            responseBaseCurrency = responseBase,
+                            rateSemantics = semantics,
+                            authMode = authMode,
+                            credentialRef = credentialRef,
+                            requestBody = requestBody,
+                            timeoutSeconds = timeoutSeconds.toLong(),
+                            retryCount = retryCount.toLong(),
+                            redirectLimit = redirectLimit.toLong(),
+                        )
+                    )
                 },
-                enabled = valid && !loading,
+                enabled = valid && !loading && !showAdvanced,
             ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onCancel, enabled = !loading) { Text("Cancel") } },

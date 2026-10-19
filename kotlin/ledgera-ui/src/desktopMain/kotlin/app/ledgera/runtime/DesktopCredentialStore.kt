@@ -17,21 +17,28 @@ object DesktopCredentialStore {
     private const val EXCHANGE_RATE_ENV = "LEDGERA_EXCHANGE_RATE_API_KEY"
     private const val LEGACY_EXCHANGE_RATE_ENV = "FINACCOUNTING_EXCHANGE_RATE_API_KEY"
     private const val TARGET_PREFIX = "Ledgera.CurrencyProvider."
+    private const val ERROR_NOT_FOUND = 1168
 
     fun status(providerId: String): String {
-        if (environmentSecret(providerId).isNotBlank()) return "Environment override"
+        val normalized = normalizeProviderId(providerId)
+        if (environmentSecret(normalized).isNotBlank()) return "Environment override"
         if (!isWindows()) return "Secure storage unavailable"
-        return if (readWindowsCredential(providerId).isNullOrBlank()) "Missing" else "Configured"
+        return runCatching { readWindowsCredential(normalized) }
+            .fold(
+                onSuccess = { if (it.isNullOrBlank()) "Missing" else "Configured" },
+                onFailure = { "Secure storage error: ${it.message ?: "Credential Manager request failed"}" },
+            )
     }
 
     fun resolve(providerId: String): String {
-        return environmentSecret(providerId).ifBlank {
-            if (isWindows()) readWindowsCredential(providerId).orEmpty() else ""
+        val normalized = normalizeProviderId(providerId)
+        return environmentSecret(normalized).ifBlank {
+            if (isWindows()) readWindowsCredential(normalized).orEmpty() else ""
         }
     }
 
     fun save(providerId: String, secret: String) {
-        require(providerId == EXCHANGE_RATE_PROVIDER) { "Unsupported provider credential: $providerId" }
+        val normalized = normalizeProviderId(providerId)
         require(secret.isNotBlank()) { "Credential cannot be blank" }
         check(isWindows()) { "Windows secure credential storage is unavailable" }
 
@@ -40,7 +47,7 @@ object DesktopCredentialStore {
         blob.write(0, bytes, 0, bytes.size)
         val credential = Credential()
         credential.type = CRED_TYPE_GENERIC
-        credential.targetName = WString(targetName(providerId))
+        credential.targetName = WString(targetName(normalized))
         credential.CredentialBlobSize = bytes.size
         credential.CredentialBlob = blob
         credential.persist = CRED_PERSIST_LOCAL_MACHINE
@@ -52,16 +59,24 @@ object DesktopCredentialStore {
     }
 
     private fun environmentSecret(providerId: String): String {
-        if (providerId != EXCHANGE_RATE_PROVIDER) return ""
-        return System.getenv(EXCHANGE_RATE_ENV).orEmpty().ifBlank {
-            System.getenv(LEGACY_EXCHANGE_RATE_ENV).orEmpty()
+        if (providerId == EXCHANGE_RATE_PROVIDER) {
+            return System.getenv(EXCHANGE_RATE_ENV).orEmpty().ifBlank {
+                System.getenv(LEGACY_EXCHANGE_RATE_ENV).orEmpty()
+            }
         }
+        if (!providerId.startsWith("custom:")) return ""
+        val slug = providerId.removePrefix("custom:")
+            .uppercase()
+            .replace(Regex("[^A-Z0-9]"), "_")
+        return System.getenv("LEDGERA_CURRENCY_PROVIDER_${slug}_API_KEY").orEmpty()
     }
 
     private fun readWindowsCredential(providerId: String): String? {
         val reference = PointerByReference()
         if (!api.CredReadW(WString(targetName(providerId)), CRED_TYPE_GENERIC, 0, reference)) {
-            return null
+            val errorCode = Native.getLastError()
+            if (errorCode == ERROR_NOT_FOUND) return null
+            throw Win32Exception(errorCode)
         }
         val pointer = reference.value ?: return null
         return try {
@@ -74,7 +89,16 @@ object DesktopCredentialStore {
         }
     }
 
-    private fun targetName(providerId: String): String = "$TARGET_PREFIX$providerId"
+    private fun targetName(providerId: String): String = "$TARGET_PREFIX${normalizeProviderId(providerId)}"
+
+    private fun normalizeProviderId(providerId: String): String {
+        val normalized = providerId.trim().lowercase()
+        require(
+            normalized == EXCHANGE_RATE_PROVIDER ||
+                normalized.matches(Regex("custom:[a-z0-9][a-z0-9_-]{1,63}")),
+        ) { "Unsupported provider credential: $providerId" }
+        return normalized
+    }
     private fun isWindows(): Boolean = System.getProperty("os.name").contains("win", ignoreCase = true)
 
     private val api: Advapi32CredentialApi by lazy {
@@ -84,7 +108,7 @@ object DesktopCredentialStore {
     private interface Advapi32CredentialApi : Library {
         fun CredWriteW(credential: Credential, flags: Int): Boolean
         fun CredReadW(targetName: WString, type: Int, flags: Int, credential: PointerByReference): Boolean
-        fun CredFree(credential: Pointer): Boolean
+        fun CredFree(credential: Pointer)
     }
 
     @Structure.FieldOrder(

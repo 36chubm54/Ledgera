@@ -29,6 +29,11 @@ class BaseRateProvider(ABC):
     def name(self) -> str:
         """Machine-readable provider name."""
 
+    @property
+    def last_rate_texts(self) -> dict[str, str]:
+        """Exact normalized rates from the latest successful fetch, when available."""
+        return {}
+
 
 @dataclass(frozen=True)
 class ProviderBuildContext:
@@ -146,6 +151,7 @@ class DeclarativeProvider(BaseRateProvider):
     def __init__(self, definition: DeclarativeProviderDefinition, context: ProviderBuildContext):
         self.definition = definition
         self.context = context
+        self._last_rate_texts: dict[str, str] = {}
 
     @classmethod
     def from_mapping(cls, provider_id: str, value: dict[str, object], context: ProviderBuildContext) -> "DeclarativeProvider":
@@ -154,6 +160,10 @@ class DeclarativeProvider(BaseRateProvider):
     @property
     def name(self) -> str:
         return self.definition.provider_id
+
+    @property
+    def last_rate_texts(self) -> dict[str, str]:
+        return dict(self._last_rate_texts)
 
     def fetch(self) -> dict[str, float]:
         try:
@@ -166,19 +176,30 @@ class DeclarativeProvider(BaseRateProvider):
             headers["X-API-Key"] = self._credential()
         elif self.definition.auth_mode == "bearer":
             headers["Authorization"] = f"Bearer {self._credential()}"
-        try:
-            response = requests.request(
-                self.definition.http_method,
-                endpoint,
-                headers=headers,
-                data=self.definition.request_body or None,
-                timeout=self.definition.timeout_seconds,
-                allow_redirects=True,
-            )
-            response.raise_for_status()
-            payload = response.text
-        except requests.RequestException as err:
-            raise ProviderFetchError("Custom provider request failed") from err
+        response = None
+        last_error: requests.RequestException | None = None
+        with requests.Session() as session:
+            session.max_redirects = self.definition.redirect_limit
+            for attempt in range(self.definition.retry_count + 1):
+                try:
+                    response = session.request(
+                        self.definition.http_method,
+                        endpoint,
+                        headers=headers,
+                        data=self.definition.request_body or None,
+                        timeout=self.definition.timeout_seconds,
+                        allow_redirects=self.definition.redirect_limit > 0,
+                    )
+                    response.raise_for_status()
+                    last_error = None
+                    break
+                except requests.RequestException as err:
+                    last_error = err
+                    if attempt >= self.definition.retry_count:
+                        break
+        if last_error is not None or response is None:
+            raise ProviderFetchError("Custom provider request failed") from last_error
+        payload = response.text
         if len(payload.encode("utf-8")) > 5 * 1024 * 1024:
             raise ProviderFetchError("Custom provider response exceeds the 5 MB limit")
         try:
@@ -282,7 +303,18 @@ class DeclarativeProvider(BaseRateProvider):
         base_rate = quote_per_response.get(self.context.target_base.upper())
         if base_rate is None:
             raise ValueError(f"Custom provider has no rate for requested base {self.context.target_base.upper()}")
-        return {code: float(rate / base_rate) for code, rate in quote_per_response.items() if code != self.context.target_base.upper()}
+        normalized: dict[str, float] = {}
+        self._last_rate_texts = {}
+        for code, rate in quote_per_response.items():
+            if code == self.context.target_base.upper():
+                continue
+            normalized_rate = rate / base_rate
+            text = format(normalized_rate.normalize(), "f")
+            if "." in text:
+                text = text.rstrip("0").rstrip(".")
+            self._last_rate_texts[code] = text or "0"
+            normalized[code] = float(normalized_rate)
+        return normalized
 
 
 class NBKProvider(BaseRateProvider):

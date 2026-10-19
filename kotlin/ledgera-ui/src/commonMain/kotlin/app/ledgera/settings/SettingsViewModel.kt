@@ -38,6 +38,7 @@ data class SettingsUiState(
     val currencyProviderStatuses: List<CurrencyProviderStatus> = emptyList(),
     val currencyProviderDefinitions: List<CurrencyProviderDefinition> = emptyList(),
     val currencyProviderSettings: List<CurrencyProviderSetting> = emptyList(),
+    val currencyProviderCredentialStatuses: Map<String, String> = emptyMap(),
     val exchangeRateCredentialStatus: String = "Missing",
     val auditRunning: Boolean = false,
     val auditFindings: List<AuditFinding> = emptyList(),
@@ -79,6 +80,15 @@ class SettingsViewModel(
                 val exchangeRateCredentialStatus = runCatching {
                     engine.currencyProviderCredentialStatus("exchange_rate")
                 }.getOrDefault("Missing")
+                val credentialStatuses = providerDefinitions
+                    .filter { it.authMode != "none" }
+                    .associate { definition ->
+                        definition.providerId to runCatching {
+                            engine.currencyProviderCredentialStatus(definition.providerId)
+                        }.getOrDefault("Missing")
+                    }
+                    .toMutableMap()
+                    .apply { put("exchange_rate", exchangeRateCredentialStatus) }
                 mutableState.value = mutableState.value.copy(
                     loading = false,
                     wallets = wallets,
@@ -89,6 +99,7 @@ class SettingsViewModel(
                     currencyProviderStatuses = providerStatuses,
                     currencyProviderDefinitions = providerDefinitions,
                     currencyProviderSettings = providerSettings,
+                    currencyProviderCredentialStatuses = credentialStatuses,
                     exchangeRateCredentialStatus = exchangeRateCredentialStatus,
                 )
             }.onFailure(::showError)
@@ -327,15 +338,19 @@ class SettingsViewModel(
     private suspend fun buildCurrencyRefreshRequest(): CurrencyRefreshRequest {
         val date = DateValidation.formatYmd(currentLedgerDate())
         val providers = runCatching { engine.currencyProviderStatuses() }.getOrDefault(emptyList())
-        val primary = providers.firstOrNull { it.selected }?.name ?: "nbk"
-        val fallback = providers.firstOrNull { it.name == "exchange_rate" && it.name != primary }?.name
+        val settings = runCatching { engine.currencyProviderSettings() }.getOrDefault(emptyList())
+        val primary = settings.firstOrNull { it.primaryEnabled || it.mode == "primary" }?.providerId
+            ?: providers.firstOrNull { it.selected }?.name
+            ?: "nbk"
+        val fallback = settings.firstOrNull {
+            it.providerId != primary && (it.fallbackEnabled || it.mode == "fallback")
+        }?.providerId
+            ?: providers.firstOrNull { it.name == "exchange_rate" && it.name != primary }?.name
             ?: "static"
-        val credentialProvider = when {
-            primary == "exchange_rate" -> primary
-            fallback == "exchange_rate" -> fallback
-            else -> ""
+        val credentialProvider = listOf(primary, fallback).firstOrNull { provider ->
+            provider == "exchange_rate" || provider.startsWith("custom:")
         }
-        val apiKey = if (credentialProvider.isBlank()) {
+        val apiKey = if (credentialProvider.isNullOrBlank()) {
             ""
         } else {
             runCatching { engine.resolveCurrencyProviderCredential(credentialProvider) }.getOrDefault("")

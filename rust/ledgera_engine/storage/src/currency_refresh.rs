@@ -636,25 +636,32 @@ pub fn test_currency_provider_definition(
             definition.response_format.clone(),
         ))
     };
-    let result = fetched
-        .and_then(|(payload, _)| parse_custom_provider_payload(&payload, &definition, &base));
+    let result = fetched.and_then(|(payload, _)| {
+        let resolved_date = resolve_custom_effective_date(
+            &payload,
+            &definition,
+            effective_date.trim(),
+        )?;
+        parse_custom_provider_payload(&payload, &definition, &base)
+            .map(|rates| (rates, resolved_date))
+    });
     match result {
-        Ok(rates) if !rates.is_empty() => {
+        Ok((rates, resolved_date)) if !rates.is_empty() => {
             activate_currency_provider_definition(db_path, &normalized, tested_at)?;
             Ok(CurrencyProviderTestResultRow {
                 provider_id: normalized,
                 status: "success".to_owned(),
                 rates_count: rates.len() as i64,
-                effective_date: effective_date.to_owned(),
+                effective_date: resolved_date,
                 diagnostic: String::new(),
                 activated: true,
             })
         }
-        Ok(_) => Ok(CurrencyProviderTestResultRow {
+        Ok((_, resolved_date)) => Ok(CurrencyProviderTestResultRow {
             provider_id: normalized,
             status: "error".to_owned(),
             rates_count: 0,
-            effective_date: effective_date.to_owned(),
+            effective_date: resolved_date,
             diagnostic: "Provider returned no usable rates".to_owned(),
             activated: false,
         }),
@@ -1196,6 +1203,70 @@ fn parse_custom_provider_payload(
     }
 }
 
+fn resolve_custom_effective_date(
+    payload: &str,
+    definition: &CurrencyProviderDefinitionRow,
+    fallback_date: &str,
+) -> StorageResult<String> {
+    let path = definition.effective_date_path.trim();
+    if path.is_empty() {
+        return Ok(fallback_date.to_owned());
+    }
+    let raw = match definition.response_format.as_str() {
+        "json" => {
+            let root: Value = serde_json::from_str(payload)
+                .map_err(|error| format!("Custom provider JSON parsing failed: {error}"))?;
+            let values = json_path_values(&root, path)?;
+            let value = values
+                .first()
+                .ok_or_else(|| "Custom provider effective date path returned no values".to_owned())?;
+            value
+                .as_str()
+                .map(str::to_owned)
+                .or_else(|| value.as_number().map(ToString::to_string))
+                .ok_or_else(|| "Custom provider effective date is not text".to_owned())?
+        }
+        "xml" => {
+            let tag = path
+                .rsplit('/')
+                .next()
+                .unwrap_or(path)
+                .trim_matches(|character| character == '$' || character == '.')
+                .to_lowercase();
+            let mut reader = Reader::from_str(payload);
+            reader.config_mut().trim_text(true);
+            let mut current_tag = String::new();
+            let mut date = None;
+            loop {
+                match reader.read_event() {
+                    Ok(Event::Start(event)) => {
+                        current_tag = String::from_utf8_lossy(event.name().as_ref()).to_lowercase();
+                    }
+                    Ok(Event::Text(text)) if current_tag == tag => {
+                        date = Some(
+                            text.decode()
+                                .map_err(|_| "Custom provider XML contains invalid text".to_owned())?
+                                .trim()
+                                .to_owned(),
+                        );
+                    }
+                    Ok(Event::Eof) => break,
+                    Err(error) => return Err(format!("Custom provider XML parsing failed: {error}")),
+                    _ => {}
+                }
+                if date.is_some() {
+                    break;
+                }
+            }
+            date.ok_or_else(|| "Custom provider effective date path returned no values".to_owned())?
+        }
+        _ => return Err("Unsupported custom provider response format".to_owned()),
+    };
+    let date = raw.trim().get(..10).unwrap_or(raw.trim()).to_owned();
+    validate_ymd_date(&date)?;
+    Ok(date)
+}
+
 fn provider_endpoint(provider: &str, base: &str, api_key: &str) -> StorageResult<String> {
     let endpoint = match provider {
         "nbk" => "https://www.nationalbank.kz/rss/rates_all.xml".to_owned(),
@@ -1238,7 +1309,8 @@ fn fetch_provider_payload(
         .output()
         .map_err(|error| format!("{provider} transport is unavailable: {error}"))?;
     if !output.status.success() {
-        let diagnostic = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let raw_diagnostic = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let diagnostic = sanitize_provider_diagnostic(&raw_diagnostic, api_key.trim());
         return Err(format!(
             "{provider} request failed{}",
             if diagnostic.is_empty() {
@@ -1627,7 +1699,7 @@ pub fn refresh_currency_rates(
         } else {
             None
         };
-        let parsed = if request.provider_payload.trim().is_empty()
+        let parsed: StorageResult<(Vec<ProviderRate>, String)> = if request.provider_payload.trim().is_empty()
             && (provider == "cache" || provider == "static")
         {
             if provider == "static" {
@@ -1636,6 +1708,7 @@ pub fn refresh_currency_rates(
             } else {
                 cached_provider_rates(db_path, &base, request.effective_date.trim())
             }
+            .map(|rates| (rates, request.effective_date.trim().to_owned()))
         } else if let Some(definition) = custom_definition.as_ref() {
             let fetched = if request.provider_payload.trim().is_empty() {
                 fetch_custom_provider_payload(definition, &request.api_key)
@@ -1646,7 +1719,13 @@ pub fn refresh_currency_rates(
                 ))
             };
             fetched.and_then(|(payload, _format)| {
+                let effective_date = resolve_custom_effective_date(
+                    &payload,
+                    definition,
+                    request.effective_date.trim(),
+                )?;
                 parse_custom_provider_payload(&payload, definition, &base)
+                    .map(|rates| (rates, effective_date))
             })
         } else {
             let fetched = if request.provider_payload.trim().is_empty() {
@@ -1668,18 +1747,19 @@ pub fn refresh_currency_rates(
             };
             fetched.and_then(|(payload, format)| {
                 parse_provider_payload(provider, &payload, &format, &base)
+                    .map(|rates| (rates, request.effective_date.trim().to_owned()))
             })
         };
         match parsed {
-            Ok(rates) if !rates.is_empty() => {
-                selected = Some((provider.clone(), rates));
+            Ok((rates, effective_date)) if !rates.is_empty() => {
+                selected = Some((provider.clone(), rates, effective_date));
                 break;
             }
-            Ok(_) => errors.push(format!("{provider}: empty rates")),
+            Ok((_, _)) => errors.push(format!("{provider}: empty rates")),
             Err(error) => errors.push(format!("{provider}: {error}")),
         }
     }
-    let Some((selected_provider, rates)) = selected else {
+    let Some((selected_provider, rates, selected_effective_date)) = selected else {
         let diagnostic = errors.join("; ");
         let result = CurrencyRefreshResultRow {
             refresh_id: request.refresh_id.clone(),
@@ -1721,7 +1801,7 @@ pub fn refresh_currency_rates(
              ON CONFLICT(refresh_id) DO UPDATE SET selected_provider = excluded.selected_provider,
                 status = excluded.status, effective_date = excluded.effective_date, fetched_at = excluded.fetched_at,
                 fallback_chain = excluded.fallback_chain, diagnostic = excluded.diagnostic",
-            params![request.refresh_id, request.backend, request.primary_provider, selected_provider, request.effective_date, request.fetched_at, order.join(",")],
+            params![request.refresh_id, request.backend, request.primary_provider, selected_provider, selected_effective_date, request.fetched_at, order.join(",")],
         ).map_err(sqlite_err)?;
         for rate in &rates {
             let currency = rate.currency.trim().to_uppercase();
@@ -1740,7 +1820,7 @@ pub fn refresh_currency_rates(
                  ON CONFLICT(refresh_id, provider, base_currency, currency, effective_date) DO UPDATE SET
                     rate = excluded.rate, rate_text = excluded.rate_text, fetched_at = excluded.fetched_at,
                     status = excluded.status, diagnostic = excluded.diagnostic",
-                params![request.refresh_id, selected_provider, base, currency, rate_value, rate_text, request.effective_date, request.fetched_at],
+                params![request.refresh_id, selected_provider, base, currency, rate_value, rate_text, selected_effective_date, request.fetched_at],
             ).map_err(sqlite_err)?;
         }
         tx.commit().map_err(sqlite_err)?;
@@ -1755,7 +1835,7 @@ pub fn refresh_currency_rates(
         .to_owned(),
         selected_provider,
         rates_count: rates.len() as i64,
-        effective_date: request.effective_date.clone(),
+        effective_date: selected_effective_date,
         fetched_at: request.fetched_at.clone(),
         fallback_chain: order.join(","),
         diagnostic: String::new(),
@@ -1943,6 +2023,43 @@ mod tests {
                 .unwrap()
                 .rate_text,
             "0.0018"
+        );
+    }
+
+    #[test]
+    fn custom_provider_uses_effective_date_from_response() {
+        let definition = CurrencyProviderDefinitionRow {
+            provider_id: "custom:dated".to_owned(),
+            display_name: "Dated fixture".to_owned(),
+            endpoint: "https://example.com/rates".to_owned(),
+            http_method: "GET".to_owned(),
+            response_format: "json".to_owned(),
+            currency_path: "$.rates".to_owned(),
+            rate_path: "$.rates".to_owned(),
+            effective_date_path: "$.date".to_owned(),
+            aliases_json: "{}".to_owned(),
+            response_base_currency: "USD".to_owned(),
+            rate_semantics: "quote_per_base".to_owned(),
+            auth_mode: "none".to_owned(),
+            credential_ref: String::new(),
+            request_body: String::new(),
+            timeout_seconds: 10,
+            retry_count: 0,
+            redirect_limit: 3,
+            schema_version: 1,
+            active: true,
+            tested_at: "2026-10-19".to_owned(),
+            created_at: "2026-10-19".to_owned(),
+            updated_at: "2026-10-19".to_owned(),
+        };
+        assert_eq!(
+            resolve_custom_effective_date(
+                r#"{"date":"2026-10-18T12:00:00Z","rates":{"USD":"1","KZT":"500"}}"#,
+                &definition,
+                "2026-10-19",
+            )
+            .unwrap(),
+            "2026-10-18"
         );
     }
 

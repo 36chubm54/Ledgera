@@ -1,6 +1,7 @@
 import logging
 import os as _os
 import threading
+from dataclasses import replace
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -529,8 +530,14 @@ class CurrencyService:
                         python_rates = self._fetch_online_rates()
                         if not python_rates:
                             return False
+                        python_refresh = python_result(python_rates)
+                        if self._aggregator.last_rate_texts:
+                            python_refresh = replace(
+                                python_refresh,
+                                rate_texts=self._aggregator.last_rate_texts,
+                            )
                         differences = compare_refresh_rates(
-                            python_result(python_rates), rust_result
+                            python_refresh, rust_result
                         )
                         if differences:
                             logger.warning(
