@@ -1520,6 +1520,7 @@ pub fn delete_transfer(db_path: &str, transfer_id: i64) -> StorageResult<bool> {
         return Err(format!("Transfer not found: {transfer_id}"));
     }
     delete_operations_in_tx(&tx, &[], &[], &[transfer_id], 0)?;
+    reset_sqlite_sequence_to_max_id_in_tx(&tx, "transfers")?;
     normalize_record_ids_in_tx(&tx)?;
 
     tx.commit().map_err(sqlite_err)?;
@@ -1544,6 +1545,9 @@ pub fn delete_all_operations(db_path: &str) -> StorageResult<OperationDeleteResu
         &transfer_ids,
         skipped_records,
     )?;
+    if result.deleted_transfers > 0 {
+        reset_sqlite_sequence_to_max_id_in_tx(&tx, "transfers")?;
+    }
     normalize_record_ids_in_tx(&tx)?;
 
     tx.commit().map_err(sqlite_err)?;
@@ -1580,6 +1584,9 @@ pub fn delete_operations_selection(
         &selected_transfer_ids,
         0,
     )?;
+    if result.deleted_transfers > 0 {
+        reset_sqlite_sequence_to_max_id_in_tx(&tx, "transfers")?;
+    }
     normalize_record_ids_in_tx(&tx)?;
 
     tx.commit().map_err(sqlite_err)?;
@@ -6939,7 +6946,7 @@ mod tests {
                 is_active INTEGER NOT NULL DEFAULT 1
             );
             CREATE TABLE transfers (
-                id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 from_wallet_id INTEGER NOT NULL,
                 to_wallet_id INTEGER NOT NULL,
                 date TEXT NOT NULL,
@@ -9295,6 +9302,66 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
 
         assert_eq!(transfer.id, 3);
         assert_eq!(transfer.target_amount, 0.2);
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn currency_transfer_reuses_id_of_deleted_tail_transfer() {
+        let db_path = create_balance_test_db();
+        let tail = create_transfer(
+            &db_path,
+            &TransferCreatePayload {
+                from_wallet_id: 1,
+                to_wallet_id: 2,
+                date: "2026-01-05".to_owned(),
+                amount: "100".to_owned(),
+                currency: "KZT".to_owned(),
+                description: "Tail transfer".to_owned(),
+                commission_amount: "0".to_owned(),
+                commission_currency: "KZT".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(tail.id, 2);
+        delete_transfer(&db_path, tail.id).unwrap();
+        upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "KZT".to_owned(),
+                currency: "USD".to_owned(),
+                rate: "500".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "test".to_owned(),
+            },
+        )
+        .unwrap();
+        let usd_wallet = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "USD wallet".to_owned(),
+                currency: "USD".to_owned(),
+                initial_balance: "0".to_owned(),
+                allow_negative: true,
+            },
+        )
+        .unwrap();
+
+        let transfer = create_currency_transfer(
+            &db_path,
+            &CurrencyTransferCreatePayload {
+                from_wallet_id: 2,
+                to_wallet_id: usd_wallet.id,
+                date: "2026-01-10".to_owned(),
+                amount: "100".to_owned(),
+                amount_currency: "KZT".to_owned(),
+                description: "Replacement transfer".to_owned(),
+                commission_amount: "0".to_owned(),
+                commission_currency: "KZT".to_owned(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(transfer.id, tail.id);
         remove_test_db(&db_path);
     }
 
