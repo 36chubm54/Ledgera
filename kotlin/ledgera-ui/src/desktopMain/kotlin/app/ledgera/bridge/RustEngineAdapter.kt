@@ -78,6 +78,12 @@ import app.ledgera.model.CurrencyRefreshResult
 import app.ledgera.model.CurrencyRefreshStatus
 import app.ledgera.model.CurrencyRateSnapshot
 import app.ledgera.model.CurrencyProviderStatus
+import app.ledgera.model.CurrencyProviderDefinition
+import app.ledgera.model.CurrencyProviderDefinitionRequest
+import app.ledgera.model.CurrencyProviderSetting
+import app.ledgera.model.CurrencyProviderSettingRequest
+import app.ledgera.model.CurrencyProviderTestRequest
+import app.ledgera.model.CurrencyProviderTestResult
 import app.ledgera.model.ReportCategoryRow
 import app.ledgera.model.ReportDebtRow
 import app.ledgera.model.ReportMonthlyRow
@@ -314,6 +320,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 providerPayload = request.providerPayload,
                 payloadFormat = request.payloadFormat,
                 apiKey = request.apiKey,
+                credentialRef = request.credentialRef,
                 timeoutSeconds = request.timeoutSeconds,
                 dryRun = request.dryRun,
             )
@@ -338,6 +345,75 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         engine.currencyProviderStatuses().map {
             CurrencyProviderStatus(it.name, it.configured, it.selected, it.lastStatus, it.diagnostic)
         }
+    }
+
+    override suspend fun currencyProviderDefinitions(): List<CurrencyProviderDefinition> = withContext(Dispatchers.IO) {
+        engine.currencyProviderDefinitions().map {
+            CurrencyProviderDefinition(it.providerId, it.displayName, it.endpoint, it.httpMethod, it.responseFormat, it.currencyPath, it.ratePath, it.effectiveDatePath, it.aliasesJson, it.responseBaseCurrency, it.rateSemantics, it.authMode, it.credentialRef, it.requestBody, it.timeoutSeconds, it.retryCount, it.redirectLimit, it.schemaVersion, it.active, it.testedAt, it.createdAt, it.updatedAt)
+        }
+    }
+
+    override suspend fun currencyProviderSettings(): List<CurrencyProviderSetting> = withContext(Dispatchers.IO) {
+        engine.currencyProviderSettings().map {
+            CurrencyProviderSetting(it.providerId, it.mode, it.primaryEnabled, it.fallbackEnabled, it.credentialStatus, it.lastStatus, it.lastDiagnostic, it.lastCheckedAt)
+        }
+    }
+
+    override suspend fun upsertCurrencyProviderSetting(request: CurrencyProviderSettingRequest): CurrencyProviderSetting = withContext(Dispatchers.IO) {
+        engine.upsertCurrencyProviderSetting(
+            app.ledgera.engine.CurrencyProviderSettingRequest(
+                providerId = request.providerId,
+                mode = request.mode,
+                primaryEnabled = request.primaryEnabled,
+                fallbackEnabled = request.fallbackEnabled,
+                credentialStatus = request.credentialStatus,
+            )
+        ).let {
+            CurrencyProviderSetting(it.providerId, it.mode, it.primaryEnabled, it.fallbackEnabled, it.credentialStatus, it.lastStatus, it.lastDiagnostic, it.lastCheckedAt)
+        }
+    }
+
+    override suspend fun upsertCurrencyProviderDefinition(request: CurrencyProviderDefinitionRequest): CurrencyProviderDefinition = withContext(Dispatchers.IO) {
+        engine.upsertCurrencyProviderDefinition(
+            app.ledgera.engine.CurrencyProviderDefinitionRequest(
+                providerId = request.providerId,
+                displayName = request.displayName,
+                endpoint = request.endpoint,
+                httpMethod = request.httpMethod,
+                responseFormat = request.responseFormat,
+                currencyPath = request.currencyPath,
+                ratePath = request.ratePath,
+                effectiveDatePath = request.effectiveDatePath,
+                aliasesJson = request.aliasesJson,
+                responseBaseCurrency = request.responseBaseCurrency,
+                rateSemantics = request.rateSemantics,
+                authMode = request.authMode,
+                credentialRef = request.credentialRef,
+                requestBody = request.requestBody,
+                timeoutSeconds = request.timeoutSeconds,
+                retryCount = request.retryCount,
+                redirectLimit = request.redirectLimit,
+            )
+        ).let {
+            CurrencyProviderDefinition(it.providerId, it.displayName, it.endpoint, it.httpMethod, it.responseFormat, it.currencyPath, it.ratePath, it.effectiveDatePath, it.aliasesJson, it.responseBaseCurrency, it.rateSemantics, it.authMode, it.credentialRef, it.requestBody, it.timeoutSeconds, it.retryCount, it.redirectLimit, it.schemaVersion, it.active, it.testedAt, it.createdAt, it.updatedAt)
+        }
+    }
+
+    override suspend fun deleteCurrencyProviderDefinition(providerId: String): Boolean = withContext(Dispatchers.IO) {
+        engine.deleteCurrencyProviderDefinition(providerId)
+    }
+
+    override suspend fun testCurrencyProvider(request: CurrencyProviderTestRequest): CurrencyProviderTestResult = withContext(Dispatchers.IO) {
+        engine.testCurrencyProvider(
+            app.ledgera.engine.CurrencyProviderTestRequest(
+                providerId = request.providerId,
+                baseCurrency = request.baseCurrency,
+                effectiveDate = request.effectiveDate,
+                testedAt = request.testedAt,
+                providerPayload = request.providerPayload,
+                apiKey = request.apiKey,
+            )
+        ).let { CurrencyProviderTestResult(it.providerId, it.status, it.ratesCount, it.effectiveDate, it.diagnostic, it.activated) }
     }
 
     override suspend fun listRecords(filter: OperationFilter): List<OperationRecord> =

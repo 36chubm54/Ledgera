@@ -8,7 +8,17 @@ import app.ledgera.model.FullBackupResult
 import app.ledgera.model.WalletSettingsItem
 import app.ledgera.model.CurrencyRate
 import app.ledgera.model.CurrencyProviderStatus
+import app.ledgera.model.CurrencyProviderDefinition
+import app.ledgera.model.CurrencyProviderDefinitionRequest
+import app.ledgera.model.CurrencyProviderSetting
+import app.ledgera.model.CurrencyProviderSettingRequest
+import app.ledgera.model.CurrencyProviderTestRequest
+import app.ledgera.model.CurrencyProviderTestResult
 import app.ledgera.model.CurrencyRefreshStatus
+import app.ledgera.model.CurrencyRefreshRequest
+import app.ledgera.model.CurrencyRefreshResult
+import app.ledgera.validation.DateValidation
+import app.ledgera.validation.currentLedgerDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 data class SettingsUiState(
     val loading: Boolean = false,
@@ -25,6 +36,8 @@ data class SettingsUiState(
     val currencyRates: List<CurrencyRate> = emptyList(),
     val currencyRefreshStatus: CurrencyRefreshStatus? = null,
     val currencyProviderStatuses: List<CurrencyProviderStatus> = emptyList(),
+    val currencyProviderDefinitions: List<CurrencyProviderDefinition> = emptyList(),
+    val currencyProviderSettings: List<CurrencyProviderSetting> = emptyList(),
     val auditRunning: Boolean = false,
     val auditFindings: List<AuditFinding> = emptyList(),
     val auditSummary: AuditSummary? = null,
@@ -38,9 +51,17 @@ data class SettingsUiState(
 class SettingsViewModel(
     private val engine: SettingsEngine,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
+    private val onCurrencyRefreshSuccess: suspend () -> Unit = {},
 ) {
     private val mutableState = MutableStateFlow(SettingsUiState(loading = true))
     val state: StateFlow<SettingsUiState> = mutableState.asStateFlow()
+    private val currencyRefreshCoordinator = CurrencyRefreshCoordinator(
+        engine = engine,
+        scope = scope,
+        requestFactory = ::buildCurrencyRefreshRequest,
+        onSuccess = { result -> handleCurrencyRefreshSuccess(result) },
+        onFailure = ::handleCurrencyRefreshFailure,
+    )
 
     fun refresh(preserveNotice: String? = null) {
         mutableState.value = mutableState.value.copy(loading = true, error = null, notice = preserveNotice)
@@ -52,6 +73,8 @@ class SettingsViewModel(
                 val rates = engine.currencyRates()
                 val refreshStatus = runCatching { engine.currencyRefreshStatus() }.getOrNull()
                 val providerStatuses = runCatching { engine.currencyProviderStatuses() }.getOrDefault(emptyList())
+                val providerDefinitions = runCatching { engine.currencyProviderDefinitions() }.getOrDefault(emptyList())
+                val providerSettings = runCatching { engine.currencyProviderSettings() }.getOrDefault(emptyList())
                 mutableState.value = mutableState.value.copy(
                     loading = false,
                     wallets = wallets,
@@ -60,6 +83,8 @@ class SettingsViewModel(
                     currencyRates = rates,
                     currencyRefreshStatus = refreshStatus,
                     currencyProviderStatuses = providerStatuses,
+                    currencyProviderDefinitions = providerDefinitions,
+                    currencyProviderSettings = providerSettings,
                 )
             }.onFailure(::showError)
         }
@@ -71,6 +96,21 @@ class SettingsViewModel(
 
     fun clearNotice() {
         mutableState.value = mutableState.value.copy(notice = null)
+    }
+
+    fun startCurrencyRefresh(autoUpdate: Boolean, intervalMinutes: Int) {
+        currencyRefreshCoordinator.start(autoUpdate, intervalMinutes)
+    }
+
+    fun stopCurrencyRefresh() {
+        currencyRefreshCoordinator.stop()
+    }
+
+    fun refreshCurrencyRates() {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            currencyRefreshCoordinator.refreshNow()
+        }
     }
 
     fun setBaseCurrency(currency: String) {
@@ -96,6 +136,49 @@ class SettingsViewModel(
         launchSafely {
             runCatching { engine.deleteCurrencyRate(rateId) }
                 .onSuccess { refresh("Currency rate deleted") }
+                .onFailure(::showError)
+        }
+    }
+
+    fun saveCurrencyProvider(request: CurrencyProviderDefinitionRequest) {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.upsertCurrencyProviderDefinition(request) }
+                .onSuccess { refresh("Provider saved; test connection to activate it") }
+                .onFailure(::showError)
+        }
+    }
+
+    fun deleteCurrencyProvider(providerId: String) {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.deleteCurrencyProviderDefinition(providerId) }
+                .onSuccess { refresh("Provider deleted") }
+                .onFailure(::showError)
+        }
+    }
+
+    fun setCurrencyProviderMode(request: CurrencyProviderSettingRequest) {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.upsertCurrencyProviderSetting(request) }
+                .onSuccess { refresh("Provider mode updated") }
+                .onFailure(::showError)
+        }
+    }
+
+    fun testCurrencyProvider(request: CurrencyProviderTestRequest) {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching { engine.testCurrencyProvider(request) }
+                .onSuccess { result ->
+                    mutableState.value = mutableState.value.copy(
+                        loading = false,
+                        error = result.diagnostic.ifBlank { null },
+                        notice = if (result.activated) "Provider test succeeded" else "Provider test failed",
+                    )
+                    refresh(mutableState.value.notice)
+                }
                 .onFailure(::showError)
         }
     }
@@ -216,6 +299,37 @@ class SettingsViewModel(
             error = error.message ?: error::class.simpleName ?: "Unknown error",
             notice = null,
         )
+    }
+
+    private suspend fun buildCurrencyRefreshRequest(): CurrencyRefreshRequest {
+        val date = DateValidation.formatYmd(currentLedgerDate())
+        val providers = runCatching { engine.currencyProviderStatuses() }.getOrDefault(emptyList())
+        val primary = providers.firstOrNull { it.selected }?.name ?: "nbk"
+        val fallback = providers.firstOrNull { it.name == "exchange_rate" && it.name != primary }?.name
+            ?: "static"
+        return CurrencyRefreshRequest(
+            refreshId = "desktop-${date}-${Random.nextLong().toString(16)}",
+            backend = "rust",
+            baseCurrency = engine.baseCurrency(),
+            primaryProvider = primary,
+            fallbackProvider = fallback,
+            effectiveDate = date,
+            fetchedAt = date,
+        )
+    }
+
+    private suspend fun handleCurrencyRefreshSuccess(result: CurrencyRefreshResult) {
+        mutableState.value = mutableState.value.copy(
+            loading = false,
+            notice = "Currency refresh completed: ${result.ratesCount} rates",
+            error = result.diagnostic.ifBlank { null },
+        )
+        refresh(mutableState.value.notice)
+        onCurrencyRefreshSuccess()
+    }
+
+    private suspend fun handleCurrencyRefreshFailure(error: Throwable) {
+        showError(error)
     }
 
     private fun launchSafely(block: suspend () -> Unit) {

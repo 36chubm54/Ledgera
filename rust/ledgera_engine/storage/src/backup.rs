@@ -1,8 +1,8 @@
 use crate::{
-    export_temp_path, normalize_tag_name, replace_export_file, sqlite_err,
-    storage_clear_read_connection_cache, StorageResult,
+    StorageResult, export_temp_path, normalize_tag_name, replace_export_file, sqlite_err,
+    storage_clear_read_connection_cache,
 };
-use rusqlite::{types::Value, Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction, types::Value};
 use serde_json::{Map, Number, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 const BACKUP_FORMAT: &str = "ledgera.full_backup";
-const BACKUP_VERSION: i64 = 4;
+const BACKUP_VERSION: i64 = 5;
 const MAX_BACKUP_BYTES: u64 = 50 * 1024 * 1024;
 
 const BACKUP_TABLES: &[&str] = &[
@@ -31,6 +31,8 @@ const BACKUP_TABLES: &[&str] = &[
     "distribution_snapshots",
     "distribution_snapshot_values",
     "currency_rates",
+    "currency_provider_definitions",
+    "currency_provider_settings",
     "currency_rate_snapshots",
     "currency_refresh_runs",
 ];
@@ -42,7 +44,10 @@ const DISTRIBUTION_RESULT_TABLES: &[&str] = &[
 ];
 
 fn backup_section_count(object: &Map<String, JsonValue>, table: &str) -> i64 {
-    object.get(table).and_then(JsonValue::as_array).map_or(0, |rows| rows.len() as i64)
+    object
+        .get(table)
+        .and_then(JsonValue::as_array)
+        .map_or(0, |rows| rows.len() as i64)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -163,7 +168,10 @@ fn sections(payload: &JsonValue) -> StorageResult<&Map<String, JsonValue>> {
         return Err("Unsupported backup format".to_owned());
     }
     let version = object.get("version").and_then(JsonValue::as_i64);
-    if !matches!(version, Some(1) | Some(2) | Some(3) | Some(BACKUP_VERSION)) {
+    if !matches!(
+        version,
+        Some(1) | Some(2) | Some(3) | Some(4) | Some(BACKUP_VERSION)
+    ) {
         return Err("Unsupported backup version".to_owned());
     }
     Ok(object)
@@ -240,8 +248,7 @@ fn validate_scalar_type(
             column.name
         ));
     }
-    if column.name == "id"
-        || (column.name.ends_with("_id") && column.declared_type.contains("INT"))
+    if column.name == "id" || (column.name.ends_with("_id") && column.declared_type.contains("INT"))
     {
         if value.as_i64().map(|id| id <= 0).unwrap_or(true) {
             return Err(format!(
@@ -346,10 +353,7 @@ fn validate_relationships(object: &Map<String, JsonValue>) -> StorageResult<()> 
                 .filter_map(|row| row.as_object()?.get("month")?.as_str().map(str::to_owned))
                 .collect()
         });
-    if let Some(rows) = object
-        .get("asset_snapshots")
-        .and_then(JsonValue::as_array)
-    {
+    if let Some(rows) = object.get("asset_snapshots").and_then(JsonValue::as_array) {
         for (index, row) in rows.iter().enumerate() {
             validate_reference(
                 "asset_snapshots",
@@ -723,6 +727,8 @@ fn validate_payload(conn: &Connection, payload: &JsonValue) -> StorageResult<Vec
             || *table == "distribution_snapshots"
             || *table == "distribution_snapshot_values"
             || *table == "currency_rates"
+            || *table == "currency_provider_definitions"
+            || *table == "currency_provider_settings"
             || *table == "currency_rate_snapshots"
             || *table == "currency_refresh_runs")
             && !object.contains_key(*table)
@@ -854,14 +860,14 @@ pub fn export_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         return Err(error);
     }
     let distribution_rows = DISTRIBUTION_RESULT_TABLES
-    .iter()
-    .map(|table| {
-        object
-            .get(*table)
-            .and_then(JsonValue::as_array)
-            .map_or(0, |rows| rows.len() as i64)
-    })
-    .sum();
+        .iter()
+        .map(|table| {
+            object
+                .get(*table)
+                .and_then(JsonValue::as_array)
+                .map_or(0, |rows| rows.len() as i64)
+        })
+        .sum();
     Ok(FullBackupResult {
         path: path.to_owned(),
         imported_rows: total,
@@ -944,14 +950,14 @@ pub fn preview_full_backup_json(db_path: &str, path: &str) -> StorageResult<Full
         })
         .sum();
     let distribution_rows = DISTRIBUTION_RESULT_TABLES
-    .iter()
-    .map(|table| {
-        object
-            .get(*table)
-            .and_then(JsonValue::as_array)
-            .map_or(0, |rows| rows.len() as i64)
-    })
-    .sum();
+        .iter()
+        .map(|table| {
+            object
+                .get(*table)
+                .and_then(JsonValue::as_array)
+                .map_or(0, |rows| rows.len() as i64)
+        })
+        .sum();
     Ok(FullBackupResult {
         path: path.to_owned(),
         imported_rows,
@@ -990,6 +996,8 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "distribution_snapshots",
         "distribution_subitems",
         "distribution_items",
+        "currency_provider_settings",
+        "currency_provider_definitions",
         "currency_rate_snapshots",
         "currency_refresh_runs",
         "wallets",
@@ -1016,6 +1024,8 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "distribution_snapshots",
         "distribution_snapshot_values",
         "currency_rates",
+        "currency_provider_definitions",
+        "currency_provider_settings",
         "currency_rate_snapshots",
         "currency_refresh_runs",
     ] {
@@ -1070,14 +1080,14 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
     tx.commit().map_err(sqlite_err)?;
     storage_clear_read_connection_cache();
     let distribution_rows = DISTRIBUTION_RESULT_TABLES
-    .iter()
-    .map(|table| {
-        object
-            .get(*table)
-            .and_then(JsonValue::as_array)
-            .map_or(0, |rows| rows.len() as i64)
-    })
-    .sum();
+        .iter()
+        .map(|table| {
+            object
+                .get(*table)
+                .and_then(JsonValue::as_array)
+                .map_or(0, |rows| rows.len() as i64)
+        })
+        .sum();
     Ok(FullBackupResult {
         path: path.to_owned(),
         imported_rows,

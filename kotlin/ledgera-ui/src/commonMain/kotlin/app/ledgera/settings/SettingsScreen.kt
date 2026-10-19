@@ -40,10 +40,14 @@ import app.ledgera.model.AuditFinding
 import app.ledgera.model.AuditSummary
 import app.ledgera.model.CreateWalletRequest
 import app.ledgera.model.CurrencyRate
+import app.ledgera.model.CurrencyProviderDefinition
+import app.ledgera.model.CurrencyProviderDefinitionRequest
+import app.ledgera.model.CurrencyProviderTestRequest
 import app.ledgera.model.WalletSettingsItem
 import app.ledgera.ui.LedgerDateField
 import app.ledgera.validation.CurrencyValidation
 import app.ledgera.validation.DateValidation
+import app.ledgera.validation.currentLedgerDate
 
 interface SettingsFileActions {
     fun openBackupPath(): String?
@@ -69,6 +73,7 @@ fun SettingsScreen(
     var editingCurrencyRate by remember { mutableStateOf<CurrencyRate?>(null) }
     var walletPendingDelete by remember { mutableStateOf<WalletSettingsItem?>(null) }
     var showAuditReport by remember { mutableStateOf(false) }
+    var showProviderDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -128,7 +133,25 @@ fun SettingsScreen(
             },
             onDeleteRate = viewModel::deleteCurrencyRate,
             onSetBase = viewModel::setBaseCurrency,
+            onRefresh = viewModel::refreshCurrencyRates,
             onShowHistory = { showCurrencyRateHistory = true },
+        )
+        OnlineProvidersSection(
+            definitions = state.currencyProviderDefinitions,
+            statuses = state.currencyProviderStatuses,
+            loading = state.loading,
+            onAdd = { viewModel.clearFeedback(); showProviderDialog = true },
+            onDelete = viewModel::deleteCurrencyProvider,
+            onTest = { provider ->
+                viewModel.testCurrencyProvider(
+                    CurrencyProviderTestRequest(
+                        providerId = provider.providerId,
+                        baseCurrency = state.baseCurrency,
+                        effectiveDate = currentSettingsDate(),
+                        testedAt = currentSettingsDate(),
+                    )
+                )
+            },
         )
         AuditSection(
             running = state.auditRunning,
@@ -181,6 +204,15 @@ fun SettingsScreen(
             },
             onDelete = viewModel::deleteCurrencyRate,
             onClose = { showCurrencyRateHistory = false },
+        )
+    }
+    if (showProviderDialog) {
+        CustomProviderDialog(
+            baseCurrency = state.baseCurrency,
+            loading = state.loading,
+            error = state.error,
+            onSave = { request -> viewModel.saveCurrencyProvider(request); showProviderDialog = false },
+            onCancel = { showProviderDialog = false },
         )
     }
     walletPendingDelete?.let { wallet ->
@@ -244,6 +276,7 @@ private fun CurrencySection(
     onUpdateRate: (CurrencyRate) -> Unit,
     onDeleteRate: (Long) -> Unit,
     onSetBase: (String) -> Unit,
+    onRefresh: () -> Unit,
     onShowHistory: () -> Unit,
 ) {
     var requestedBase by remember(baseCurrency) { mutableStateOf(baseCurrency) }
@@ -262,6 +295,7 @@ private fun CurrencySection(
             ) {
                 Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = onShowHistory, enabled = !loading && rates.size > 1) { Text("Rate history") }
+                TextButton(onClick = onRefresh, enabled = !loading) { Text("Refresh now") }
             }
             refreshStatus?.let { status ->
                 Text(
@@ -304,6 +338,102 @@ private fun CurrencySection(
             }
         }
     }
+}
+
+@Composable
+private fun OnlineProvidersSection(
+    definitions: List<CurrencyProviderDefinition>,
+    statuses: List<app.ledgera.model.CurrencyProviderStatus>,
+    loading: Boolean,
+    onAdd: () -> Unit,
+    onDelete: (String) -> Unit,
+    onTest: (CurrencyProviderDefinition) -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Online providers", style = MaterialTheme.typography.titleMedium)
+                Button(onClick = onAdd, enabled = !loading) { Text("Add custom") }
+            }
+            Text("Built-in: ${statuses.filter { !it.name.startsWith("custom:") }.joinToString { it.name }}", style = MaterialTheme.typography.bodySmall)
+            if (definitions.isEmpty()) {
+                Text("No custom providers configured.", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    definitions.forEach { provider ->
+                        val status = statuses.firstOrNull { it.name == provider.providerId }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(provider.displayName, fontWeight = FontWeight.Medium)
+                                Text("${provider.providerId} · ${provider.authMode} · ${if (provider.active) "active" else "test required"}", style = MaterialTheme.typography.bodySmall)
+                                status?.let { Text("Status: ${it.lastStatus}${it.diagnostic.takeIf(String::isNotBlank)?.let { detail -> " · $detail" } ?: ""}", style = MaterialTheme.typography.bodySmall) }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TextButton(onClick = { onTest(provider) }, enabled = !loading) { Text("Test") }
+                                TextButton(onClick = { onDelete(provider.providerId) }, enabled = !loading) { Text("Delete") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomProviderDialog(
+    baseCurrency: String,
+    loading: Boolean,
+    error: String?,
+    onSave: (CurrencyProviderDefinitionRequest) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var slug by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
+    var endpoint by remember { mutableStateOf("") }
+    var responseFormat by remember { mutableStateOf("json") }
+    var currencyPath by remember { mutableStateOf("$.rates") }
+    var ratePath by remember { mutableStateOf("$.rates") }
+    var responseBase by remember { mutableStateOf("USD") }
+    var semantics by remember { mutableStateOf("quote_per_base") }
+    var authMode by remember { mutableStateOf("none") }
+    var credentialRef by remember { mutableStateOf("") }
+    val valid = slug.matches(Regex("[a-z0-9][a-z0-9_-]{1,63}")) &&
+        displayName.isNotBlank() && endpoint.startsWith("https://") &&
+        currencyPath.isNotBlank() && ratePath.isNotBlank() && responseBase.matches(Regex("[A-Za-z]{3}")) &&
+        (authMode == "none" || credentialRef.isNotBlank())
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Add custom provider") },
+        text = {
+            Column(Modifier.width(DialogContentWidth).heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(slug, { slug = it.lowercase() }, label = { Text("Slug") }, placeholder = { Text("my-provider") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(endpoint, { endpoint = it }, label = { Text("HTTPS endpoint") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(responseFormat, { responseFormat = it.lowercase() }, label = { Text("Format: json or xml") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(currencyPath, { currencyPath = it }, label = { Text("Currency path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(ratePath, { ratePath = it }, label = { Text("Rate path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(responseBase, { responseBase = it.uppercase().take(3) }, label = { Text("Response base") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(semantics, { semantics = it.lowercase() }, label = { Text("Rate semantics") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(authMode, { authMode = it.lowercase() }, label = { Text("Auth: none, api_key_header, api_key_query, bearer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (authMode != "none") OutlinedTextField(credentialRef, { credentialRef = it }, label = { Text("Credential reference") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text("Base currency: $baseCurrency. Provider stays inactive until Test succeeds.", style = MaterialTheme.typography.bodySmall)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(CurrencyProviderDefinitionRequest("custom:$slug", displayName, endpoint, responseFormat = responseFormat, currencyPath = currencyPath, ratePath = ratePath, responseBaseCurrency = responseBase, rateSemantics = semantics, authMode = authMode, credentialRef = credentialRef))
+                },
+                enabled = valid && !loading,
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onCancel, enabled = !loading) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -718,3 +848,7 @@ private fun CreateWalletDialog(
 }
 
 private val DialogContentWidth = 360.dp
+
+private fun currentSettingsDate(): String = currentLedgerDate().let {
+    "%04d-%02d-%02d".format(it.year, it.month, it.day)
+}

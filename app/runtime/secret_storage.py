@@ -111,22 +111,27 @@ def _require_available_status() -> SecretStorageStatus:
     return status
 
 
-def _get_password(service_name: str) -> str:
+def _get_password(service_name: str, account: str = EXCHANGE_RATE_API_KEY_ACCOUNT) -> str:
     if keyring is None:
         return ""
     try:
-        value = keyring.get_password(service_name, EXCHANGE_RATE_API_KEY_ACCOUNT)
+        value = keyring.get_password(service_name, account)
     except (KeyringError, NoKeyringError, RuntimeError, AttributeError):
         logger.exception("Failed to read ExchangeRate API key from secure storage")
         return ""
     return str(value or "").strip()
 
 
-def _delete_password_quietly(service_name: str, *, log_message: str) -> None:
+def _delete_password_quietly(
+    service_name: str,
+    *,
+    log_message: str,
+    account: str = EXCHANGE_RATE_API_KEY_ACCOUNT,
+) -> None:
     if keyring is None:
         return
     try:
-        keyring.delete_password(service_name, EXCHANGE_RATE_API_KEY_ACCOUNT)
+        keyring.delete_password(service_name, account)
     except Exception as exc:
         if _is_expected_keyring_error(exc):
             logger.debug(log_message, exc_info=True)
@@ -138,6 +143,50 @@ def get_exchange_rate_api_key() -> str:
     if keyring is None:
         return ""
     return _get_password(SERVICE_NAME) or _get_password(LEGACY_SERVICE_NAME)
+
+
+def credential_account(credential_ref: str) -> str:
+    normalized = str(credential_ref or "").strip()
+    if not normalized:
+        raise ValueError("Credential reference is required")
+    return normalized if normalized.startswith("Ledgera.") else f"Ledgera.CurrencyProvider.{normalized}"
+
+
+def get_secret(credential_ref: str) -> str:
+    """Read a provider secret without exposing its value to configuration or backups."""
+    account = credential_account(credential_ref)
+    return _get_password(SERVICE_NAME, account) or _get_password(LEGACY_SERVICE_NAME, account)
+
+
+def set_secret(credential_ref: str, value: str) -> None:
+    normalized = str(value or "").strip()
+    _require_available_status()
+    if keyring is None:  # pragma: no cover - defensive
+        raise SecretStorageUnavailableError("Secure API key storage is unavailable")
+    account = credential_account(credential_ref)
+    try:
+        keyring.set_password(SERVICE_NAME, account, normalized)
+    except (KeyringError, NoKeyringError, RuntimeError, AttributeError) as exc:
+        raise SecretStorageUnavailableError(
+            "Failed to persist the provider credential in secure OS storage."
+        ) from exc
+
+
+def delete_secret(credential_ref: str) -> None:
+    status = get_secret_storage_status()
+    if not status.available or keyring is None:
+        return
+    account = credential_account(credential_ref)
+    _delete_password_quietly(
+        SERVICE_NAME,
+        log_message="Provider credential cleanup skipped",
+        account=account,
+    )
+    _delete_password_quietly(
+        LEGACY_SERVICE_NAME,
+        log_message="Legacy provider credential cleanup skipped",
+        account=account,
+    )
 
 
 def set_exchange_rate_api_key(value: str) -> None:

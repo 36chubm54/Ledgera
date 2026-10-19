@@ -240,6 +240,7 @@ data class CurrencyRefreshRequest(
     val providerPayload: String = "",
     val payloadFormat: String = "",
     val apiKey: String = "",
+    val credentialRef: String = "",
     val timeoutSeconds: Long = 10,
     val dryRun: Boolean = false,
 )
@@ -294,6 +295,88 @@ data class CurrencyProviderStatus(
     val selected: Boolean,
     val lastStatus: String,
     val diagnostic: String,
+)
+
+data class CurrencyProviderDefinitionRequest(
+    val providerId: String,
+    val displayName: String,
+    val endpoint: String,
+    val httpMethod: String = "GET",
+    val responseFormat: String = "json",
+    val currencyPath: String,
+    val ratePath: String,
+    val effectiveDatePath: String = "",
+    val aliasesJson: String = "{}",
+    val responseBaseCurrency: String,
+    val rateSemantics: String = "quote_per_base",
+    val authMode: String = "none",
+    val credentialRef: String = "",
+    val requestBody: String = "",
+    val timeoutSeconds: Long = 10,
+    val retryCount: Long = 0,
+    val redirectLimit: Long = 3,
+)
+
+data class CurrencyProviderDefinition(
+    val providerId: String,
+    val displayName: String,
+    val endpoint: String,
+    val httpMethod: String,
+    val responseFormat: String,
+    val currencyPath: String,
+    val ratePath: String,
+    val effectiveDatePath: String,
+    val aliasesJson: String,
+    val responseBaseCurrency: String,
+    val rateSemantics: String,
+    val authMode: String,
+    val credentialRef: String,
+    val requestBody: String,
+    val timeoutSeconds: Long,
+    val retryCount: Long,
+    val redirectLimit: Long,
+    val schemaVersion: Long,
+    val active: Boolean,
+    val testedAt: String,
+    val createdAt: String,
+    val updatedAt: String,
+)
+
+data class CurrencyProviderSetting(
+    val providerId: String,
+    val mode: String,
+    val primaryEnabled: Boolean,
+    val fallbackEnabled: Boolean,
+    val credentialStatus: String,
+    val lastStatus: String,
+    val lastDiagnostic: String,
+    val lastCheckedAt: String,
+)
+
+data class CurrencyProviderSettingRequest(
+    val providerId: String,
+    val mode: String,
+    val primaryEnabled: Boolean,
+    val fallbackEnabled: Boolean,
+    val credentialStatus: String,
+)
+
+data class CurrencyProviderTestRequest(
+    val providerId: String,
+    val baseCurrency: String,
+    val effectiveDate: String,
+    val testedAt: String,
+    val providerPayload: String = "",
+    val apiKey: String = "",
+)
+
+data class CurrencyProviderTestResult(
+    val providerId: String,
+    val status: String,
+    val ratesCount: Long,
+    val effectiveDate: String,
+    val diagnostic: String,
+    val activated: Boolean,
 )
 
 data class CreateWalletRequest(

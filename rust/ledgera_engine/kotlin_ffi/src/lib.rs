@@ -1,55 +1,59 @@
 use ledgera_engine_storage::{
     AnalyticsBreakdownRow, AnalyticsFilters, AnalyticsSnapshot, AssetPayload,
     AssetSnapshotUpdatePayload, AuditFindingRow, BudgetCreatePayload, BudgetPayload,
-    BudgetResultPayload, DashboardPayload, DebtCreatePayload, DebtPayload, DebtPaymentPayload,
-    DebtPaymentRequestPayload, DistributionItemPayload, DistributionMonthlyPayload,
-    DistributionSubitemPayload, FrozenDistributionPayload, GoalPayload,
+    BudgetResultPayload, CurrencyProviderDefinitionPayload, CurrencyProviderDefinitionRow,
+    CurrencyProviderSettingPayload, CurrencyProviderSettingRow, CurrencyProviderTestResultRow,
+    CurrencyRatePayload, CurrencyRateRow, CurrencyRateSnapshotRow, CurrencyRefreshRequestPayload,
+    CurrencyRefreshResultRow, CurrencyRefreshStatusRow, CurrencyTransferCreatePayload,
+    CurrencyTransferQuoteRow, CurrencyTransferRow, DashboardPayload, DebtCreatePayload,
+    DebtPayload, DebtPaymentPayload, DebtPaymentRequestPayload, DistributionItemPayload,
+    DistributionMonthlyPayload, DistributionSubitemPayload, FrozenDistributionPayload, GoalPayload,
     MandatoryAddToRecordsPayload, MandatoryAutoPayResult, MandatoryExpenseRow,
     MandatoryExportResult, MandatoryImportResult, MandatoryTemplateCreatePayload,
     MandatoryTemplateUpdatePayload, OperationDeleteResult, OperationExportResult,
     OperationImportResult, RecordFilterPayload, RecordRow, ReportCategoryRow, ReportDebtRow,
     ReportExportResult, ReportFilters, ReportMonthlyRow, ReportOperationRow, ReportResult,
-    ReportTagRow, StandaloneRecordCreatePayload, StandaloneRecordUpdatePayload,
-    TagColorAssignment as StorageTagColorAssignment, TransferCreatePayload, TransferRow,
-    TransferUpdatePayload, WalletBalanceRow, WalletCreatePayload, WalletRow, analytics_generate,
-    analytics_list_categories, analytics_list_months, analytics_list_tags, analytics_list_years,
-    asset_add_snapshot, asset_add_snapshots_bulk, asset_create, asset_rows, asset_set_active,
-    asset_update, audit_run_for_date, base_currency_code, budget_create, budget_delete,
-    budget_results, budget_rows, budget_update_limit, create_standalone_record_with_tag_colors,
-    create_transfer, create_wallet, current_local_date, dashboard_payload, debt_close_validated,
-    debt_create, debt_delete, debt_delete_payment, debt_payment_rows,
+    ReportTagRow, SUPPORTED_CURRENCY_PROVIDER_NAMES, StandaloneRecordCreatePayload,
+    StandaloneRecordUpdatePayload, TagColorAssignment as StorageTagColorAssignment,
+    TransferCreatePayload, TransferRow, TransferUpdatePayload, WalletBalanceRow,
+    WalletCreatePayload, WalletRow, analytics_generate, analytics_list_categories,
+    analytics_list_months, analytics_list_tags, analytics_list_years, asset_add_snapshot,
+    asset_add_snapshots_bulk, asset_create, asset_rows, asset_set_active, asset_update,
+    audit_run_for_date, base_currency_code, budget_create, budget_delete, budget_results,
+    budget_rows, budget_update_limit, create_currency_transfer,
+    create_standalone_record_with_tag_colors, create_transfer, create_wallet,
+    currency_provider_definition_rows, currency_provider_setting_rows, currency_rate_rows,
+    currency_rate_snapshot_rows, currency_transfer_quote, current_local_date, dashboard_payload,
+    debt_close_validated, debt_create, debt_delete, debt_delete_payment, debt_payment_rows,
     debt_register_payment_validated, debt_register_write_off_validated, debt_rows,
-    delete_all_operations, delete_operations_selection, delete_standalone_record, delete_transfer,
-    delete_wallet, distinct_record_categories, distinct_record_descriptions,
-    distribution_available_months, distribution_create_item, distribution_create_subitem,
-    distribution_delete_item, distribution_delete_subitem, distribution_freeze_closed_months,
-    distribution_frozen_rows, distribution_history_months, distribution_is_month_auto_fixed,
-    distribution_is_month_fixed, distribution_item_rows, distribution_monthly_payload,
-    distribution_subitem_rows, distribution_unfreeze_month, distribution_update_item,
-    distribution_update_item_name, distribution_update_item_order, distribution_update_item_pct,
-    distribution_update_subitem, distribution_update_subitem_name,
-    distribution_update_subitem_order, distribution_update_subitem_pct,
-    distribution_validate_structure, distribution_write_frozen_row, export_full_backup_json,
-    export_mandatory_csv, export_mandatory_xlsx, export_records_csv, export_records_xlsx,
-    filtered_record_list_rows, goal_create, goal_delete, goal_rows, goal_set_completed,
-    import_full_backup_json, import_mandatory_csv, import_mandatory_xlsx, import_records_csv,
-    import_records_xlsx, initialize_database, mandatory_add_to_records,
+    delete_all_operations, delete_currency_provider_definition, delete_currency_rate,
+    delete_operations_selection, delete_standalone_record, delete_transfer, delete_wallet,
+    distinct_record_categories, distinct_record_descriptions, distribution_available_months,
+    distribution_create_item, distribution_create_subitem, distribution_delete_item,
+    distribution_delete_subitem, distribution_freeze_closed_months, distribution_frozen_rows,
+    distribution_history_months, distribution_is_month_auto_fixed, distribution_is_month_fixed,
+    distribution_item_rows, distribution_monthly_payload, distribution_subitem_rows,
+    distribution_unfreeze_month, distribution_update_item, distribution_update_item_name,
+    distribution_update_item_order, distribution_update_item_pct, distribution_update_subitem,
+    distribution_update_subitem_name, distribution_update_subitem_order,
+    distribution_update_subitem_pct, distribution_validate_structure,
+    distribution_write_frozen_row, export_full_backup_json, export_mandatory_csv,
+    export_mandatory_xlsx, export_records_csv, export_records_xlsx, filtered_record_list_rows,
+    goal_create, goal_delete, goal_rows, goal_set_completed, import_full_backup_json,
+    import_mandatory_csv, import_mandatory_xlsx, import_records_csv, import_records_xlsx,
+    initialize_database, latest_currency_refresh_status, mandatory_add_to_records,
     mandatory_apply_auto_payments, mandatory_expense_row, mandatory_expense_rows,
     mandatory_template_create, mandatory_template_delete, mandatory_template_delete_all,
     mandatory_template_update, normalize_tag_colors, operation_suggestions,
     preview_full_backup_json, preview_import_mandatory_csv, preview_import_mandatory_xlsx,
-    preview_import_records_csv, preview_import_records_xlsx, report_export_csv, report_export_pdf,
-    report_export_xlsx, report_generate, set_system_wallet_details,
-    set_system_wallet_initial_balance, standalone_record_get_row, tag_color_palette,
-    tag_color_rows, tag_names, transfer_get_row, update_standalone_record_with_tag_colors,
-    update_transfer, wallet_balance_row, wallet_balance_rows, wallet_current_balance_rows, wallet_list_rows,
-    CurrencyRatePayload, CurrencyRateRow, CurrencyTransferCreatePayload, CurrencyTransferRow,
-    CurrencyTransferQuoteRow, currency_transfer_quote,
-    create_currency_transfer, currency_rate_rows, delete_currency_rate,
-    set_base_currency, supported_currencies, upsert_currency_rate,
-    CurrencyRateSnapshotRow, CurrencyRefreshRequestPayload, CurrencyRefreshResultRow,
-    CurrencyRefreshStatusRow, currency_rate_snapshot_rows, latest_currency_refresh_status,
-    refresh_currency_rates, SUPPORTED_CURRENCY_PROVIDER_NAMES,
+    preview_import_records_csv, preview_import_records_xlsx, refresh_currency_rates,
+    report_export_csv, report_export_pdf, report_export_xlsx, report_generate, set_base_currency,
+    set_system_wallet_details, set_system_wallet_initial_balance, standalone_record_get_row,
+    supported_currencies, tag_color_palette, tag_color_rows, tag_names,
+    test_currency_provider_definition, transfer_get_row, update_standalone_record_with_tag_colors,
+    update_transfer, upsert_currency_provider_definition, upsert_currency_provider_setting,
+    upsert_currency_rate, wallet_balance_row, wallet_balance_rows, wallet_current_balance_rows,
+    wallet_list_rows,
 };
 use std::fmt;
 use std::path::Path;
@@ -723,6 +727,7 @@ pub struct CurrencyRefreshRequest {
     pub provider_payload: String,
     pub payload_format: String,
     pub api_key: String,
+    pub credential_ref: String,
     pub timeout_seconds: i64,
     pub dry_run: bool,
 }
@@ -760,6 +765,94 @@ pub struct CurrencyProviderStatusDto {
     pub selected: bool,
     pub last_status: String,
     pub diagnostic: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyProviderDefinitionRequest {
+    pub provider_id: String,
+    pub display_name: String,
+    pub endpoint: String,
+    pub http_method: String,
+    pub response_format: String,
+    pub currency_path: String,
+    pub rate_path: String,
+    pub effective_date_path: String,
+    pub aliases_json: String,
+    pub response_base_currency: String,
+    pub rate_semantics: String,
+    pub auth_mode: String,
+    pub credential_ref: String,
+    pub request_body: String,
+    pub timeout_seconds: i64,
+    pub retry_count: i64,
+    pub redirect_limit: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyProviderDefinitionDto {
+    pub provider_id: String,
+    pub display_name: String,
+    pub endpoint: String,
+    pub http_method: String,
+    pub response_format: String,
+    pub currency_path: String,
+    pub rate_path: String,
+    pub effective_date_path: String,
+    pub aliases_json: String,
+    pub response_base_currency: String,
+    pub rate_semantics: String,
+    pub auth_mode: String,
+    pub credential_ref: String,
+    pub request_body: String,
+    pub timeout_seconds: i64,
+    pub retry_count: i64,
+    pub redirect_limit: i64,
+    pub schema_version: i64,
+    pub active: bool,
+    pub tested_at: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyProviderSettingDto {
+    pub provider_id: String,
+    pub mode: String,
+    pub primary_enabled: bool,
+    pub fallback_enabled: bool,
+    pub credential_status: String,
+    pub last_status: String,
+    pub last_diagnostic: String,
+    pub last_checked_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyProviderSettingRequest {
+    pub provider_id: String,
+    pub mode: String,
+    pub primary_enabled: bool,
+    pub fallback_enabled: bool,
+    pub credential_status: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyProviderTestRequest {
+    pub provider_id: String,
+    pub base_currency: String,
+    pub effective_date: String,
+    pub tested_at: String,
+    pub provider_payload: String,
+    pub api_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurrencyProviderTestResultDto {
+    pub provider_id: String,
+    pub status: String,
+    pub rates_count: i64,
+    pub effective_date: String,
+    pub diagnostic: String,
+    pub activated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1158,60 +1251,217 @@ impl LedgeraEngine {
             .map_err(storage_error)
     }
 
-    pub fn upsert_currency_rate(&self, request: CurrencyRateRequest) -> Result<CurrencyRateDto, LedgeraEngineError> {
-        upsert_currency_rate(&self.db_path, &CurrencyRatePayload {
-            base_currency: request.base_currency,
-            currency: request.currency,
-            rate: request.rate,
-            effective_date: request.effective_date,
-            source: request.source,
-        }).map(currency_rate_to_dto).map_err(storage_error)
+    pub fn upsert_currency_rate(
+        &self,
+        request: CurrencyRateRequest,
+    ) -> Result<CurrencyRateDto, LedgeraEngineError> {
+        upsert_currency_rate(
+            &self.db_path,
+            &CurrencyRatePayload {
+                base_currency: request.base_currency,
+                currency: request.currency,
+                rate: request.rate,
+                effective_date: request.effective_date,
+                source: request.source,
+            },
+        )
+        .map(currency_rate_to_dto)
+        .map_err(storage_error)
     }
 
     pub fn delete_currency_rate(&self, rate_id: i64) -> Result<bool, LedgeraEngineError> {
         delete_currency_rate(&self.db_path, rate_id).map_err(storage_error)
     }
 
-    pub fn refresh_currency_rates(&self, request: CurrencyRefreshRequest) -> Result<CurrencyRefreshResultDto, LedgeraEngineError> {
+    pub fn refresh_currency_rates(
+        &self,
+        request: CurrencyRefreshRequest,
+    ) -> Result<CurrencyRefreshResultDto, LedgeraEngineError> {
         let refresh_id = if request.refresh_id.trim().is_empty() {
             format!("{}-{}", request.effective_date, request.fetched_at)
         } else {
             request.refresh_id.clone()
         };
-        refresh_currency_rates(&self.db_path, &CurrencyRefreshRequestPayload {
-            refresh_id,
-            backend: request.backend,
-            base_currency: request.base_currency,
-            primary_provider: request.primary_provider,
-            fallback_provider: request.fallback_provider,
-            effective_date: request.effective_date,
-            fetched_at: request.fetched_at,
-            provider_payload: request.provider_payload,
-            payload_format: request.payload_format,
-            api_key: request.api_key,
-            timeout_seconds: request.timeout_seconds,
-            dry_run: request.dry_run,
-        }).map(currency_refresh_result_to_dto).map_err(storage_error)
+        refresh_currency_rates(
+            &self.db_path,
+            &CurrencyRefreshRequestPayload {
+                refresh_id,
+                backend: request.backend,
+                base_currency: request.base_currency,
+                primary_provider: request.primary_provider,
+                fallback_provider: request.fallback_provider,
+                effective_date: request.effective_date,
+                fetched_at: request.fetched_at,
+                provider_payload: request.provider_payload,
+                payload_format: request.payload_format,
+                api_key: request.api_key,
+                credential_ref: request.credential_ref,
+                timeout_seconds: request.timeout_seconds,
+                dry_run: request.dry_run,
+            },
+        )
+        .map(currency_refresh_result_to_dto)
+        .map_err(storage_error)
     }
 
     pub fn currency_refresh_status(&self) -> Result<CurrencyRefreshStatusDto, LedgeraEngineError> {
-        latest_currency_refresh_status(&self.db_path).map(currency_refresh_status_to_dto).map_err(storage_error)
-    }
-
-    pub fn currency_rate_snapshots(&self) -> Result<Vec<CurrencyRateSnapshotDto>, LedgeraEngineError> {
-        currency_rate_snapshot_rows(&self.db_path)
-            .map(|rows| rows.into_iter().map(currency_rate_snapshot_to_dto).collect())
+        latest_currency_refresh_status(&self.db_path)
+            .map(currency_refresh_status_to_dto)
             .map_err(storage_error)
     }
 
-    pub fn currency_provider_statuses(&self) -> Result<Vec<CurrencyProviderStatusDto>, LedgeraEngineError> {
+    pub fn currency_rate_snapshots(
+        &self,
+    ) -> Result<Vec<CurrencyRateSnapshotDto>, LedgeraEngineError> {
+        currency_rate_snapshot_rows(&self.db_path)
+            .map(|rows| {
+                rows.into_iter()
+                    .map(currency_rate_snapshot_to_dto)
+                    .collect()
+            })
+            .map_err(storage_error)
+    }
+
+    pub fn currency_provider_statuses(
+        &self,
+    ) -> Result<Vec<CurrencyProviderStatusDto>, LedgeraEngineError> {
         let status = latest_currency_refresh_status(&self.db_path).ok();
-        let selected = status.as_ref().map(|value| value.selected_provider.as_str()).unwrap_or_default();
-        let last_status = status.as_ref().map(|value| value.status.clone()).unwrap_or_else(|| "never".to_owned());
-        let diagnostic = status.as_ref().map(|value| value.diagnostic.clone()).unwrap_or_default();
-        Ok(SUPPORTED_CURRENCY_PROVIDER_NAMES.iter().map(|name| *name).map(|name| CurrencyProviderStatusDto {
-            name: name.to_owned(), configured: true, selected: selected == name, last_status: last_status.clone(), diagnostic: diagnostic.clone(),
-        }).collect())
+        let selected = status
+            .as_ref()
+            .map(|value| value.selected_provider.as_str())
+            .unwrap_or_default();
+        let last_status = status
+            .as_ref()
+            .map(|value| value.status.clone())
+            .unwrap_or_else(|| "never".to_owned());
+        let diagnostic = status
+            .as_ref()
+            .map(|value| value.diagnostic.clone())
+            .unwrap_or_default();
+        let mut result: Vec<CurrencyProviderStatusDto> = SUPPORTED_CURRENCY_PROVIDER_NAMES
+            .iter()
+            .map(|name| *name)
+            .map(|name| CurrencyProviderStatusDto {
+                name: name.to_owned(),
+                configured: true,
+                selected: selected == name,
+                last_status: last_status.clone(),
+                diagnostic: diagnostic.clone(),
+            })
+            .collect();
+        for definition in currency_provider_definition_rows(&self.db_path).map_err(storage_error)? {
+            let provider_id = definition.provider_id;
+            result.push(CurrencyProviderStatusDto {
+                name: provider_id.clone(),
+                configured: definition.active,
+                selected: selected == provider_id,
+                last_status: if definition.active {
+                    last_status.clone()
+                } else {
+                    "manual-only".to_owned()
+                },
+                diagnostic: diagnostic.clone(),
+            });
+        }
+        Ok(result)
+    }
+
+    pub fn currency_provider_definitions(
+        &self,
+    ) -> Result<Vec<CurrencyProviderDefinitionDto>, LedgeraEngineError> {
+        currency_provider_definition_rows(&self.db_path)
+            .map(|rows| {
+                rows.into_iter()
+                    .map(currency_provider_definition_to_dto)
+                    .collect()
+            })
+            .map_err(storage_error)
+    }
+
+    pub fn currency_provider_settings(
+        &self,
+    ) -> Result<Vec<CurrencyProviderSettingDto>, LedgeraEngineError> {
+        currency_provider_setting_rows(&self.db_path)
+            .map(|rows| {
+                rows.into_iter()
+                    .map(currency_provider_setting_to_dto)
+                    .collect()
+            })
+            .map_err(storage_error)
+    }
+
+    pub fn upsert_currency_provider_setting(
+        &self,
+        request: CurrencyProviderSettingRequest,
+    ) -> Result<CurrencyProviderSettingDto, LedgeraEngineError> {
+        upsert_currency_provider_setting(
+            &self.db_path,
+            &CurrencyProviderSettingPayload {
+                provider_id: request.provider_id,
+                mode: request.mode,
+                primary_enabled: request.primary_enabled,
+                fallback_enabled: request.fallback_enabled,
+                credential_status: request.credential_status,
+            },
+        )
+        .map(currency_provider_setting_to_dto)
+        .map_err(storage_error)
+    }
+
+    pub fn upsert_currency_provider_definition(
+        &self,
+        request: CurrencyProviderDefinitionRequest,
+    ) -> Result<CurrencyProviderDefinitionDto, LedgeraEngineError> {
+        let now = current_local_date_text();
+        upsert_currency_provider_definition(
+            &self.db_path,
+            &CurrencyProviderDefinitionPayload {
+                provider_id: request.provider_id,
+                display_name: request.display_name,
+                endpoint: request.endpoint,
+                http_method: request.http_method,
+                response_format: request.response_format,
+                currency_path: request.currency_path,
+                rate_path: request.rate_path,
+                effective_date_path: request.effective_date_path,
+                aliases_json: request.aliases_json,
+                response_base_currency: request.response_base_currency,
+                rate_semantics: request.rate_semantics,
+                auth_mode: request.auth_mode,
+                credential_ref: request.credential_ref,
+                request_body: request.request_body,
+                timeout_seconds: request.timeout_seconds,
+                retry_count: request.retry_count,
+                redirect_limit: request.redirect_limit,
+            },
+            &now,
+        )
+        .map(currency_provider_definition_to_dto)
+        .map_err(storage_error)
+    }
+
+    pub fn delete_currency_provider_definition(
+        &self,
+        provider_id: String,
+    ) -> Result<bool, LedgeraEngineError> {
+        delete_currency_provider_definition(&self.db_path, &provider_id).map_err(storage_error)
+    }
+
+    pub fn test_currency_provider(
+        &self,
+        request: CurrencyProviderTestRequest,
+    ) -> Result<CurrencyProviderTestResultDto, LedgeraEngineError> {
+        test_currency_provider_definition(
+            &self.db_path,
+            &request.provider_id,
+            &request.base_currency,
+            &request.effective_date,
+            &request.tested_at,
+            &request.provider_payload,
+            &request.api_key,
+        )
+        .map(currency_provider_test_result_to_dto)
+        .map_err(storage_error)
     }
 
     pub fn list_records(
@@ -1336,30 +1586,46 @@ impl LedgeraEngine {
             .map_err(storage_error)
     }
 
-    pub fn create_currency_transfer(&self, request: CurrencyTransferRequest) -> Result<CurrencyTransferDto, LedgeraEngineError> {
-        create_currency_transfer(&self.db_path, &CurrencyTransferCreatePayload {
-            from_wallet_id: request.from_wallet_id,
-            to_wallet_id: request.to_wallet_id,
-            date: request.date,
-            amount: request.amount,
-            amount_currency: request.amount_currency,
-            description: request.description,
-            commission_amount: request.commission_amount,
-            commission_currency: request.commission_currency,
-        }).map(currency_transfer_to_dto).map_err(storage_error)
+    pub fn create_currency_transfer(
+        &self,
+        request: CurrencyTransferRequest,
+    ) -> Result<CurrencyTransferDto, LedgeraEngineError> {
+        create_currency_transfer(
+            &self.db_path,
+            &CurrencyTransferCreatePayload {
+                from_wallet_id: request.from_wallet_id,
+                to_wallet_id: request.to_wallet_id,
+                date: request.date,
+                amount: request.amount,
+                amount_currency: request.amount_currency,
+                description: request.description,
+                commission_amount: request.commission_amount,
+                commission_currency: request.commission_currency,
+            },
+        )
+        .map(currency_transfer_to_dto)
+        .map_err(storage_error)
     }
 
-    pub fn quote_currency_transfer(&self, request: CurrencyTransferRequest) -> Result<CurrencyTransferQuoteDto, LedgeraEngineError> {
-        currency_transfer_quote(&self.db_path, &CurrencyTransferCreatePayload {
-            from_wallet_id: request.from_wallet_id,
-            to_wallet_id: request.to_wallet_id,
-            date: request.date,
-            amount: request.amount,
-            amount_currency: request.amount_currency,
-            description: request.description,
-            commission_amount: request.commission_amount,
-            commission_currency: request.commission_currency,
-        }).map(currency_transfer_quote_to_dto).map_err(storage_error)
+    pub fn quote_currency_transfer(
+        &self,
+        request: CurrencyTransferRequest,
+    ) -> Result<CurrencyTransferQuoteDto, LedgeraEngineError> {
+        currency_transfer_quote(
+            &self.db_path,
+            &CurrencyTransferCreatePayload {
+                from_wallet_id: request.from_wallet_id,
+                to_wallet_id: request.to_wallet_id,
+                date: request.date,
+                amount: request.amount,
+                amount_currency: request.amount_currency,
+                description: request.description,
+                commission_amount: request.commission_amount,
+                commission_currency: request.commission_currency,
+            },
+        )
+        .map(currency_transfer_quote_to_dto)
+        .map_err(storage_error)
     }
 
     pub fn get_transfer(
@@ -2606,6 +2872,61 @@ fn currency_rate_snapshot_to_dto(row: CurrencyRateSnapshotRow) -> CurrencyRateSn
         fetched_at: row.fetched_at,
         status: row.status,
         diagnostic: row.diagnostic,
+    }
+}
+
+fn currency_provider_definition_to_dto(
+    row: CurrencyProviderDefinitionRow,
+) -> CurrencyProviderDefinitionDto {
+    CurrencyProviderDefinitionDto {
+        provider_id: row.provider_id,
+        display_name: row.display_name,
+        endpoint: row.endpoint,
+        http_method: row.http_method,
+        response_format: row.response_format,
+        currency_path: row.currency_path,
+        rate_path: row.rate_path,
+        effective_date_path: row.effective_date_path,
+        aliases_json: row.aliases_json,
+        response_base_currency: row.response_base_currency,
+        rate_semantics: row.rate_semantics,
+        auth_mode: row.auth_mode,
+        credential_ref: row.credential_ref,
+        request_body: row.request_body,
+        timeout_seconds: row.timeout_seconds,
+        retry_count: row.retry_count,
+        redirect_limit: row.redirect_limit,
+        schema_version: row.schema_version,
+        active: row.active,
+        tested_at: row.tested_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    }
+}
+
+fn currency_provider_setting_to_dto(row: CurrencyProviderSettingRow) -> CurrencyProviderSettingDto {
+    CurrencyProviderSettingDto {
+        provider_id: row.provider_id,
+        mode: row.mode,
+        primary_enabled: row.primary_enabled,
+        fallback_enabled: row.fallback_enabled,
+        credential_status: row.credential_status,
+        last_status: row.last_status,
+        last_diagnostic: row.last_diagnostic,
+        last_checked_at: row.last_checked_at,
+    }
+}
+
+fn currency_provider_test_result_to_dto(
+    row: CurrencyProviderTestResultRow,
+) -> CurrencyProviderTestResultDto {
+    CurrencyProviderTestResultDto {
+        provider_id: row.provider_id,
+        status: row.status,
+        rates_count: row.rates_count,
+        effective_date: row.effective_date,
+        diagnostic: row.diagnostic,
+        activated: row.activated,
     }
 }
 
@@ -4782,7 +5103,11 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 tags: vec![],
             })
             .expect_err("missing foreign-currency rate");
-        assert!(create_error.to_string().contains("No currency rate for USD"));
+        assert!(
+            create_error
+                .to_string()
+                .contains("No currency rate for USD")
+        );
 
         let created = engine
             .create_record(CreateRecordRequest {
@@ -4815,7 +5140,11 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 },
             )
             .unwrap_err();
-        assert!(update_error.to_string().contains("No currency rate for USD"));
+        assert!(
+            update_error
+                .to_string()
+                .contains("No currency rate for USD")
+        );
         fs::remove_file(db_path).ok();
     }
 

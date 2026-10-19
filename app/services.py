@@ -72,6 +72,7 @@ from app.currency.runtime_engine import (
 from app.runtime.secret_storage import (
     delete_exchange_rate_api_key,
     get_exchange_rate_api_key,
+    get_secret,
     get_secret_storage_status,
     set_exchange_rate_api_key,
 )
@@ -140,6 +141,7 @@ class CurrencyService:
         "update_interval_minutes": 60,
         "refresh_backend": BACKEND_PYTHON,
         "provider_timeout_seconds": 10,
+        "custom_provider_definitions": {},
     }
     API_KEY_SOURCE_FIELD = "_exchange_rate_api_key_source"
     API_KEY_PERSISTED_FIELD = "_exchange_rate_api_key_persisted_value"
@@ -200,6 +202,20 @@ class CurrencyService:
             os.environ.get(cls.EXCHANGE_RATE_API_KEY_ENV, "")
             or os.environ.get(cls.LEGACY_EXCHANGE_RATE_API_KEY_ENV, "")
         )
+
+    def _read_provider_credential(self, provider_id: str) -> tuple[str, str]:
+        normalized = str(provider_id or "").strip().lower()
+        definitions = self._config.get("custom_provider_definitions", {})
+        definition = definitions.get(normalized, {}) if isinstance(definitions, Mapping) else {}
+        credential_ref = str(definition.get("credential_ref", "") or "") if isinstance(definition, Mapping) else ""
+        slug = normalized.removeprefix("custom:").upper().replace("-", "_")
+        env_name = f"LEDGERA_CURRENCY_PROVIDER_{slug}_API_KEY" if slug else ""
+        env_value = _os.environ.get(env_name, "") if env_name else ""
+        if env_value.strip():
+            return credential_ref, env_value.strip()
+        if credential_ref:
+            return credential_ref, get_secret(credential_ref)
+        return credential_ref, ""
 
     @classmethod
     def _build_api_key_status(cls, config: Mapping[str, object]) -> dict[str, object]:
@@ -492,14 +508,19 @@ class CurrencyService:
                     timeout_seconds = max(1, int(self._config.get("provider_timeout_seconds", 10)))
                 except (TypeError, ValueError):
                     timeout_seconds = 10
+                primary_provider = str(self._config.get("primary_provider", "") or "").strip().lower()
+                credential_ref, provider_secret = self._read_provider_credential(primary_provider)
+                if not provider_secret and primary_provider == "exchange_rate":
+                    provider_secret = get_exchange_rate_api_key() or self._read_api_key_env()
                 rust_result = call_rust_refresh(
                     self._rust_refresh_backend or _RUST_CURRENCY_CORE,
                     build_refresh_request(
                         base_currency=self._base,
-                        primary_provider=str(self._config.get("primary_provider", "") or ""),
+                        primary_provider=primary_provider,
                         fallback_provider=str(self._config.get("fallback_provider", "") or ""),
                         backend=backend,
-                        api_key=get_exchange_rate_api_key() or self._read_api_key_env(),
+                        api_key=provider_secret,
+                        credential_ref=credential_ref,
                         timeout_seconds=timeout_seconds,
                     ),
                 )

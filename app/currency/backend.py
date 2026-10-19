@@ -49,9 +49,10 @@ def build_refresh_request(
     fallback_provider: str,
     backend: str,
     api_key: str = "",
+    credential_ref: str = "",
     timeout_seconds: int = 10,
 ) -> dict[str, str]:
-    return {
+    request = {
         "backend": normalize_backend(backend),
         "base_currency": str(base_currency or "KZT").strip().upper(),
         "primary_provider": str(primary_provider or "").strip().lower(),
@@ -59,6 +60,9 @@ def build_refresh_request(
         "api_key": str(api_key or ""),
         "timeout_seconds": str(max(1, int(timeout_seconds))),
     }
+    if str(credential_ref or "").strip():
+        request["credential_ref"] = str(credential_ref).strip()
+    return request
 
 
 def call_rust_refresh(

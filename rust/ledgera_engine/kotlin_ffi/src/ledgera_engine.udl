@@ -144,6 +144,7 @@ dictionary CurrencyRefreshRequest {
     string provider_payload;
     string payload_format;
     string api_key;
+    string credential_ref;
     i64 timeout_seconds;
     boolean dry_run;
 };
@@ -178,6 +179,88 @@ dictionary CurrencyProviderStatusDto {
     boolean selected;
     string last_status;
     string diagnostic;
+};
+
+dictionary CurrencyProviderDefinitionRequest {
+    string provider_id;
+    string display_name;
+    string endpoint;
+    string http_method;
+    string response_format;
+    string currency_path;
+    string rate_path;
+    string effective_date_path;
+    string aliases_json;
+    string response_base_currency;
+    string rate_semantics;
+    string auth_mode;
+    string credential_ref;
+    string request_body;
+    i64 timeout_seconds;
+    i64 retry_count;
+    i64 redirect_limit;
+};
+
+dictionary CurrencyProviderDefinitionDto {
+    string provider_id;
+    string display_name;
+    string endpoint;
+    string http_method;
+    string response_format;
+    string currency_path;
+    string rate_path;
+    string effective_date_path;
+    string aliases_json;
+    string response_base_currency;
+    string rate_semantics;
+    string auth_mode;
+    string credential_ref;
+    string request_body;
+    i64 timeout_seconds;
+    i64 retry_count;
+    i64 redirect_limit;
+    i64 schema_version;
+    boolean active;
+    string tested_at;
+    string created_at;
+    string updated_at;
+};
+
+dictionary CurrencyProviderSettingDto {
+    string provider_id;
+    string mode;
+    boolean primary_enabled;
+    boolean fallback_enabled;
+    string credential_status;
+    string last_status;
+    string last_diagnostic;
+    string last_checked_at;
+};
+
+dictionary CurrencyProviderTestRequest {
+    string provider_id;
+    string base_currency;
+    string effective_date;
+    string tested_at;
+    string provider_payload;
+    string api_key;
+};
+
+dictionary CurrencyProviderSettingRequest {
+    string provider_id;
+    string mode;
+    boolean primary_enabled;
+    boolean fallback_enabled;
+    string credential_status;
+};
+
+dictionary CurrencyProviderTestResultDto {
+    string provider_id;
+    string status;
+    i64 rates_count;
+    string effective_date;
+    string diagnostic;
+    boolean activated;
 };
 
 dictionary CurrencyRateSnapshotDto {
@@ -795,6 +878,18 @@ interface LedgeraEngine {
     sequence<CurrencyRateSnapshotDto> currency_rate_snapshots();
     [Throws=LedgeraEngineError]
     sequence<CurrencyProviderStatusDto> currency_provider_statuses();
+    [Throws=LedgeraEngineError]
+    sequence<CurrencyProviderDefinitionDto> currency_provider_definitions();
+    [Throws=LedgeraEngineError]
+    sequence<CurrencyProviderSettingDto> currency_provider_settings();
+    [Throws=LedgeraEngineError]
+    CurrencyProviderSettingDto upsert_currency_provider_setting(CurrencyProviderSettingRequest request);
+    [Throws=LedgeraEngineError]
+    CurrencyProviderDefinitionDto upsert_currency_provider_definition(CurrencyProviderDefinitionRequest request);
+    [Throws=LedgeraEngineError]
+    boolean delete_currency_provider_definition(string provider_id);
+    [Throws=LedgeraEngineError]
+    CurrencyProviderTestResultDto test_currency_provider(CurrencyProviderTestRequest request);
     [Throws=LedgeraEngineError]
     sequence<RecordDto> list_records(RecordFilterDto filter);
     [Throws=LedgeraEngineError]

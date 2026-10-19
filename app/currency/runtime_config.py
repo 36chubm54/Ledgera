@@ -200,6 +200,16 @@ def get_supported_provider_names_for_config(
     for name in provider_registry.names():
         if provider_registry.create(name, context) is not None:
             supported.append(name)
+    definitions = config.get("custom_provider_definitions", {})
+    if isinstance(definitions, Mapping):
+        for name, definition in definitions.items():
+            normalized = str(name or "").strip().lower()
+            if not normalized.startswith("custom:") or not isinstance(definition, Mapping):
+                continue
+            if not bool(definition.get("active", False)):
+                continue
+            if provider_registry.create(normalized, context) is not None and normalized not in supported:
+                supported.append(normalized)
     return supported
 
 

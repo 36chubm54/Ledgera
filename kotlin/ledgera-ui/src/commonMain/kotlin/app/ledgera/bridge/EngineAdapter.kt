@@ -49,6 +49,12 @@ import app.ledgera.model.CurrencyRefreshResult
 import app.ledgera.model.CurrencyRefreshStatus
 import app.ledgera.model.CurrencyRateSnapshot
 import app.ledgera.model.CurrencyProviderStatus
+import app.ledgera.model.CurrencyProviderDefinition
+import app.ledgera.model.CurrencyProviderDefinitionRequest
+import app.ledgera.model.CurrencyProviderSetting
+import app.ledgera.model.CurrencyProviderSettingRequest
+import app.ledgera.model.CurrencyProviderTestRequest
+import app.ledgera.model.CurrencyProviderTestResult
 import app.ledgera.model.CreateDistributionItemRequest
 import app.ledgera.model.CreateDistributionSubitemRequest
 import app.ledgera.model.DistributionFrozenRow
@@ -143,6 +149,12 @@ interface SettingsEngine {
     suspend fun currencyRefreshStatus(): CurrencyRefreshStatus = error("Currency refresh status is unavailable")
     suspend fun currencyRateSnapshots(): List<CurrencyRateSnapshot> = emptyList()
     suspend fun currencyProviderStatuses(): List<CurrencyProviderStatus> = emptyList()
+    suspend fun currencyProviderDefinitions(): List<CurrencyProviderDefinition> = emptyList()
+    suspend fun currencyProviderSettings(): List<CurrencyProviderSetting> = emptyList()
+    suspend fun upsertCurrencyProviderSetting(request: CurrencyProviderSettingRequest): CurrencyProviderSetting = error("Currency provider settings are unavailable")
+    suspend fun upsertCurrencyProviderDefinition(request: CurrencyProviderDefinitionRequest): CurrencyProviderDefinition = error("Currency provider settings are unavailable")
+    suspend fun deleteCurrencyProviderDefinition(providerId: String): Boolean = false
+    suspend fun testCurrencyProvider(request: CurrencyProviderTestRequest): CurrencyProviderTestResult = error("Currency provider test is unavailable")
     suspend fun listWalletsForSettings(): List<WalletSettingsItem>
     suspend fun createWallet(request: CreateWalletRequest): WalletSettingsItem
     suspend fun setSystemWalletInitialBalance(initialBalance: String): WalletSettingsItem = error("Initial balance setup is unavailable")
@@ -156,11 +168,11 @@ interface SettingsEngine {
 
 interface BudgetEngine {
     suspend fun budgetScopeSuggestions(scopeType: String): List<String> = emptyList()
-    suspend fun listBudgets(): List<BudgetItem>
-    suspend fun listBudgetResults(today: String? = null): List<BudgetResultItem>
-    suspend fun createBudget(request: CreateBudgetRequest): BudgetItem
-    suspend fun updateBudgetLimit(budgetId: Long, limitBase: String): BudgetItem
-    suspend fun deleteBudget(budgetId: Long): Boolean
+    suspend fun listBudgets(): List<BudgetItem> = emptyList()
+    suspend fun listBudgetResults(today: String? = null): List<BudgetResultItem> = emptyList()
+    suspend fun createBudget(request: CreateBudgetRequest): BudgetItem = error("Budgets are unavailable")
+    suspend fun updateBudgetLimit(budgetId: Long, limitBase: String): BudgetItem = error("Budgets are unavailable")
+    suspend fun deleteBudget(budgetId: Long): Boolean = false
 }
 
 interface DebtsEngine {

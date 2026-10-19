@@ -10,6 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,7 +80,44 @@ private fun runApplication(args: Array<String>) = application {
                 } else {
                     File(dbPath).parentFile?.mkdirs()
                     val newDatabase = !File(dbPath).exists()
-                    val engine = RustEngineAdapter(dbPath)
+                    val engine = remember(dbPath) { RustEngineAdapter(dbPath) }
+                    val operationsViewModel = remember(engine) {
+                        OperationsViewModel(
+                            engine,
+                            importFileSnapshotProvider = DesktopImportFileSnapshotProvider,
+                        )
+                    }
+                    val debtsViewModel = remember(engine) { DebtsViewModel(engine) }
+                    val mandatoryViewModel = remember(engine) {
+                        MandatoryViewModel(
+                            engine,
+                            importFileSnapshotProvider = DesktopImportFileSnapshotProvider,
+                        )
+                    }
+                    val reportsViewModel = remember(engine) { ReportsViewModel(engine) }
+                    val budgetViewModel = remember(engine) { BudgetViewModel(engine) }
+                    val analyticsViewModel = remember(engine) { AnalyticsViewModel(engine) }
+                    val distributionViewModel = remember(engine) { DistributionViewModel(engine) }
+                    val dashboardViewModel = remember(engine) { DashboardViewModel(engine) }
+                    val settingsViewModel = remember(engine) {
+                        SettingsViewModel(
+                            engine,
+                            onCurrencyRefreshSuccess = {
+                                operationsViewModel.refresh()
+                                debtsViewModel.refresh()
+                                mandatoryViewModel.refresh()
+                                reportsViewModel.refreshLookups()
+                                budgetViewModel.refresh()
+                                analyticsViewModel.generate()
+                                distributionViewModel.refresh()
+                                dashboardViewModel.refresh()
+                            },
+                        )
+                    }
+                    DisposableEffect(settingsViewModel) {
+                        settingsViewModel.startCurrencyRefresh(autoUpdate = true, intervalMinutes = 60)
+                        onDispose { settingsViewModel.stopCurrencyRefresh() }
+                    }
                     var showInitialBalanceDialog by remember { mutableStateOf(newDatabase) }
                     var startupNotice by remember { mutableStateOf<String?>(null) }
                     ToastHost(
@@ -90,21 +128,15 @@ private fun runApplication(args: Array<String>) = application {
                         Box(Modifier.fillMaxSize()) {
                             AppShell(
                             viewModel = AppShellViewModel(engine),
-                            operationsViewModel = OperationsViewModel(
-                                engine,
-                                importFileSnapshotProvider = DesktopImportFileSnapshotProvider,
-                            ),
-                            debtsViewModel = DebtsViewModel(engine),
-                            mandatoryViewModel = MandatoryViewModel(
-                                engine,
-                                importFileSnapshotProvider = DesktopImportFileSnapshotProvider,
-                            ),
-                            settingsViewModel = SettingsViewModel(engine),
-                            reportsViewModel = ReportsViewModel(engine),
-                            budgetViewModel = BudgetViewModel(engine),
-                            analyticsViewModel = AnalyticsViewModel(engine),
-                            distributionViewModel = DistributionViewModel(engine),
-                            dashboardViewModel = DashboardViewModel(engine),
+                            operationsViewModel = operationsViewModel,
+                            debtsViewModel = debtsViewModel,
+                            mandatoryViewModel = mandatoryViewModel,
+                            settingsViewModel = settingsViewModel,
+                            reportsViewModel = reportsViewModel,
+                            budgetViewModel = budgetViewModel,
+                            analyticsViewModel = analyticsViewModel,
+                            distributionViewModel = distributionViewModel,
+                            dashboardViewModel = dashboardViewModel,
                             operationsFileActions = DesktopOperationsFileActions(window),
                             mandatoryFileActions = DesktopMandatoryFileActions(window),
                             reportsFileActions = DesktopReportsFileActions(window),
