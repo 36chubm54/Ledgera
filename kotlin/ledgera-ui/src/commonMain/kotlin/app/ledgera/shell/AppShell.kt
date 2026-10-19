@@ -3,6 +3,7 @@ package app.ledgera.shell
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,6 +100,7 @@ fun AppShell(
     settingsFileActions: SettingsFileActions = NoSettingsFileActions,
 ) {
     val state by viewModel.state.collectAsState()
+    val settingsScrollState = rememberScrollState()
     val operationsState by operationsViewModel.state.collectAsState()
     val debtsState by debtsViewModel.state.collectAsState()
     val mandatoryState by mandatoryViewModel.state.collectAsState()
@@ -191,7 +193,7 @@ fun AppShell(
                             viewModel = mandatoryViewModel,
                             fileActions = mandatoryFileActions,
                         )
-                        DesktopSection.Settings -> SettingsScreen(settingsViewModel, fileActions = settingsFileActions)
+                        DesktopSection.Settings -> SettingsScreen(settingsViewModel, scrollState = settingsScrollState, fileActions = settingsFileActions)
                     }
                 }
             }

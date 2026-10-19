@@ -58,6 +58,7 @@ object NoSettingsFileActions : SettingsFileActions {
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    scrollState: androidx.compose.foundation.ScrollState,
     modifier: Modifier = Modifier,
     fileActions: SettingsFileActions = NoSettingsFileActions,
 ) {
@@ -93,7 +94,7 @@ fun SettingsScreen(
     }
 
     Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        modifier = modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
@@ -236,28 +237,24 @@ private fun CurrencySection(
                 Button(onClick = { onSetBase(requestedBase) }, enabled = !loading && requestedBase.length == 3) { Text("Set") }
                 Button(onClick = onAddRate, enabled = !loading) { Text("Add rate") }
             }
+            Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall)
+            refreshStatus?.let { status ->
+                Text(
+                    "Automatic refresh: ${status.status} · ${status.selectedProvider.ifBlank { "none" }} · ${status.effectiveDate}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (status.status == "success") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                )
+            }
+            if (providerStatuses.isNotEmpty()) {
+                Text(
+                    "Providers: ${providerStatuses.filter { it.selected }.joinToString { it.name }.ifBlank { "not selected" }}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                item { Text("Supported: ${currencies.joinToString()}", style = MaterialTheme.typography.bodySmall) }
-                refreshStatus?.let { status ->
-                    item {
-                        Text(
-                            "Automatic refresh: ${status.status} · ${status.selectedProvider.ifBlank { "none" }} · ${status.effectiveDate}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (status.status == "success") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-                if (providerStatuses.isNotEmpty()) {
-                    item {
-                        Text(
-                            "Providers: ${providerStatuses.filter { it.selected }.joinToString { it.name }.ifBlank { "not selected" }}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
                 val visibleRates = rates
                     .groupBy { it.baseCurrency.uppercase() to it.currency.uppercase() }
                     .values
