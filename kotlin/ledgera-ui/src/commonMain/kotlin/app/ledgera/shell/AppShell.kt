@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -105,6 +106,7 @@ fun AppShell(
     val dashboardScrollState = rememberScrollState()
     val reportsScrollState = rememberScrollState()
     val distributionScrollState = rememberScrollState()
+    val navigationScrollState = rememberScrollState()
     val operationsState by operationsViewModel.state.collectAsState()
     val debtsState by debtsViewModel.state.collectAsState()
     val mandatoryState by mandatoryViewModel.state.collectAsState()
@@ -160,20 +162,28 @@ fun AppShell(
                     }
                 },
             ) {
-                state.sections.forEach { section ->
-                    val selected = state.selectedSection == section
-                    NavigationRailItem(
-                        selected = selected,
-                        onClick = { viewModel.select(section) },
-                        icon = {
-                            NavigationIcon(
-                                icons = section.iconResources(),
-                                selected = selected,
-                            )
-                        },
-                        label = { Text(section.label) },
-                        alwaysShowLabel = true,
-                    )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(navigationScrollState),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    state.sections.forEach { section ->
+                        val selected = state.selectedSection == section
+                        NavigationRailItem(
+                            selected = selected,
+                            onClick = { viewModel.select(section) },
+                            icon = {
+                                NavigationIcon(
+                                    icons = section.iconResources(),
+                                    selected = selected,
+                                )
+                            },
+                            label = { Text(section.label) },
+                            alwaysShowLabel = true,
+                        )
+                    }
                 }
             }
 
