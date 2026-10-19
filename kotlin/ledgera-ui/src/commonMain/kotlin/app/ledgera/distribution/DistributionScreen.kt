@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -47,13 +48,17 @@ import app.ledgera.model.DistributionColumn
 import app.ledgera.model.DistributionMonthlyResult
 
 @Composable
-fun DistributionScreen(viewModel: DistributionViewModel, modifier: Modifier = Modifier) {
+fun DistributionScreen(
+    viewModel: DistributionViewModel,
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsState()
     var dialog by remember { mutableStateOf<DistributionDialog?>(null) }
     BoxWithConstraints(modifier.fillMaxSize()) {
         val narrow = maxWidth < 860.dp
         val contentModifier = if (narrow) {
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)
+            Modifier.fillMaxWidth().verticalScroll(scrollState).padding(16.dp)
         } else {
             Modifier.fillMaxSize().padding(16.dp)
         }

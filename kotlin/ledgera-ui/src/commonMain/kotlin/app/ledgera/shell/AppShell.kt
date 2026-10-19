@@ -101,6 +101,10 @@ fun AppShell(
 ) {
     val state by viewModel.state.collectAsState()
     val settingsScrollState = rememberScrollState()
+    val analyticsScrollState = rememberScrollState()
+    val dashboardScrollState = rememberScrollState()
+    val reportsScrollState = rememberScrollState()
+    val distributionScrollState = rememberScrollState()
     val operationsState by operationsViewModel.state.collectAsState()
     val debtsState by debtsViewModel.state.collectAsState()
     val mandatoryState by mandatoryViewModel.state.collectAsState()
@@ -183,12 +187,12 @@ fun AppShell(
                             operationsViewModel,
                             fileActions = operationsFileActions,
                         )
-                        DesktopSection.Reports -> ReportsScreen(reportsViewModel, reportsFileActions)
-                        DesktopSection.Analytics -> AnalyticsScreen(analyticsViewModel)
-                        DesktopSection.Dashboard -> DashboardScreen(dashboardViewModel)
+                        DesktopSection.Reports -> ReportsScreen(reportsViewModel, reportsScrollState, reportsFileActions)
+                        DesktopSection.Analytics -> AnalyticsScreen(analyticsViewModel, analyticsScrollState)
+                        DesktopSection.Dashboard -> DashboardScreen(dashboardViewModel, dashboardScrollState)
                         DesktopSection.Budget -> BudgetScreen(budgetViewModel)
                         DesktopSection.Debts -> DebtsScreen(debtsViewModel)
-                        DesktopSection.Distribution -> DistributionScreen(distributionViewModel)
+                        DesktopSection.Distribution -> DistributionScreen(distributionViewModel, distributionScrollState)
                         DesktopSection.Mandatory -> MandatoryScreen(
                             viewModel = mandatoryViewModel,
                             fileActions = mandatoryFileActions,

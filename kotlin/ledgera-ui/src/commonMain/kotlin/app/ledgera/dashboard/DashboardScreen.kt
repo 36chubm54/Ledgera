@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -80,13 +81,17 @@ private data class AssetRefreshRow(
 )
 
 @Composable
-fun DashboardScreen(viewModel: DashboardViewModel, modifier: Modifier = Modifier) {
+fun DashboardScreen(
+    viewModel: DashboardViewModel,
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsState()
     var dialog by remember { mutableStateOf<DashboardDialog?>(null) }
     BoxWithConstraints(modifier.fillMaxSize()) {
         val isWideLayout = maxWidth >= 900.dp
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+            Modifier.fillMaxSize().verticalScroll(scrollState).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

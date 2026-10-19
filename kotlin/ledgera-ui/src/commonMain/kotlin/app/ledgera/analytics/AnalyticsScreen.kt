@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.AlertDialog
@@ -57,10 +58,14 @@ import app.ledgera.ui.LedgerDateField
 import kotlin.math.max
 
 @Composable
-fun AnalyticsScreen(viewModel: AnalyticsViewModel, modifier: Modifier = Modifier) {
+fun AnalyticsScreen(
+    viewModel: AnalyticsViewModel,
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsState()
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Analytics", style = MaterialTheme.typography.headlineLarge)

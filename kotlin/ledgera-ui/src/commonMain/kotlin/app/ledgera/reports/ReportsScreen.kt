@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -23,10 +24,14 @@ import app.ledgera.ui.AutocompleteTextField
 import app.ledgera.ui.LedgerDateField
 
 @Composable
-fun ReportsScreen(viewModel: ReportsViewModel, fileActions: ReportsFileActions = NoReportsFileActions) {
+fun ReportsScreen(
+    viewModel: ReportsViewModel,
+    scrollState: ScrollState,
+    fileActions: ReportsFileActions = NoReportsFileActions,
+) {
     val state by viewModel.state.collectAsState()
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Reports", style = MaterialTheme.typography.headlineLarge)
