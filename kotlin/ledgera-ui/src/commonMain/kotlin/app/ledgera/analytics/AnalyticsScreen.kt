@@ -44,6 +44,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Dp
@@ -79,7 +80,28 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel, modifier: Modifier = Modifier
         }
         state.snapshot?.let { snapshot ->
             SummaryCard(snapshot.summary)
-            ChartCard("Capital dynamics") { LineChart(snapshot.capital.map { it.month to it.balanceBase }) }
+            var hoveredCapitalIndex by remember(snapshot.capital) { mutableStateOf<Int?>(null) }
+            ChartCard("Capital dynamics") {
+                Column(Modifier.fillMaxSize()) {
+                    LineChart(
+                        points = snapshot.capital.map { it.month to it.balanceBase },
+                        onHover = { hoveredCapitalIndex = it },
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                    Box(Modifier.fillMaxWidth().height(28.dp)) {
+                        hoveredCapitalIndex?.let { index ->
+                            snapshot.capital.getOrNull(index)?.let { point ->
+                                Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f)) {
+                                    Text(
+                                        "${point.month}: %.2f".format(point.balanceBase),
+                                        Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             val breakdown = when {
                 state.groupByCategory -> snapshot.groupedCategories
                 state.breakdownMode == "tag" -> snapshot.tags
@@ -360,64 +382,73 @@ private fun CategoryChart(rows: List<AnalyticsBreakdownRow>) {
 }
 
 @Composable
-private fun LineChart(points: List<Pair<String, Double>>) {
+private fun LineChart(
+    points: List<Pair<String, Double>>,
+    onHover: (Int?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     if (points.isEmpty()) {
         Text("No data")
         return
     }
     val lineColor = MaterialTheme.colorScheme.primary
     val axisColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-    var selectedIndex by remember(points) { mutableStateOf<Int?>(null) }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier) {
         val chartWidth = maxOf(maxWidth, (points.size * 96).dp)
-        Column(Modifier.width(chartWidth).horizontalScroll(rememberScrollState())) {
-            Box(Modifier.width(chartWidth).height(310.dp)) {
-                Canvas(Modifier.fillMaxSize().pointerInput(points) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val x = awaitPointerEvent().changes.firstOrNull()?.position?.x ?: continue
-                        selectedIndex = if (points.size == 1) 0 else {
-                            (x / size.width * points.size).toInt().coerceIn(0, points.lastIndex)
+        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            Column(Modifier.width(chartWidth)) {
+                Box(Modifier.width(chartWidth).height(310.dp)) {
+                    Canvas(Modifier.fillMaxSize().pointerInput(points) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val position = event.changes.firstOrNull()?.position
+                                if (event.type == PointerEventType.Exit) {
+                                    onHover(null)
+                                } else {
+                                    position?.let {
+                                        val inset = 28f
+                                        val usableWidth = (size.width - inset * 2f).coerceAtLeast(1f)
+                                        onHover(
+                                            (((it.x - inset) / usableWidth) * points.lastIndex.coerceAtLeast(0))
+                                                .toInt()
+                                                .coerceIn(0, points.lastIndex.coerceAtLeast(0))
+                                        )
+                                    }
+                                }
+                            }
                         }
+                    }) {
+                        val values = points.map { it.second }
+                        val dataMin = values.minOrNull() ?: 0.0
+                        val dataMax = values.maxOrNull() ?: 0.0
+                        val dataSpan = dataMax - dataMin
+                        val padding = max(max(dataSpan * 0.12, kotlin.math.abs(dataMax) * 0.02), 1.0)
+                        val minValue = dataMin - padding
+                        val span = max(dataSpan + padding * 2.0, 1.0)
+                        val horizontalInset = 28f
+                        val usableWidth = (size.width - horizontalInset * 2f).coerceAtLeast(1f)
+                        val coordinates = values.mapIndexed { index, value ->
+                            val x = if (points.size == 1) size.width / 2f
+                            else horizontalInset + index.toFloat() / points.lastIndex * usableWidth
+                            Offset(x, size.height - ((value - minValue) / span * size.height).toFloat())
+                        }
+                        val axisY = size.height - 28f
+                        drawLine(
+                            axisColor,
+                            Offset(horizontalInset, axisY),
+                            Offset(size.width - horizontalInset, axisY),
+                            strokeWidth = 1f,
+                        )
+                        coordinates.zipWithNext().forEach { (a, b) -> drawLine(lineColor, a, b, strokeWidth = 4f) }
+                        coordinates.forEach { drawCircle(lineColor, 4f, it) }
                     }
-                }
-                }) {
-                val values = points.map { it.second }
-                val dataMin = values.minOrNull() ?: 0.0
-                val dataMax = values.maxOrNull() ?: 0.0
-                val dataSpan = dataMax - dataMin
-                val padding = max(max(dataSpan * 0.12, kotlin.math.abs(dataMax) * 0.02), 1.0)
-                val minValue = dataMin - padding
-                val span = max(dataSpan + padding * 2.0, 1.0)
-                val horizontalInset = 28f
-                val usableWidth = (size.width - horizontalInset * 2f).coerceAtLeast(1f)
-                val coordinates = values.mapIndexed { index, value ->
-                    val x = if (points.size == 1) size.width / 2f
-                    else horizontalInset + index.toFloat() / points.lastIndex * usableWidth
-                    Offset(x, size.height - ((value - minValue) / span * size.height).toFloat())
-                }
-                val axisY = size.height - 28f
-                drawLine(
-                    axisColor,
-                    Offset(horizontalInset, axisY),
-                    Offset(size.width - horizontalInset, axisY),
-                    strokeWidth = 1f,
-                )
-                coordinates.zipWithNext().forEach { (a, b) -> drawLine(lineColor, a, b, strokeWidth = 4f) }
-                coordinates.forEach { drawCircle(lineColor, 4f, it) }
-            }
-                ChartLabels(
-                    labels = points.map { it.first },
-                    show = { index -> index == 0 || index == points.lastIndex || points.size <= 8 || index % 2 == 0 },
-                    horizontalInset = 28.dp,
-                    modifier = Modifier.align(Alignment.BottomStart),
-                )
-            }
-            selectedIndex?.let { index ->
-                points.getOrNull(index)?.let { point ->
-                    Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f)) {
-                        Text("${point.first}: %.2f".format(point.second), Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-                    }
+                    ChartLabels(
+                        labels = points.map { it.first },
+                        show = { index -> index == 0 || index == points.lastIndex || points.size <= 8 || index % 2 == 0 },
+                        horizontalInset = 28.dp,
+                        modifier = Modifier.align(Alignment.BottomStart),
+                    )
                 }
             }
         }
