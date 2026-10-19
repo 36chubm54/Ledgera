@@ -1290,19 +1290,14 @@ pub fn create_transfer(
             &format!("[transfer:{transfer_id}]"),
         )?;
     }
-    let transfer_id_map = normalize_transfer_ids_in_tx(&tx)?;
-    let normalized_transfer_id = transfer_id_map
-        .get(&transfer_id)
-        .copied()
-        .unwrap_or(transfer_id);
     normalize_record_ids_in_tx(&tx)?;
 
     tx.commit().map_err(sqlite_err)?;
     storage_clear_read_connection_cache();
     transfer_list_rows(db_path)?
         .into_iter()
-        .find(|row| row.id == normalized_transfer_id)
-        .ok_or_else(|| format!("Transfer not found: {normalized_transfer_id}"))
+        .find(|row| row.id == transfer_id)
+        .ok_or_else(|| format!("Transfer not found: {transfer_id}"))
 }
 
 pub fn update_transfer(
@@ -4505,16 +4500,11 @@ pub fn create_currency_transfer(
         insert_transfer_record_in_tx(&tx, "expense", payload.date.trim(), payload.from_wallet_id, None, commission_minor as f64 / 100.0, commission_minor, &commission_currency, commission_rate.parse::<f64>().unwrap(), &commission_rate, "Commission", &format!("[transfer:{transfer_id}]"))?;
         tx.execute("UPDATE records SET amount_base = ?1, amount_base_minor = ?2 WHERE transfer_id IS NULL AND description = ?3", (commission_base_minor as f64 / 100.0, commission_base_minor, format!("[transfer:{transfer_id}]"))).map_err(sqlite_err)?;
     }
-    let transfer_id_map = normalize_transfer_ids_in_tx(&tx)?;
-    let normalized_transfer_id = transfer_id_map
-        .get(&transfer_id)
-        .copied()
-        .unwrap_or(transfer_id);
     normalize_record_ids_in_tx(&tx)?;
     tx.commit().map_err(sqlite_err)?;
     storage_clear_read_connection_cache();
     let conn = open_sqlite_connection(db_path)?;
-    conn.query_row("SELECT id, from_wallet_id, to_wallet_id, date, source_amount_original, source_currency, target_amount_original, target_currency, conversion_rate_text, description FROM transfers WHERE id = ?1", [normalized_transfer_id], |row| Ok(CurrencyTransferRow { id: row.get(0)?, from_wallet_id: row.get(1)?, to_wallet_id: row.get(2)?, date: row.get(3)?, source_amount: row.get(4)?, source_currency: row.get(5)?, target_amount: row.get(6)?, target_currency: row.get(7)?, conversion_rate: row.get(8)?, description: row.get(9)? })).map_err(sqlite_err)
+    conn.query_row("SELECT id, from_wallet_id, to_wallet_id, date, source_amount_original, source_currency, target_amount_original, target_currency, conversion_rate_text, description FROM transfers WHERE id = ?1", [transfer_id], |row| Ok(CurrencyTransferRow { id: row.get(0)?, from_wallet_id: row.get(1)?, to_wallet_id: row.get(2)?, date: row.get(3)?, source_amount: row.get(4)?, source_currency: row.get(5)?, target_amount: row.get(6)?, target_currency: row.get(7)?, conversion_rate: row.get(8)?, description: row.get(9)? })).map_err(sqlite_err)
 }
 
 struct ResolvedCurrencyTransfer {
@@ -5026,6 +5016,8 @@ fn all_transfer_ids_in_tx(tx: &rusqlite::Transaction<'_>) -> StorageResult<Vec<i
     rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
 }
 
+// Import replacement may remap logical IDs, but normal CRUD must preserve
+// persisted transfer IDs because records, markers, backups, and callers refer to them.
 fn normalize_transfer_ids_in_tx(
     tx: &rusqlite::Transaction<'_>,
 ) -> StorageResult<HashMap<i64, i64>> {
@@ -9247,8 +9239,22 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
     }
 
     #[test]
-    fn currency_transfer_returns_row_after_transfer_id_gap_is_normalized() {
+    fn currency_transfer_returns_row_without_reassigning_transfer_id() {
         let db_path = create_balance_test_db();
+        create_transfer(
+            &db_path,
+            &TransferCreatePayload {
+                from_wallet_id: 1,
+                to_wallet_id: 2,
+                date: "2026-01-05".to_owned(),
+                amount: "100".to_owned(),
+                currency: "KZT".to_owned(),
+                description: "Existing transfer".to_owned(),
+                commission_amount: "0".to_owned(),
+                commission_currency: "KZT".to_owned(),
+            },
+        )
+        .unwrap();
         delete_transfer(&db_path, 1).unwrap();
         upsert_currency_rate(
             &db_path,
@@ -9287,13 +9293,13 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         )
         .unwrap();
 
-        assert_eq!(transfer.id, 1);
+        assert_eq!(transfer.id, 3);
         assert_eq!(transfer.target_amount, 0.2);
         remove_test_db(&db_path);
     }
 
     #[test]
-    fn create_transfer_normalizes_transfer_ids_after_gaps() {
+    fn create_transfer_preserves_transfer_ids_after_gaps() {
         let db_path = create_balance_test_db();
         let second = create_transfer(
             &db_path,
@@ -9327,26 +9333,26 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         )
         .unwrap();
 
-        assert_eq!(created.id, 2);
+        assert_eq!(created.id, 3);
         let transfers = transfer_list_rows(&db_path).unwrap();
         assert_eq!(
             transfers
                 .iter()
                 .map(|transfer| transfer.id)
                 .collect::<Vec<_>>(),
-            vec![1, 2]
+            vec![2, 3]
         );
         let rows = record_list_rows(&db_path).unwrap();
-        assert!(rows.iter().any(|record| record.transfer_id == Some(1)));
         assert!(rows.iter().any(|record| record.transfer_id == Some(2)));
+        assert!(rows.iter().any(|record| record.transfer_id == Some(3)));
         assert!(
             rows.iter()
-                .any(|record| record.description == "[transfer:2]")
+                .any(|record| record.description == "[transfer:3]")
         );
         assert!(
             !rows
                 .iter()
-                .any(|record| record.description == "[transfer:3]")
+                .any(|record| record.description == "[transfer:2]")
         );
         remove_test_db(&db_path);
     }
