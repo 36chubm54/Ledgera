@@ -535,7 +535,7 @@ private fun CustomProviderDialog(
     var timeoutSeconds by remember(existingProvider) { mutableStateOf((existingProvider?.timeoutSeconds ?: 10).toString()) }
     var retryCount by remember(existingProvider) { mutableStateOf((existingProvider?.retryCount ?: 0).toString()) }
     var redirectLimit by remember(existingProvider) { mutableStateOf((existingProvider?.redirectLimit ?: 3).toString()) }
-    var showAdvanced by remember { mutableStateOf(false) }
+    var showAdvancedDialog by remember(existingProvider?.providerId) { mutableStateOf(false) }
     val valid = slug.matches(Regex("[a-z0-9][a-z0-9_-]{1,63}")) &&
         displayName.isNotBlank() && endpoint.startsWith("https://") &&
         currencyPath.isNotBlank() && ratePath.isNotBlank() && responseBase.matches(Regex("[A-Za-z]{3}")) &&
@@ -544,32 +544,21 @@ private fun CustomProviderDialog(
         retryCount.toLongOrNull()?.let { it in 0..3 } == true &&
         redirectLimit.toLongOrNull()?.let { it in 0..5 } == true
     AlertDialog(
-        onDismissRequest = onCancel,
+        onDismissRequest = { if (!loading) onCancel() },
         title = { Text(if (existingProvider == null) "Add custom provider" else "Edit custom provider") },
         text = {
             Column(Modifier.width(DialogContentWidth).heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!showAdvanced) {
-                    OutlinedTextField(slug, { slug = it.lowercase() }, label = { Text("Slug") }, placeholder = { Text("my-provider") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = existingProvider == null)
-                    OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(endpoint, { endpoint = it }, label = { Text("HTTPS endpoint") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(responseFormat, { responseFormat = it.lowercase() }, label = { Text("Format: json or xml") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(currencyPath, { currencyPath = it }, label = { Text("Currency path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(ratePath, { ratePath = it }, label = { Text("Rate path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(responseBase, { responseBase = it.uppercase().take(3) }, label = { Text("Response base") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(semantics, { semantics = it.lowercase() }, label = { Text("Rate semantics") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(authMode, { authMode = it.lowercase() }, label = { Text("Auth: none, api_key_header, api_key_query, bearer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    if (authMode != "none") OutlinedTextField(credentialRef, { credentialRef = it }, label = { Text("Credential reference") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    TextButton(onClick = { showAdvanced = true }) { Text("Advanced provider parameters") }
-                } else {
-                    Text("Advanced provider parameters", style = MaterialTheme.typography.titleMedium)
-                    OutlinedTextField(effectiveDatePath, { effectiveDatePath = it }, label = { Text("Effective date path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(aliasesJson, { aliasesJson = it }, label = { Text("Currency aliases JSON") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(requestBody, { requestBody = it }, label = { Text("POST request body") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(timeoutSeconds, { timeoutSeconds = it.filter(Char::isDigit) }, label = { Text("Timeout seconds (1-120)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(retryCount, { retryCount = it.filter(Char::isDigit) }, label = { Text("Retries (0-3)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(redirectLimit, { redirectLimit = it.filter(Char::isDigit) }, label = { Text("Redirects (0-5)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    TextButton(onClick = { showAdvanced = false }) { Text("Back to provider settings") }
-                }
+                OutlinedTextField(slug, { slug = it.lowercase() }, label = { Text("Slug") }, placeholder = { Text("my-provider") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = existingProvider == null)
+                OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(endpoint, { endpoint = it }, label = { Text("HTTPS endpoint") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(responseFormat, { responseFormat = it.lowercase() }, label = { Text("Format: json or xml") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(currencyPath, { currencyPath = it }, label = { Text("Currency path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(ratePath, { ratePath = it }, label = { Text("Rate path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(responseBase, { responseBase = it.uppercase().take(3) }, label = { Text("Response base") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(semantics, { semantics = it.lowercase() }, label = { Text("Rate semantics") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(authMode, { authMode = it.lowercase() }, label = { Text("Auth: none, api_key_header, api_key_query, bearer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (authMode != "none") OutlinedTextField(credentialRef, { credentialRef = it }, label = { Text("Credential reference") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                TextButton(onClick = { showAdvancedDialog = true }, enabled = !loading) { Text("Advanced provider parameters") }
                 Text("Base currency: $baseCurrency. Provider stays inactive until Test succeeds.", style = MaterialTheme.typography.bodySmall)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -598,10 +587,66 @@ private fun CustomProviderDialog(
                         )
                     )
                 },
-                enabled = valid && !loading && !showAdvanced,
+                enabled = valid && !loading,
             ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onCancel, enabled = !loading) { Text("Cancel") } },
+    )
+    if (showAdvancedDialog) {
+        AdvancedProviderParametersDialog(
+            effectiveDatePath = effectiveDatePath,
+            aliasesJson = aliasesJson,
+            requestBody = requestBody,
+            timeoutSeconds = timeoutSeconds,
+            retryCount = retryCount,
+            redirectLimit = redirectLimit,
+            loading = loading,
+            onEffectiveDatePathChange = { effectiveDatePath = it },
+            onAliasesJsonChange = { aliasesJson = it },
+            onRequestBodyChange = { requestBody = it },
+            onTimeoutSecondsChange = { timeoutSeconds = it.filter(Char::isDigit) },
+            onRetryCountChange = { retryCount = it.filter(Char::isDigit) },
+            onRedirectLimitChange = { redirectLimit = it.filter(Char::isDigit) },
+            onClose = { showAdvancedDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun AdvancedProviderParametersDialog(
+    effectiveDatePath: String,
+    aliasesJson: String,
+    requestBody: String,
+    timeoutSeconds: String,
+    retryCount: String,
+    redirectLimit: String,
+    loading: Boolean,
+    onEffectiveDatePathChange: (String) -> Unit,
+    onAliasesJsonChange: (String) -> Unit,
+    onRequestBodyChange: (String) -> Unit,
+    onTimeoutSecondsChange: (String) -> Unit,
+    onRetryCountChange: (String) -> Unit,
+    onRedirectLimitChange: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!loading) onClose() },
+        title = { Text("Advanced provider parameters") },
+        text = {
+            Column(
+                Modifier.width(DialogContentWidth).heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("These settings are kept in the provider draft until you save it.", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(effectiveDatePath, onEffectiveDatePathChange, label = { Text("Effective date path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(aliasesJson, onAliasesJsonChange, label = { Text("Currency aliases JSON") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(requestBody, onRequestBodyChange, label = { Text("POST request body") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(timeoutSeconds, onTimeoutSecondsChange, label = { Text("Timeout seconds (1-120)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(retryCount, onRetryCountChange, label = { Text("Retries (0-3)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(redirectLimit, onRedirectLimitChange, label = { Text("Redirects (0-5)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose, enabled = !loading) { Text("Done") } },
     )
 }
 
