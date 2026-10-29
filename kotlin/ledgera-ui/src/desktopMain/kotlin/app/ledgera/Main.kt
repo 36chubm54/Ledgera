@@ -116,6 +116,7 @@ private fun runApplication(args: Array<String>) = application {
                             },
                         )
                     }
+                    val appShellViewModel = remember(engine) { AppShellViewModel(engine) }
                     DisposableEffect(settingsViewModel) {
                         settingsViewModel.startCurrencyRefresh(autoUpdate = true, intervalMinutes = 60)
                         onDispose { settingsViewModel.stopCurrencyRefresh() }
@@ -129,7 +130,7 @@ private fun runApplication(args: Array<String>) = application {
                     ) {
                         Box(Modifier.fillMaxSize()) {
                             AppShell(
-                            viewModel = AppShellViewModel(engine),
+                            viewModel = appShellViewModel,
                             operationsViewModel = operationsViewModel,
                             debtsViewModel = debtsViewModel,
                             mandatoryViewModel = mandatoryViewModel,

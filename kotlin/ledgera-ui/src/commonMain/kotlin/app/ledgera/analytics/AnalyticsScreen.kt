@@ -96,7 +96,7 @@ fun AnalyticsScreen(
                     Box(Modifier.fillMaxWidth().height(28.dp)) {
                         hoveredCapitalIndex?.let { index ->
                             snapshot.capital.getOrNull(index)?.let { point ->
-                                Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f)) {
+                                Surface(color = Color.Transparent) {
                                     Text(
                                         "${point.month}: %.2f".format(point.balanceBase),
                                         Modifier.padding(horizontal = 8.dp, vertical = 4.dp),

@@ -1,6 +1,6 @@
-use quick_xml::Reader;
 use quick_xml::events::Event;
-use rusqlite::{Connection, OptionalExtension, params};
+use quick_xml::Reader;
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::net::{IpAddr, ToSocketAddrs};
@@ -8,7 +8,7 @@ use std::process::Command;
 use std::str::FromStr;
 use std::sync::{Mutex, OnceLock};
 
-use crate::{StorageResult, sqlite_err, validate_currency_code, validate_ymd_date};
+use crate::{sqlite_err, validate_currency_code, validate_ymd_date, StorageResult};
 
 pub const SUPPORTED_CURRENCY_PROVIDER_NAMES: &[&str] =
     &["nbk", "exchange_rate", "cbr", "static", "cache"];
@@ -242,10 +242,11 @@ pub fn normalize_rate_text(value: &str) -> StorageResult<String> {
             fraction
         )
     };
-    let number = normalized
-        .parse::<f64>()
-        .map_err(|_| "Currency rate must be a positive decimal".to_owned())?;
-    if !number.is_finite() || number <= 0.0 {
+    let is_zero = normalized
+        .chars()
+        .filter(|character| *character != '.')
+        .all(|character| character == '0');
+    if is_zero {
         return Err("Currency rate must be positive".to_owned());
     }
     Ok(normalized)
@@ -637,11 +638,8 @@ pub fn test_currency_provider_definition(
         ))
     };
     let result = fetched.and_then(|(payload, _)| {
-        let resolved_date = resolve_custom_effective_date(
-            &payload,
-            &definition,
-            effective_date.trim(),
-        )?;
+        let resolved_date =
+            resolve_custom_effective_date(&payload, &definition, effective_date.trim())?;
         parse_custom_provider_payload(&payload, &definition, &base)
             .map(|rates| (rates, resolved_date))
     });
@@ -863,12 +861,15 @@ fn divide_decimal_text(numerator: &str, denominator: &str) -> StorageResult<Stri
         return Err("Currency rate denominator must be positive".to_owned());
     }
     let scale = 12u32;
+    let denominator_power = decimal_power(denominator_scale)?;
+    let scale_power = decimal_power(scale)?;
+    let numerator_power = decimal_power(numerator_scale)?;
     let numerator_scaled = numerator
-        .checked_mul(10u128.pow(denominator_scale))
-        .and_then(|value| value.checked_mul(10u128.pow(scale)))
+        .checked_mul(denominator_power)
+        .and_then(|value| value.checked_mul(scale_power))
         .ok_or_else(|| "Currency rate is too large".to_owned())?;
     let denominator_scaled = denominator
-        .checked_mul(10u128.pow(numerator_scale))
+        .checked_mul(numerator_power)
         .ok_or_else(|| "Currency rate is too large".to_owned())?;
     let quotient = numerator_scaled / denominator_scaled;
     let remainder = numerator_scaled % denominator_scaled;
@@ -877,8 +878,8 @@ fn divide_decimal_text(numerator: &str, denominator: &str) -> StorageResult<Stri
     } else {
         quotient
     };
-    let whole = rounded / 10u128.pow(scale);
-    let fraction = format!("{:012}", rounded % 10u128.pow(scale))
+    let whole = rounded / scale_power;
+    let fraction = format!("{:012}", rounded % scale_power)
         .trim_end_matches('0')
         .to_owned();
     normalize_rate_text(
@@ -889,6 +890,12 @@ fn divide_decimal_text(numerator: &str, denominator: &str) -> StorageResult<Stri
         }
         .as_str(),
     )
+}
+
+fn decimal_power(scale: u32) -> StorageResult<u128> {
+    10u128
+        .checked_pow(scale)
+        .ok_or_else(|| "Currency rate is too large".to_owned())
 }
 
 pub fn static_provider_rates() -> Vec<ProviderRate> {
@@ -1217,9 +1224,9 @@ fn resolve_custom_effective_date(
             let root: Value = serde_json::from_str(payload)
                 .map_err(|error| format!("Custom provider JSON parsing failed: {error}"))?;
             let values = json_path_values(&root, path)?;
-            let value = values
-                .first()
-                .ok_or_else(|| "Custom provider effective date path returned no values".to_owned())?;
+            let value = values.first().ok_or_else(|| {
+                "Custom provider effective date path returned no values".to_owned()
+            })?;
             value
                 .as_str()
                 .map(str::to_owned)
@@ -1245,13 +1252,17 @@ fn resolve_custom_effective_date(
                     Ok(Event::Text(text)) if current_tag == tag => {
                         date = Some(
                             text.decode()
-                                .map_err(|_| "Custom provider XML contains invalid text".to_owned())?
+                                .map_err(|_| {
+                                    "Custom provider XML contains invalid text".to_owned()
+                                })?
                                 .trim()
                                 .to_owned(),
                         );
                     }
                     Ok(Event::Eof) => break,
-                    Err(error) => return Err(format!("Custom provider XML parsing failed: {error}")),
+                    Err(error) => {
+                        return Err(format!("Custom provider XML parsing failed: {error}"))
+                    }
                     _ => {}
                 }
                 if date.is_some() {
@@ -1292,6 +1303,7 @@ fn fetch_provider_payload(
     api_key: &str,
     timeout_seconds: i64,
 ) -> StorageResult<(String, String)> {
+    const MAX_PROVIDER_RESPONSE_BYTES: usize = 5 * 1024 * 1024;
     let endpoint = provider_endpoint(provider, base, api_key)?;
     let timeout = timeout_seconds.clamp(1, 120).to_string();
     let output = Command::new("curl")
@@ -1300,8 +1312,12 @@ fn fetch_provider_payload(
             "--silent",
             "--show-error",
             "--location",
+            "--max-redirs",
+            "3",
             "--max-time",
             &timeout,
+            "--max-filesize",
+            &MAX_PROVIDER_RESPONSE_BYTES.to_string(),
             "--user-agent",
             "Ledgera currency refresh",
             &endpoint,
@@ -1322,6 +1338,9 @@ fn fetch_provider_payload(
     }
     let body = String::from_utf8(output.stdout)
         .map_err(|_| format!("{provider} response is not valid UTF-8"))?;
+    if body.len() > MAX_PROVIDER_RESPONSE_BYTES {
+        return Err(format!("{provider} response exceeds the 5 MB limit"));
+    }
     let format = if provider == "exchange_rate" {
         "json"
     } else {
@@ -1443,7 +1462,9 @@ fn fetch_custom_provider_payload(
         } else {
             sanitize_provider_diagnostic(&diagnostic, secret)
         };
-        if attempt < definition.retry_count.clamp(0, 3) {
+        if attempt < definition.retry_count.clamp(0, 3)
+            && is_retryable_curl_failure(output.status.code())
+        {
             continue;
         }
     }
@@ -1451,6 +1472,10 @@ fn fetch_custom_provider_payload(
         "{} request failed: {last_error}",
         definition.provider_id
     ))
+}
+
+fn is_retryable_curl_failure(code: Option<i32>) -> bool {
+    matches!(code, Some(6 | 7 | 28 | 52 | 55 | 56))
 }
 
 fn sanitize_provider_diagnostic(value: &str, secret: &str) -> String {
@@ -1699,57 +1724,58 @@ pub fn refresh_currency_rates(
         } else {
             None
         };
-        let parsed: StorageResult<(Vec<ProviderRate>, String)> = if request.provider_payload.trim().is_empty()
-            && (provider == "cache" || provider == "static")
-        {
-            if provider == "static" {
-                cached_provider_rates(db_path, &base, request.effective_date.trim())
-                    .or_else(|_| Ok(static_provider_rates_for_base(&base)?))
-            } else {
-                cached_provider_rates(db_path, &base, request.effective_date.trim())
-            }
-            .map(|rates| (rates, request.effective_date.trim().to_owned()))
-        } else if let Some(definition) = custom_definition.as_ref() {
-            let fetched = if request.provider_payload.trim().is_empty() {
-                fetch_custom_provider_payload(definition, &request.api_key)
-            } else {
-                Ok((
-                    request.provider_payload.clone(),
-                    request.payload_format.clone(),
-                ))
-            };
-            fetched.and_then(|(payload, _format)| {
-                let effective_date = resolve_custom_effective_date(
-                    &payload,
-                    definition,
-                    request.effective_date.trim(),
-                )?;
-                parse_custom_provider_payload(&payload, definition, &base)
-                    .map(|rates| (rates, effective_date))
-            })
-        } else {
-            let fetched = if request.provider_payload.trim().is_empty() {
+        let parsed: StorageResult<(Vec<ProviderRate>, String)> =
+            if request.provider_payload.trim().is_empty()
+                && (provider == "cache" || provider == "static")
+            {
                 if provider == "static" {
-                    Ok((String::new(), "static".to_owned()))
+                    cached_provider_rates(db_path, &base, request.effective_date.trim())
+                        .or_else(|_| Ok(static_provider_rates_for_base(&base)?))
                 } else {
-                    fetch_provider_payload(
-                        provider,
-                        &base,
-                        &request.api_key,
-                        request.timeout_seconds,
-                    )
+                    cached_provider_rates(db_path, &base, request.effective_date.trim())
                 }
+                .map(|rates| (rates, request.effective_date.trim().to_owned()))
+            } else if let Some(definition) = custom_definition.as_ref() {
+                let fetched = if request.provider_payload.trim().is_empty() {
+                    fetch_custom_provider_payload(definition, &request.api_key)
+                } else {
+                    Ok((
+                        request.provider_payload.clone(),
+                        request.payload_format.clone(),
+                    ))
+                };
+                fetched.and_then(|(payload, _format)| {
+                    let effective_date = resolve_custom_effective_date(
+                        &payload,
+                        definition,
+                        request.effective_date.trim(),
+                    )?;
+                    parse_custom_provider_payload(&payload, definition, &base)
+                        .map(|rates| (rates, effective_date))
+                })
             } else {
-                Ok((
-                    request.provider_payload.clone(),
-                    request.payload_format.clone(),
-                ))
+                let fetched = if request.provider_payload.trim().is_empty() {
+                    if provider == "static" {
+                        Ok((String::new(), "static".to_owned()))
+                    } else {
+                        fetch_provider_payload(
+                            provider,
+                            &base,
+                            &request.api_key,
+                            request.timeout_seconds,
+                        )
+                    }
+                } else {
+                    Ok((
+                        request.provider_payload.clone(),
+                        request.payload_format.clone(),
+                    ))
+                };
+                fetched.and_then(|(payload, format)| {
+                    parse_provider_payload(provider, &payload, &format, &base)
+                        .map(|rates| (rates, request.effective_date.trim().to_owned()))
+                })
             };
-            fetched.and_then(|(payload, format)| {
-                parse_provider_payload(provider, &payload, &format, &base)
-                    .map(|rates| (rates, request.effective_date.trim().to_owned()))
-            })
-        };
         match parsed {
             Ok((rates, effective_date)) if !rates.is_empty() => {
                 selected = Some((provider.clone(), rates, effective_date));
@@ -1852,6 +1878,18 @@ mod tests {
         assert_eq!(normalize_rate_text("000457.4300").unwrap(), "457.43");
         assert_eq!(normalize_rate_text("6,500").unwrap(), "6.5");
         assert!(normalize_rate_text("0").is_err());
+        assert_eq!(
+            normalize_rate_text("999999999999999999999999999999999999999999").unwrap(),
+            "999999999999999999999999999999999999999999"
+        );
+    }
+
+    #[test]
+    fn retries_only_network_failures() {
+        assert!(is_retryable_curl_failure(Some(28)));
+        assert!(is_retryable_curl_failure(Some(56)));
+        assert!(!is_retryable_curl_failure(Some(22)));
+        assert!(!is_retryable_curl_failure(None));
     }
 
     #[test]
@@ -2095,32 +2133,30 @@ mod tests {
         )
         .unwrap();
         assert!(!row.active);
-        assert!(
-            upsert_currency_provider_definition(
-                &path_text,
-                &CurrencyProviderDefinitionPayload {
-                    provider_id: "custom:bad".to_owned(),
-                    display_name: "Bad".to_owned(),
-                    endpoint: "http://localhost/rates".to_owned(),
-                    http_method: "GET".to_owned(),
-                    response_format: "json".to_owned(),
-                    currency_path: "$.rates".to_owned(),
-                    rate_path: "$.rates".to_owned(),
-                    effective_date_path: String::new(),
-                    aliases_json: "{}".to_owned(),
-                    response_base_currency: "USD".to_owned(),
-                    rate_semantics: "quote_per_base".to_owned(),
-                    auth_mode: "none".to_owned(),
-                    credential_ref: String::new(),
-                    request_body: String::new(),
-                    timeout_seconds: 10,
-                    retry_count: 0,
-                    redirect_limit: 3,
-                },
-                "2026-10-19"
-            )
-            .is_err()
-        );
+        assert!(upsert_currency_provider_definition(
+            &path_text,
+            &CurrencyProviderDefinitionPayload {
+                provider_id: "custom:bad".to_owned(),
+                display_name: "Bad".to_owned(),
+                endpoint: "http://localhost/rates".to_owned(),
+                http_method: "GET".to_owned(),
+                response_format: "json".to_owned(),
+                currency_path: "$.rates".to_owned(),
+                rate_path: "$.rates".to_owned(),
+                effective_date_path: String::new(),
+                aliases_json: "{}".to_owned(),
+                response_base_currency: "USD".to_owned(),
+                rate_semantics: "quote_per_base".to_owned(),
+                auth_mode: "none".to_owned(),
+                credential_ref: String::new(),
+                request_body: String::new(),
+                timeout_seconds: 10,
+                retry_count: 0,
+                redirect_limit: 3,
+            },
+            "2026-10-19"
+        )
+        .is_err());
         activate_currency_provider_definition(&path_text, "custom:fixture", "2026-10-19").unwrap();
         assert!(currency_provider_definition_rows(&path_text).unwrap()[0].active);
         let refresh = refresh_currency_rates(

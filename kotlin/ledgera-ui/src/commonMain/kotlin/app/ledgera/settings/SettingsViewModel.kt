@@ -19,6 +19,7 @@ import app.ledgera.model.CurrencyRefreshRequest
 import app.ledgera.model.CurrencyRefreshResult
 import app.ledgera.validation.DateValidation
 import app.ledgera.validation.currentLedgerDate
+import app.ledgera.validation.currentUtcTimestamp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -362,7 +363,7 @@ class SettingsViewModel(
             primaryProvider = primary,
             fallbackProvider = fallback,
             effectiveDate = date,
-            fetchedAt = date,
+            fetchedAt = currentUtcTimestamp(),
             apiKey = apiKey,
         )
     }

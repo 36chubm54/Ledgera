@@ -169,7 +169,7 @@ private fun CapitalCard(points: List<DashboardCapitalPoint>) {
                 CapitalChart(points, { hoveredIndex = it }, Modifier.fillMaxWidth().weight(1f))
                 Box(Modifier.fillMaxWidth().height(28.dp)) {
                     hoveredIndex?.let { index -> points.getOrNull(index)?.let { point ->
-                        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .94f)) {
+                        Surface(color = Color.Transparent) {
                             Text("${point.month}: ${point.balanceBase}", Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                         }
                     } }

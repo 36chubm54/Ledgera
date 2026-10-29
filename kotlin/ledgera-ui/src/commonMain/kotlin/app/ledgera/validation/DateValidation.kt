@@ -15,6 +15,8 @@ data class LedgerDate(
 
 expect fun currentLedgerDate(): LedgerDate
 
+expect fun currentUtcTimestamp(): String
+
 object DateValidation {
     fun validateYmdNotFuture(value: String, today: LedgerDate = currentLedgerDate()): String? {
         val parsed = parseYmd(value) ?: return "Date must use a valid YYYY-MM-DD value"
