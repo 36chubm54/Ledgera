@@ -43,6 +43,7 @@ import app.ledgera.reports.ReportsFileActions
 import app.ledgera.shell.AppShell
 import app.ledgera.shell.AppShellViewModel
 import app.ledgera.theme.LedgeraTheme
+import app.ledgera.theme.DesktopThemePreferences
 import java.awt.Window as AwtWindow
 import java.awt.FileDialog
 import java.awt.Frame
@@ -73,7 +74,8 @@ private fun runApplication(args: Array<String>) = application {
 
     Window(onCloseRequest = ::exitApplication, state = windowState, title = "Ledgera Beta.1") {
         RefreshDpiAfterStartup(window)
-        LedgeraTheme {
+        var themeMode by remember { mutableStateOf(DesktopThemePreferences.load()) }
+        LedgeraTheme(mode = themeMode) {
             Surface {
                 if (dbPath.isNullOrBlank()) {
                     Text("Start with --db-path <ledger.db>.")
@@ -137,6 +139,11 @@ private fun runApplication(args: Array<String>) = application {
                             analyticsViewModel = analyticsViewModel,
                             distributionViewModel = distributionViewModel,
                             dashboardViewModel = dashboardViewModel,
+                            themeMode = themeMode,
+                            onThemeModeChange = { mode ->
+                                themeMode = mode
+                                DesktopThemePreferences.save(mode)
+                            },
                             operationsFileActions = DesktopOperationsFileActions(window),
                             mandatoryFileActions = DesktopMandatoryFileActions(window),
                             reportsFileActions = DesktopReportsFileActions(window),

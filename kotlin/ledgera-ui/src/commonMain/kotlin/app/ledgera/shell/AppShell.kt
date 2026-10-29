@@ -59,6 +59,7 @@ import app.ledgera.settings.SettingsScreen
 import app.ledgera.settings.SettingsFileActions
 import app.ledgera.settings.NoSettingsFileActions
 import app.ledgera.settings.SettingsViewModel
+import app.ledgera.theme.ThemeMode
 import app.ledgera.ui.ToastHost
 import app.ledgera.resources.Res
 import app.ledgera.resources.ic_analytics
@@ -94,6 +95,8 @@ fun AppShell(
     analyticsViewModel: AnalyticsViewModel,
     distributionViewModel: DistributionViewModel,
     dashboardViewModel: DashboardViewModel,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
     modifier: Modifier = Modifier,
     operationsFileActions: OperationsFileActions = NoOperationsFileActions,
     mandatoryFileActions: MandatoryFileActions = NoMandatoryFileActions,
@@ -207,7 +210,13 @@ fun AppShell(
                             viewModel = mandatoryViewModel,
                             fileActions = mandatoryFileActions,
                         )
-                        DesktopSection.Settings -> SettingsScreen(settingsViewModel, scrollState = settingsScrollState, fileActions = settingsFileActions)
+                        DesktopSection.Settings -> SettingsScreen(
+                            viewModel = settingsViewModel,
+                            scrollState = settingsScrollState,
+                            themeMode = themeMode,
+                            onThemeModeChange = onThemeModeChange,
+                            fileActions = settingsFileActions,
+                        )
                     }
                 }
             }

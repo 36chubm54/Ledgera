@@ -31,7 +31,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.ledgera.model.BudgetResultItem
 import app.ledgera.ui.AutocompleteTextField
@@ -105,7 +104,7 @@ private fun BudgetList(state: BudgetUiState, viewModel: BudgetViewModel) {
 private fun BudgetRow(result: BudgetResultItem, selected: Boolean, onClick: () -> Unit) {
     val tone = when (result.paceStatus) {
         "overspent" -> MaterialTheme.colorScheme.error
-        "overpace" -> Color(0xFF9A6700)
+        "overpace" -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.primary
     }
     Card(

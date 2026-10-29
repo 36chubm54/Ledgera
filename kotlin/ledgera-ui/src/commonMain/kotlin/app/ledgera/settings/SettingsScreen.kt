@@ -47,6 +47,7 @@ import app.ledgera.model.CurrencyProviderDefinitionRequest
 import app.ledgera.model.CurrencyProviderSettingRequest
 import app.ledgera.model.CurrencyProviderTestRequest
 import app.ledgera.model.WalletSettingsItem
+import app.ledgera.theme.ThemeMode
 import app.ledgera.ui.LedgerDateField
 import app.ledgera.validation.CurrencyValidation
 import app.ledgera.validation.DateValidation
@@ -66,6 +67,8 @@ object NoSettingsFileActions : SettingsFileActions {
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     scrollState: androidx.compose.foundation.ScrollState,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
     modifier: Modifier = Modifier,
     fileActions: SettingsFileActions = NoSettingsFileActions,
 ) {
@@ -120,6 +123,8 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+
+        AppearanceSection(themeMode = themeMode, onThemeModeChange = onThemeModeChange)
 
         WalletsSection(
             wallets = state.wallets,
@@ -305,6 +310,38 @@ fun SettingsScreen(
             },
             dismissButton = { TextButton(onClick = viewModel::cancelBackupPreview) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun AppearanceSection(
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Appearance", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Choose how Ledgera should display its colors.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThemeMode.entries.forEach { option ->
+                    FilterChip(
+                        selected = themeMode == option,
+                        onClick = { onThemeModeChange(option) },
+                        label = { Text(option.label) },
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -187,6 +187,8 @@ private fun CapitalChart(points: List<DashboardCapitalPoint>, onHover: (Int?) ->
     val padding = maxOf((dataMax - dataMin) * .12, kotlin.math.abs(dataMin) * .02, kotlin.math.abs(dataMax) * .02, 1.0)
     val chartMin = dataMin - padding
     val chartSpan = (dataMax + padding - chartMin).coerceAtLeast(1.0)
+    val axisColor = MaterialTheme.colorScheme.outline.copy(alpha = .45f)
+    val lineColor = MaterialTheme.colorScheme.primary
     BoxWithConstraints(modifier) {
         val scrollState = rememberScrollState()
         val contentWidth = maxOf(maxWidth, (points.size * 96).dp)
@@ -215,9 +217,9 @@ private fun CapitalChart(points: List<DashboardCapitalPoint>, onHover: (Int?) ->
                         else horizontalInset + index.toFloat() / values.lastIndex * usableWidth
                         Offset(x, size.height - 24f - (size.height - 42f) * ((value - chartMin) / chartSpan).toFloat())
                     }
-                    drawLine(Color.Gray.copy(alpha = .45f), Offset(horizontalInset, size.height - 24f), Offset(size.width - horizontalInset, size.height - 24f), 1f)
-                    coords.zipWithNext().forEach { (a, b) -> drawLine(Color(0xFF2E8B70), a, b, 4f, StrokeCap.Round) }
-                    coords.forEach { drawCircle(Color(0xFF2E8B70), 4f, it) }
+                    drawLine(axisColor, Offset(horizontalInset, size.height - 24f), Offset(size.width - horizontalInset, size.height - 24f), 1f)
+                    coords.zipWithNext().forEach { (a, b) -> drawLine(lineColor, a, b, 4f, StrokeCap.Round) }
+                    coords.forEach { drawCircle(lineColor, 4f, it) }
                 }
                 DashboardChartLabels(
                     labels = points.map { it.month },
@@ -279,7 +281,7 @@ private fun AssetStructureCard(rows: List<DashboardAssetBreakdown>, selected: St
                 Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     rows.forEach { row ->
                         Row(Modifier.clickable { onSelected(if (selected == row.label) null else row.label) }, verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(11.dp).background(parseColor(row.color), RoundedCornerShape(3.dp)))
+                            Box(Modifier.size(11.dp).background(parseColor(row.color, MaterialTheme.colorScheme.outline), RoundedCornerShape(3.dp)))
                             Text("  ${row.label.replaceFirstChar { it.uppercase() }}  ${row.amountBase}")
                         }
                     }
@@ -291,6 +293,7 @@ private fun AssetStructureCard(rows: List<DashboardAssetBreakdown>, selected: St
 
 @Composable
 private fun AssetDonut(rows: List<DashboardAssetBreakdown>, selected: String?, onSelected: (String?) -> Unit, modifier: Modifier) {
+    val fallbackColor = MaterialTheme.colorScheme.outline
     val total = rows.sumOf { it.amountBase.toDoubleOrNull() ?: 0.0 }.coerceAtLeast(1.0)
     Canvas(modifier.pointerInput(rows, selected) {
         detectTapGestures { position ->
@@ -317,7 +320,7 @@ private fun AssetDonut(rows: List<DashboardAssetBreakdown>, selected: String?, o
             val radians = Math.toRadians((start + sweep / 2f).toDouble())
             val shift = Offset(cos(radians).toFloat() * offset, sin(radians).toFloat() * offset)
             drawArc(
-                color = parseColor(row.color),
+                color = parseColor(row.color, fallbackColor),
                 startAngle = start,
                 sweepAngle = (sweep - 7f).coerceAtLeast(0f),
                 useCenter = false,
@@ -646,4 +649,5 @@ private fun GoalDialog(viewModel: DashboardViewModel, close: () -> Unit) {
     } }, confirmButton = { Button(onClick = { viewModel.createGoal(title, target, currency, DateValidation.formatGuiDateToYmd(date), ""); close() }, enabled = !invalid) { Text("Save") } }, dismissButton = { TextButton(onClick = close) { Text("Cancel") } })
 }
 
-private fun parseColor(value: String): Color = value.removePrefix("#").toLongOrNull(16)?.let { Color((0xFF000000L or it).toInt()) } ?: Color.Gray
+private fun parseColor(value: String, fallback: Color): Color =
+    value.removePrefix("#").toLongOrNull(16)?.let { Color((0xFF000000L or it).toInt()) } ?: fallback

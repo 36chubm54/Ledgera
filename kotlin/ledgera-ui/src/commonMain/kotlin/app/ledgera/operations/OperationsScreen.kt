@@ -1406,7 +1406,7 @@ private fun OperationRow(
                             ) {
                                 Text(
                                     "#$tag",
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onPrimary,
                                     style = MaterialTheme.typography.labelMedium,
                                 )
                             }

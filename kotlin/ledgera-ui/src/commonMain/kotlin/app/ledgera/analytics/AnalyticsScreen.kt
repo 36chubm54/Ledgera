@@ -211,8 +211,8 @@ private fun MonthlyCard(rows: List<AnalyticsMonthlyRow>) {
         }
         rows.forEach { row ->
             val rowColor = when {
-                row.cashflowBase > 0.0 -> Color(0xFF2E7D32)
-                row.cashflowBase < 0.0 -> Color(0xFFC62828)
+                row.cashflowBase > 0.0 -> MaterialTheme.colorScheme.primary
+                row.cashflowBase < 0.0 -> MaterialTheme.colorScheme.error
                 else -> Color.Transparent
             }
             Row(
@@ -467,6 +467,7 @@ private fun InteractiveDonutChart(
     modifier: Modifier,
     onSelected: (AnalyticsBreakdownRow?) -> Unit,
 ) {
+    val otherColor = MaterialTheme.colorScheme.onSurfaceVariant
     val total = rows.sumOf { it.amountBase }
     val sweeps = rows.mapIndexed { index, row ->
         val targetSweep = (row.amountBase / total * 360.0).toFloat()
@@ -509,7 +510,7 @@ private fun InteractiveDonutChart(
             val targetSweep = (row.amountBase / total * 360.0).toFloat()
             // Round caps extend past the arc endpoints, so leave enough angular room for a visible background gap.
             val sweep = (sweeps[index] - 8f).coerceAtLeast(0f)
-            val color = if (row.isOther) Color(0xFF858585) else parseHexColor(row.color) ?: paletteColor(index)
+            val color = if (row.isOther) otherColor else parseHexColor(row.color) ?: paletteColor(index)
             val midAngle = Math.toRadians((start + targetSweep / 2f).toDouble())
             val offset = Offset(
                 kotlin.math.cos(midAngle).toFloat() * offsets[index],
@@ -558,6 +559,8 @@ private fun CashflowChart(
         max(kotlin.math.abs(it.second.first), kotlin.math.abs(it.second.second))
     }.coerceAtLeast(1.0)
     val axisColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    val incomeColor = MaterialTheme.colorScheme.primary
+    val expenseColor = MaterialTheme.colorScheme.error
     var selectedIndex by remember(rows) { mutableStateOf<Int?>(null) }
     val incomeHeights = rows.mapIndexed { index, row ->
         animateFloatAsState(
@@ -573,8 +576,8 @@ private fun CashflowChart(
     }
     Column(Modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            LegendDot(Color(0xFF2C7A68), "Income")
-            LegendDot(Color(0xFFC94C4C), "Expenses")
+            LegendDot(incomeColor, "Income")
+            LegendDot(expenseColor, "Expenses")
         }
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val chartWidth = if (stretchToWidth) {
@@ -608,8 +611,8 @@ private fun CashflowChart(
                         val x = group * index + group / 2f
                         val incomeHeight = incomeHeights[index] * (size.height * .42f)
                         val expenseHeight = expenseHeights[index] * (size.height * .42f)
-                        drawRect(Color(0xFF2C7A68), Offset(x - 5f, baseline - incomeHeight), Size(10f, incomeHeight))
-                        drawRect(Color(0xFFC94C4C), Offset(x - 5f, baseline), Size(10f, expenseHeight))
+                        drawRect(incomeColor, Offset(x - 5f, baseline - incomeHeight), Size(10f, incomeHeight))
+                        drawRect(expenseColor, Offset(x - 5f, baseline), Size(10f, expenseHeight))
                     }
                 }
                 ChartLabels(

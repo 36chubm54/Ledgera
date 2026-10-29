@@ -105,7 +105,7 @@ private fun StructurePane(state: DistributionUiState, viewModel: DistributionVie
         Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Distribution structure", style = MaterialTheme.typography.titleLarge)
             val validation = state.validation
-            Text(if (validation.isEmpty()) "Structure is valid" else validation.joinToString("\n") { it.message }, color = if (validation.isEmpty()) Color(0xFF18794E) else MaterialTheme.colorScheme.error)
+            Text(if (validation.isEmpty()) "Structure is valid" else validation.joinToString("\n") { it.message }, color = if (validation.isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
             val groupedItems = state.items
                 .groupBy { it.groupName.ifBlank { "Ungrouped" } }
                 .toSortedMap()
@@ -251,7 +251,7 @@ private fun ResultsPane(state: DistributionUiState, viewModel: DistributionViewM
                         val result = live[month]
                         val negative = frozenRow?.isNegative ?: result?.isNegative ?: false
                         val isAuto = frozenRow?.autoFixed == true
-                        val rowColor = (if (negative) Color(0xFFE53935) else Color(0xFF2E8B70)).copy(alpha = .30f)
+                        val rowColor = (if (negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary).copy(alpha = .30f)
                         val frozenValues = frozenRow?.columns?.associateBy { it.key }.orEmpty()
                         val liveValues = buildMap {
                             result?.items?.forEach { item ->
