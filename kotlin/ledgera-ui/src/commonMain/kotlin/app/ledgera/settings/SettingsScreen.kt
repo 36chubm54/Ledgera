@@ -20,6 +20,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -535,8 +536,10 @@ private fun CustomProviderDialog(
     var timeoutSeconds by remember(existingProvider) { mutableStateOf((existingProvider?.timeoutSeconds ?: 10).toString()) }
     var retryCount by remember(existingProvider) { mutableStateOf((existingProvider?.retryCount ?: 0).toString()) }
     var redirectLimit by remember(existingProvider) { mutableStateOf((existingProvider?.redirectLimit ?: 3).toString()) }
+    var advancedMode by remember(existingProvider?.providerId) { mutableStateOf(false) }
     var showAdvancedDialog by remember(existingProvider?.providerId) { mutableStateOf(false) }
-    val valid = slug.matches(Regex("[a-z0-9][a-z0-9_-]{1,63}")) &&
+    val effectiveSlug = if (existingProvider == null && !advancedMode) slugifyProviderName(displayName) else slug
+    val valid = effectiveSlug.matches(Regex("[a-z0-9][a-z0-9_-]{1,63}")) &&
         displayName.isNotBlank() && endpoint.startsWith("https://") &&
         currencyPath.isNotBlank() && ratePath.isNotBlank() && responseBase.matches(Regex("[A-Za-z]{3}")) &&
         (authMode == "none" || credentialRef.isNotBlank()) &&
@@ -548,17 +551,45 @@ private fun CustomProviderDialog(
         title = { Text(if (existingProvider == null) "Add custom provider" else "Edit custom provider") },
         text = {
             Column(Modifier.width(DialogContentWidth).heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(slug, { slug = it.lowercase() }, label = { Text("Slug") }, placeholder = { Text("my-provider") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = existingProvider == null)
+                Text("Setup mode", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !advancedMode,
+                        onClick = { advancedMode = false },
+                        label = { Text("Simple") },
+                    )
+                    FilterChip(
+                        selected = advancedMode,
+                        onClick = {
+                            if (slug.isBlank()) slug = slugifyProviderName(displayName)
+                            advancedMode = true
+                        },
+                        label = { Text("Advanced") },
+                    )
+                }
+                Text(
+                    if (advancedMode) {
+                        "Configure response mapping, authentication, and network policies."
+                    } else {
+                        "For a standard JSON API with rates in $.rates. Technical mapping stays hidden."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(endpoint, { endpoint = it }, label = { Text("HTTPS endpoint") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(responseFormat, { responseFormat = it.lowercase() }, label = { Text("Format: json or xml") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(currencyPath, { currencyPath = it }, label = { Text("Currency path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(ratePath, { ratePath = it }, label = { Text("Rate path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(responseBase, { responseBase = it.uppercase().take(3) }, label = { Text("Response base") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(semantics, { semantics = it.lowercase() }, label = { Text("Rate semantics") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(authMode, { authMode = it.lowercase() }, label = { Text("Auth: none, api_key_header, api_key_query, bearer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (authMode != "none") OutlinedTextField(credentialRef, { credentialRef = it }, label = { Text("Credential reference") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                TextButton(onClick = { showAdvancedDialog = true }, enabled = !loading) { Text("Advanced provider parameters") }
+                if (advancedMode) {
+                    OutlinedTextField(slug, { slug = it.lowercase() }, label = { Text("Provider slug") }, placeholder = { Text("my-provider") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = existingProvider == null)
+                    OutlinedTextField(responseFormat, { responseFormat = it.lowercase() }, label = { Text("Response format: json or xml") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(currencyPath, { currencyPath = it }, label = { Text("Currency code path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(ratePath, { ratePath = it }, label = { Text("Rate value path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(responseBase, { responseBase = it.uppercase().take(3) }, label = { Text("Response base currency") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(semantics, { semantics = it.lowercase() }, label = { Text("Rate semantics") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(authMode, { authMode = it.lowercase() }, label = { Text("Authentication mode") }, supportingText = { Text("none, api_key_header, api_key_query, or bearer") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (authMode != "none") OutlinedTextField(credentialRef, { credentialRef = it }, label = { Text("Credential reference") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    TextButton(onClick = { showAdvancedDialog = true }, enabled = !loading) { Text("Advanced network settings") }
+                } else {
+                    OutlinedTextField(responseBase, { responseBase = it.uppercase().take(3) }, label = { Text("Provider base currency") }, supportingText = { Text("Example: USD") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
                 Text("Base currency: $baseCurrency. Provider stays inactive until Test succeeds.", style = MaterialTheme.typography.bodySmall)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -568,7 +599,7 @@ private fun CustomProviderDialog(
                 onClick = {
                     onSave(
                         CurrencyProviderDefinitionRequest(
-                            providerId = "custom:$slug",
+                            providerId = "custom:$effectiveSlug",
                             displayName = displayName,
                             endpoint = endpoint,
                             responseFormat = responseFormat,
@@ -611,6 +642,15 @@ private fun CustomProviderDialog(
         )
     }
 }
+
+private fun slugifyProviderName(value: String): String =
+    value
+        .trim()
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "-")
+        .trim('-')
+        .take(62)
+        .ifBlank { "provider" }
 
 @Composable
 private fun AdvancedProviderParametersDialog(
