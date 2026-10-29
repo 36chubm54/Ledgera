@@ -1,6 +1,7 @@
 package app.ledgera.operations
 
 import app.ledgera.model.OperationRecord
+import app.ledgera.model.WalletOption
 
 internal data class OperationJournalItem(
     val key: String,
@@ -19,6 +20,7 @@ internal data class OperationJournalItem(
 
 internal fun operationJournalItems(
     records: List<OperationRecord>,
+    wallets: List<WalletOption> = emptyList(),
     selectedRecordId: Long?,
     selectedBulkRecordIds: Set<Long> = emptySet(),
     selectedBulkTransferIds: Set<Long> = emptySet(),
@@ -29,7 +31,7 @@ internal fun operationJournalItems(
     records.forEach { record ->
         val transferId = record.transferId
         if (transferId == null) {
-            result += standaloneJournalItem(record, selectedRecordId, selectedBulkRecordIds, tagColors)
+            result += standaloneJournalItem(record, wallets, selectedRecordId, selectedBulkRecordIds, tagColors)
             return@forEach
         }
         if (!consumedTransferIds.add(transferId)) {
@@ -38,6 +40,7 @@ internal fun operationJournalItems(
         result += transferJournalItem(
             records = records.filter { it.transferId == transferId },
             transferId = transferId,
+            wallets = wallets,
             selectedBulkTransferIds = selectedBulkTransferIds,
         )
     }
@@ -46,6 +49,7 @@ internal fun operationJournalItems(
 
 private fun standaloneJournalItem(
     record: OperationRecord,
+    wallets: List<WalletOption>,
     selectedRecordId: Long?,
     selectedBulkRecordIds: Set<Long>,
     tagColors: Map<String, String>,
@@ -58,7 +62,7 @@ private fun standaloneJournalItem(
         key = "record:${record.id}",
         title = record.category,
         amount = "${record.amountOriginal} ${record.currency}",
-        meta = "${record.date} · ${record.type} · wallet #${record.walletId}",
+        meta = "${record.date} · ${record.type} · ${walletLabel(record.walletId, wallets)}",
         description = record.description,
         tags = record.tags,
         tagColors = tagColors,
@@ -73,15 +77,16 @@ private fun standaloneJournalItem(
 private fun transferJournalItem(
     records: List<OperationRecord>,
     transferId: Long,
+    wallets: List<WalletOption>,
     selectedBulkTransferIds: Set<Long>,
 ): OperationJournalItem {
     val expense = records.firstOrNull { it.type == "expense" }
     val income = records.firstOrNull { it.type == "income" }
     val primary = expense ?: income ?: records.first()
     val direction = if (expense != null && income != null) {
-        "wallet #${expense.walletId} -> wallet #${income.walletId}"
+        "${walletLabel(expense.walletId, wallets)} -> ${walletLabel(income.walletId, wallets)}"
     } else {
-        "wallet #${primary.walletId}"
+        walletLabel(primary.walletId, wallets)
     }
     return OperationJournalItem(
         key = "transfer:$transferId",
@@ -100,3 +105,7 @@ private fun transferJournalItem(
 
 private fun isTransferCommissionMarker(description: String): Boolean =
     Regex("""^\[transfer:\d+]$""").matches(description.trim())
+
+private fun walletLabel(walletId: Long, wallets: List<WalletOption>): String =
+    wallets.firstOrNull { it.id == walletId }?.name?.takeIf(String::isNotBlank)
+        ?: "wallet #$walletId"

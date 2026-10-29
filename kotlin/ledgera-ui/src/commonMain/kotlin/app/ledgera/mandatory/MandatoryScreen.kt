@@ -84,11 +84,9 @@ fun MandatoryScreen(
             MandatoryActionsCard(
                 selected = state.templates.firstOrNull { it.id == state.selectedTemplateId },
                 inProgress = state.inProgress,
-                onAddToRecords = viewModel::openAddToRecordsDialog,
                 onApplyAutoPay = viewModel::applyAutoPayments,
                 onImport = { viewModel.previewImportMandatory(fileActions.openImportPath()) },
                 onExport = { confirmExport = true },
-                onDelete = viewModel::requestDeleteSelectedTemplate,
                 onDeleteAll = viewModel::requestDeleteAllTemplates,
                 modifier = Modifier.weight(0.34f),
             )
@@ -113,6 +111,8 @@ fun MandatoryScreen(
                 submitting = state.inProgress,
                 onDraftChange = viewModel::updateDraft,
                 onSubmit = viewModel::saveTemplate,
+                onAddToRecords = if (draft.id != null) viewModel::openAddToRecordsDialog else null,
+                onDelete = if (draft.id != null) viewModel::requestDeleteSelectedTemplate else null,
                 onCancel = viewModel::closeEditDialog,
             )
         }
@@ -239,11 +239,9 @@ private fun MandatoryTemplateRow(
 private fun MandatoryActionsCard(
     selected: MandatoryTemplateItem?,
     inProgress: Boolean,
-    onAddToRecords: () -> Unit,
     onApplyAutoPay: () -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit,
-    onDelete: () -> Unit,
     onDeleteAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -251,16 +249,13 @@ private fun MandatoryActionsCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Actions", style = MaterialTheme.typography.titleMedium)
             Text(
-                selected?.let { "Selected: ${it.description}" } ?: "Select a mandatory template to add or delete it.",
+                selected?.let { "Selected: ${it.description}" } ?: "Select a mandatory template to add it.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Button(onClick = onAddToRecords, enabled = selected != null && !inProgress) {
-                    Text("Add to records")
-                }
                 OutlinedButton(onClick = onApplyAutoPay, enabled = !inProgress) {
                     Text("Apply auto-pay")
                 }
@@ -275,9 +270,6 @@ private fun MandatoryActionsCard(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedButton(onClick = onDelete, enabled = selected != null && !inProgress) {
-                    Text("Delete")
-                }
                 TextButton(onClick = onDeleteAll, enabled = !inProgress) {
                     Text("Delete all")
                 }
@@ -296,6 +288,8 @@ private fun MandatoryTemplateDialog(
     submitting: Boolean,
     onDraftChange: (MandatoryTemplateDraft) -> Unit,
     onSubmit: () -> Unit,
+    onAddToRecords: (() -> Unit)?,
+    onDelete: (() -> Unit)?,
     onCancel: () -> Unit,
 ) {
     val validationError = if (draft.id == null) {
@@ -376,8 +370,20 @@ private fun MandatoryTemplateDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onCancel, enabled = !submitting) {
-                Text("Cancel")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                onAddToRecords?.let { addToRecords ->
+                    OutlinedButton(onClick = addToRecords, enabled = !submitting) {
+                        Text("Add to records")
+                    }
+                }
+                onDelete?.let { delete ->
+                    OutlinedButton(onClick = delete, enabled = !submitting) {
+                        Text("Delete")
+                    }
+                }
+                TextButton(onClick = onCancel, enabled = !submitting) {
+                    Text("Cancel")
+                }
             }
         },
     )

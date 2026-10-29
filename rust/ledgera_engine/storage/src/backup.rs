@@ -15,11 +15,11 @@ const MAX_BACKUP_BYTES: u64 = 50 * 1024 * 1024;
 
 const BACKUP_TABLES: &[&str] = &[
     "wallets",
-    "transfers",
-    "mandatory_expenses",
     "records",
     "tags",
     "record_tags",
+    "transfers",
+    "mandatory_expenses",
     "debts",
     "debt_payments",
     "assets",

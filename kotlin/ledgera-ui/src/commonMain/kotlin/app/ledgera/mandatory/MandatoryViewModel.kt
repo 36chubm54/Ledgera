@@ -222,6 +222,7 @@ class MandatoryViewModel(
                 walletId = state.wallets.firstOrNull()?.id ?: 0,
                 date = todayDisplayText(),
             ),
+            editDraft = null,
             error = null,
             notice = null,
         )
@@ -325,7 +326,12 @@ class MandatoryViewModel(
             mutableState.value = state.copy(error = "Select a mandatory template first", notice = null)
             return
         }
-        mutableState.value = state.copy(deleteTemplateId = templateId, error = null, notice = null)
+        mutableState.value = state.copy(
+            deleteTemplateId = templateId,
+            editDraft = null,
+            error = null,
+            notice = null,
+        )
     }
 
     fun closeDeleteTemplateDialog() {

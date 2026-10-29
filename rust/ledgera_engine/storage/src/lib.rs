@@ -7543,8 +7543,22 @@ mod tests {
         let exported = export_full_backup_json(&db_path, backup_path.to_str().unwrap()).unwrap();
         assert_eq!(exported.budget_rows, 1);
         assert!(exported.checksum.starts_with("sha256:"));
-        let exported_json: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&backup_path).unwrap()).unwrap();
+        let exported_text = fs::read_to_string(&backup_path).unwrap();
+        let exported_json: serde_json::Value = serde_json::from_str(&exported_text).unwrap();
+        for (before, after) in [
+            ("\"format\"", "\"version\""),
+            ("\"version\"", "\"base_currency\""),
+            ("\"base_currency\"", "\"wallets\""),
+            ("\"wallets\"", "\"records\""),
+            ("\"records\"", "\"transfers\""),
+            ("\"transfers\"", "\"currency_rates\""),
+            ("\"currency_refresh_runs\"", "\"checksum\""),
+        ] {
+            assert!(
+                exported_text.find(before).unwrap() < exported_text.find(after).unwrap(),
+                "backup key {before} must precede {after}"
+            );
+        }
         assert_eq!(
             exported_json["currency_rate_snapshots"]
                 .as_array()

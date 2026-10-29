@@ -1,6 +1,7 @@
 package app.ledgera.operations
 
 import app.ledgera.model.OperationRecord
+import app.ledgera.model.WalletOption
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -12,12 +13,19 @@ class OperationJournalTest {
             operationRecord(id = 9, type = "expense", walletId = 1, transferId = 7),
         )
 
-        val items = operationJournalItems(rows, selectedRecordId = null)
+        val items = operationJournalItems(
+            rows,
+            wallets = listOf(
+                WalletOption(1, "Main wallet", "KZT"),
+                WalletOption(2, "USD wallet", "USD"),
+            ),
+            selectedRecordId = null,
+        )
 
         assertEquals(1, items.size)
         assertEquals("transfer:7", items.single().key)
         assertEquals("Transfer · transfer #7", items.single().title)
-        assertEquals("2026-01-01 · transfer · wallet #1 -> wallet #2", items.single().meta)
+        assertEquals("2026-01-01 · transfer · Main wallet -> USD wallet", items.single().meta)
         assertEquals(7, items.single().transferId)
         assertEquals(null, items.single().selectableRecordId)
     }

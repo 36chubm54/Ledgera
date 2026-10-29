@@ -151,6 +151,7 @@ fun OperationsScreen(
                 } else {
                     val journalItems = operationJournalItems(
                         records = state.records,
+                        wallets = state.wallets,
                         selectedRecordId = state.selectedRecordId,
                         selectedBulkRecordIds = state.selectedBulkRecordIds,
                         selectedBulkTransferIds = state.selectedBulkTransferIds,
