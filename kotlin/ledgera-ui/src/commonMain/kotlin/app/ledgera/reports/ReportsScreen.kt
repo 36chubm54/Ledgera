@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
@@ -106,9 +107,24 @@ fun ReportsScreen(
             if (result.filters.groupByCategory) {
                 ReportSection("Categories") {
                     val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
-                    result.categories.forEach { row ->
-                        val amount = if (currentMode) row.totalCurrent else row.totalBase
-                        Text("${row.category}: ${row.operationsCount} · ${"%.2f".format(amount)}")
+                    ReportDataTable(
+                        columns = listOf(
+                            ReportColumn("Category", 300.dp, 3f),
+                            ReportColumn("Operations", 140.dp, 1f, alignEnd = true),
+                            ReportColumn("Amount", 180.dp, 2f, alignEnd = true),
+                        ),
+                    ) { widths ->
+                        items(result.categories) { row ->
+                            val amount = if (currentMode) row.totalCurrent else row.totalBase
+                            Column(Modifier.fillMaxWidth()) {
+                                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                                    ReportTableCell(row.category, widths[0])
+                                    ReportTableCell(row.operationsCount.toString(), widths[1], alignEnd = true)
+                                    ReportTableCell("%.2f".format(amount), widths[2], alignEnd = true)
+                                }
+                                HorizontalDivider(Modifier.fillMaxWidth())
+                            }
+                        }
                     }
                 }
             } else {
@@ -116,21 +132,72 @@ fun ReportsScreen(
             }
             ReportSection("Monthly") {
                 val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
-                result.monthly.forEach { row ->
-                    val income = if (currentMode) row.incomeCurrent else row.income
-                    val expenses = if (currentMode) row.expensesCurrent else row.expenses
-                    Text("${row.month}: income ${"%.2f".format(income)}, expenses ${"%.2f".format(expenses)}")
+                ReportDataTable(
+                    columns = listOf(
+                        ReportColumn("Month", 220.dp, 2f),
+                        ReportColumn("Income", 220.dp, 1f, alignEnd = true),
+                        ReportColumn("Expenses", 220.dp, 1f, alignEnd = true),
+                    ),
+                ) { widths ->
+                    items(result.monthly) { row ->
+                        val income = if (currentMode) row.incomeCurrent else row.income
+                        val expenses = if (currentMode) row.expensesCurrent else row.expenses
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                                ReportTableCell(row.month, widths[0])
+                                ReportTableCell("%.2f".format(income), widths[1], alignEnd = true)
+                                ReportTableCell("%.2f".format(expenses), widths[2], alignEnd = true)
+                            }
+                            HorizontalDivider(Modifier.fillMaxWidth())
+                        }
+                    }
                 }
             }
             ReportSection("Tags") {
                 val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
-                result.tags.forEach { row ->
-                    val amount = if (currentMode) row.totalCurrent else row.totalBase
-                    Text("${row.tag}: ${row.operationsCount} · ${"%.2f".format(amount)}")
+                ReportDataTable(
+                    columns = listOf(
+                        ReportColumn("Tag", 300.dp, 3f),
+                        ReportColumn("Operations", 140.dp, 1f, alignEnd = true),
+                        ReportColumn("Amount", 180.dp, 2f, alignEnd = true),
+                    ),
+                ) { widths ->
+                    items(result.tags) { row ->
+                        val amount = if (currentMode) row.totalCurrent else row.totalBase
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                                ReportTableCell("#${row.tag}", widths[0])
+                                ReportTableCell(row.operationsCount.toString(), widths[1], alignEnd = true)
+                                ReportTableCell("%.2f".format(amount), widths[2], alignEnd = true)
+                            }
+                            HorizontalDivider(Modifier.fillMaxWidth())
+                        }
+                    }
                 }
             }
             if (result.debts.isNotEmpty()) ReportSection("Debts") {
-                result.debts.forEach { row -> Text("${row.contactName} · ${row.kind} · ${row.remainingAmount} / ${row.totalAmount} ${row.currency}") }
+                ReportDataTable(
+                    columns = listOf(
+                        ReportColumn("Contact", 260.dp, 2f),
+                        ReportColumn("Type", 160.dp, 1f),
+                        ReportColumn("Remaining", 180.dp, 1f, alignEnd = true),
+                        ReportColumn("Total", 180.dp, 1f, alignEnd = true),
+                        ReportColumn("Currency", 120.dp, 1f),
+                    ),
+                ) { widths ->
+                    items(result.debts) { row ->
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                                ReportTableCell(row.contactName, widths[0])
+                                ReportTableCell(row.kind, widths[1])
+                                ReportTableCell("%.2f".format(row.remainingAmount), widths[2], alignEnd = true)
+                                ReportTableCell("%.2f".format(row.totalAmount), widths[3], alignEnd = true)
+                                ReportTableCell(row.currency, widths[4])
+                            }
+                            HorizontalDivider(Modifier.fillMaxWidth())
+                        }
+                    }
+                }
             }
         }
     }
@@ -159,6 +226,48 @@ private fun ReportSection(title: String, content: @Composable () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             content()
+        }
+    }
+}
+
+private data class ReportColumn(
+    val title: String,
+    val baseWidth: androidx.compose.ui.unit.Dp,
+    val expandWeight: Float,
+    val alignEnd: Boolean = false,
+)
+
+@Composable
+private fun ReportDataTable(
+    columns: List<ReportColumn>,
+    rows: LazyListScope.(List<androidx.compose.ui.unit.Dp>) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val minimumWidth = columns.fold(0f) { sum, column -> sum + column.baseWidth.value }.dp
+        val tableWidth = maxOf(maxWidth, minimumWidth)
+        val extraWidth = (tableWidth - minimumWidth).coerceAtLeast(0.dp)
+        val totalWeight = columns.fold(0f) { sum, column -> sum + column.expandWeight }
+        val widths = columns.map { column ->
+            column.baseWidth + if (totalWeight > 0f) {
+                extraWidth * (column.expandWeight / totalWeight)
+            } else {
+                0.dp
+            }
+        }
+        Column(Modifier.horizontalScroll(rememberScrollState()).width(tableWidth)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(vertical = 10.dp),
+            ) {
+                columns.forEachIndexed { index, column ->
+                    ReportTableCell(column.title, widths[index], isHeader = true, alignEnd = column.alignEnd)
+                }
+            }
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
+                rows(widths)
+            }
         }
     }
 }
