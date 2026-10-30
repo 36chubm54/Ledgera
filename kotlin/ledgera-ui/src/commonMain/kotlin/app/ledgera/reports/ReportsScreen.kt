@@ -3,18 +3,24 @@ package app.ledgera.reports
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -106,23 +112,7 @@ fun ReportsScreen(
                     }
                 }
             } else {
-                ReportSection("Operations") {
-                    val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
-                    result.operations.forEach { row ->
-                        val amount = if (currentMode) row.amountCurrent else row.amountBase
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "${row.date} · ${row.typeLabel} · ${row.category} · ${"%.2f".format(amount)}",
-                                Modifier.weight(1f),
-                            )
-                            ReportTagChips(row.tagsText, state.tagColors)
-                        }
-                    }
-                }
+                ReportOperationsTable(result, state.tagColors)
             }
             ReportSection("Monthly") {
                 val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
@@ -174,10 +164,90 @@ private fun ReportSection(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ReportTagChips(tagsText: String, tagColors: Map<String, String>) {
+private fun ReportOperationsTable(result: app.ledgera.model.ReportResult, tagColors: Map<String, String>) {
+    val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
+    Surface(Modifier.fillMaxWidth(), tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Operations", style = MaterialTheme.typography.titleMedium)
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val tableWidth = maxOf(maxWidth, 1060.dp)
+                val extraWidth = (tableWidth - 1060.dp).coerceAtLeast(0.dp)
+                val dateWidth = 110.dp + extraWidth * 0.1f
+                val typeWidth = 110.dp + extraWidth * 0.1f
+                val categoryWidth = 210.dp + extraWidth * 0.2f
+                val descriptionWidth = 260.dp + extraWidth * 0.3f
+                val tagsWidth = 220.dp + extraWidth * 0.2f
+                val amountWidth = 150.dp + extraWidth * 0.1f
+                Column(Modifier.horizontalScroll(rememberScrollState()).width(tableWidth)) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(vertical = 10.dp),
+                    ) {
+                        ReportTableCell("Date", dateWidth, isHeader = true)
+                        ReportTableCell("Type", typeWidth, isHeader = true)
+                        ReportTableCell("Category", categoryWidth, isHeader = true)
+                        ReportTableCell("Description", descriptionWidth, isHeader = true)
+                        ReportTableCell("Tags", tagsWidth, isHeader = true)
+                        ReportTableCell("Amount", amountWidth, isHeader = true, alignEnd = true)
+                    }
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                        items(result.operations) { row ->
+                            val amount = if (currentMode) row.amountCurrent else row.amountBase
+                            Column(Modifier.fillMaxWidth()) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    ReportTableCell(row.date, dateWidth)
+                                    ReportTableCell(row.typeLabel, typeWidth)
+                                    ReportTableCell(row.category, categoryWidth)
+                                    ReportTableCell(row.description.ifBlank { "-" }, descriptionWidth)
+                                    ReportTagChips(row.tagsText, tagColors, Modifier.width(tagsWidth))
+                                    ReportTableCell("%.2f".format(amount), amountWidth, alignEnd = true)
+                                }
+                                HorizontalDivider(Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportTableCell(
+    value: String,
+    width: androidx.compose.ui.unit.Dp,
+    isHeader: Boolean = false,
+    alignEnd: Boolean = false,
+) {
+    Box(
+        Modifier.width(width).padding(horizontal = 8.dp),
+        contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        Text(
+            value,
+            fontWeight = if (isHeader) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
+            color = if (isHeader) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun ReportTagChips(
+    tagsText: String,
+    tagColors: Map<String, String>,
+    modifier: Modifier = Modifier,
+) {
     val tags = tagsText.split(Regex("\\s+")).filter(String::isNotBlank)
-    if (tags.isEmpty()) return
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    if (tags.isEmpty()) {
+        Box(modifier)
+        return
+    }
+    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         tags.forEach { tag ->
             Box(
                 Modifier
