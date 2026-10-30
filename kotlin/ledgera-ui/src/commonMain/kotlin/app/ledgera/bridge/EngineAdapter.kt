@@ -76,6 +76,7 @@ interface ReportsEngine {
     suspend fun reportWallets(): List<WalletOption> = emptyList()
     suspend fun reportCategories(): List<String> = emptyList()
     suspend fun reportTags(): List<String> = emptyList()
+    suspend fun reportTagColors(): Map<String, String> = emptyMap()
     suspend fun exportReportCsv(filters: ReportFilters, path: String): ReportExportResult = error("Reports export is unavailable")
     suspend fun exportReportXlsx(filters: ReportFilters, path: String): ReportExportResult = error("Reports export is unavailable")
     suspend fun exportReportPdf(filters: ReportFilters, path: String): ReportExportResult = error("Reports export is unavailable")

@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -44,6 +45,9 @@ import app.ledgera.model.WalletOption
 import app.ledgera.ui.LedgerDateField
 import app.ledgera.ui.AutocompleteTextField
 import app.ledgera.validation.DateValidation
+import app.ledgera.resources.Res
+import app.ledgera.resources.ic_wallet
+import org.jetbrains.compose.resources.painterResource
 
 interface MandatoryFileActions {
     fun openImportPath(): String?
@@ -76,6 +80,7 @@ fun MandatoryScreen(
 
         MandatoryListCard(
             templates = state.templates,
+                wallets = state.wallets,
                 selectedTemplateId = state.selectedTemplateId,
                 loading = state.loading,
                 onSelect = viewModel::selectTemplate,
@@ -174,6 +179,7 @@ fun MandatoryScreen(
 @Composable
 private fun MandatoryListCard(
     templates: List<MandatoryTemplateItem>,
+    wallets: List<WalletOption>,
     selectedTemplateId: Long?,
     loading: Boolean,
     onSelect: (Long) -> Unit,
@@ -194,6 +200,7 @@ private fun MandatoryListCard(
                     items(templates, key = { it.id }) { template ->
                         MandatoryTemplateRow(
                             template = template,
+                            wallet = wallets.firstOrNull { it.id == template.walletId },
                             selected = selectedTemplateId == template.id,
                             onClick = { onSelect(template.id) },
                         )
@@ -207,6 +214,7 @@ private fun MandatoryListCard(
 @Composable
 private fun MandatoryTemplateRow(
     template: MandatoryTemplateItem,
+    wallet: WalletOption?,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -227,7 +235,14 @@ private fun MandatoryTemplateRow(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(template.description, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("${template.category} · ${template.period} · wallet #${template.walletId}")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(
+                        painter = painterResource(Res.drawable.ic_wallet),
+                        contentDescription = "Wallet",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text("${template.category} · ${template.period} · ${wallet?.name ?: "Unknown wallet"}")
+                }
                 Text(if (template.autoPay) "Auto-pay anchor ${template.date}" else "Manual template")
             }
             Text("${template.amountBase} ${template.currency}", style = MaterialTheme.typography.titleMedium)

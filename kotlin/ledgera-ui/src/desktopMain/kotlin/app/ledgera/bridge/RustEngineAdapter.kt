@@ -285,6 +285,8 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     override suspend fun reportCategories(): List<String> =
         (listCategories("income") + listCategories("expense")).distinct().sorted()
     override suspend fun reportTags(): List<String> = listTags()
+    override suspend fun reportTagColors(): Map<String, String> =
+        listTagColors().associate { it.name.lowercase() to it.color }
 
     override suspend fun exportReportCsv(filters: ReportFilters, path: String): ReportExportResult =
         withContext(Dispatchers.IO) { engine.exportReportCsv(filters.toNative(), path).toModel() }

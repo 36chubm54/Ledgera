@@ -18,6 +18,7 @@ data class ReportsUiState(
     val wallets: List<WalletOption> = emptyList(),
     val categories: List<String> = emptyList(),
     val tags: List<String> = emptyList(),
+    val tagColors: Map<String, String> = emptyMap(),
     val periodStart: String = "",
     val periodEnd: String = "",
     val walletId: Long? = null,
@@ -62,6 +63,7 @@ class ReportsViewModel(
                     wallets = wallets,
                     categories = runCatching { engine.reportCategories() }.getOrDefault(emptyList()),
                     tags = runCatching { engine.reportTags() }.getOrDefault(emptyList()),
+                    tagColors = runCatching { engine.reportTagColors() }.getOrDefault(emptyMap()),
                     result = null,
                 )
             }.onFailure { error ->

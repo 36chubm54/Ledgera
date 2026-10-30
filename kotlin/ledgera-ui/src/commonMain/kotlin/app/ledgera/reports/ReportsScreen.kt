@@ -1,6 +1,8 @@
 package app.ledgera.reports
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -19,9 +22,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import app.ledgera.ui.AutocompleteTextField
 import app.ledgera.ui.LedgerDateField
+import app.ledgera.ui.toComposeTagColor
 
 @Composable
 fun ReportsScreen(
@@ -36,7 +42,7 @@ fun ReportsScreen(
     ) {
         Text("Reports", style = MaterialTheme.typography.headlineLarge)
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
+        Surface(Modifier.fillMaxWidth(), tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LedgerDateField(state.periodStart, viewModel::updatePeriodStart, "From", Modifier.weight(1f), required = false, externalError = state.periodStartError)
@@ -104,8 +110,17 @@ fun ReportsScreen(
                     val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
                     result.operations.forEach { row ->
                         val amount = if (currentMode) row.amountCurrent else row.amountBase
-                        Text("${row.date} · ${row.typeLabel} · ${row.category} · ${"%.2f".format(amount)}")
-                        if (row.tagsText.isNotBlank()) Text(row.tagsText, style = MaterialTheme.typography.bodySmall)
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "${row.date} · ${row.typeLabel} · ${row.category} · ${"%.2f".format(amount)}",
+                                Modifier.weight(1f),
+                            )
+                            ReportTagChips(row.tagsText, state.tagColors)
+                        }
                     }
                 }
             }
@@ -136,7 +151,7 @@ private fun ReportSummaryCard(result: app.ledgera.model.ReportResult) {
     val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
     val operationsTotal = if (currentMode) result.summary.recordsTotalCurrent else result.summary.recordsTotalFixed
     val finalBalance = if (currentMode) result.summary.finalBalanceCurrent else result.summary.finalBalanceFixed
-    Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
+    Surface(Modifier.fillMaxWidth(), tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(result.title, style = MaterialTheme.typography.titleLarge)
             Text("Initial: ${"%.2f".format(result.summary.initialBalance)} ${result.displayCurrency}")
@@ -150,10 +165,35 @@ private fun ReportSummaryCard(result: app.ledgera.model.ReportResult) {
 
 @Composable
 private fun ReportSection(title: String, content: @Composable () -> Unit) {
-    Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
+    Surface(Modifier.fillMaxWidth(), tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             content()
+        }
+    }
+}
+
+@Composable
+private fun ReportTagChips(tagsText: String, tagColors: Map<String, String>) {
+    val tags = tagsText.split(Regex("\\s+")).filter(String::isNotBlank)
+    if (tags.isEmpty()) return
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        tags.forEach { tag ->
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(
+                        tagColors[tag.lowercase()]?.toComposeTagColor()
+                            ?: MaterialTheme.colorScheme.outline,
+                    )
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+            ) {
+                Text(
+                    "#$tag",
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
     }
 }
