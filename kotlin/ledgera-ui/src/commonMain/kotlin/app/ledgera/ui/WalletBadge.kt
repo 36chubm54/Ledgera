@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -37,6 +38,7 @@ internal fun WalletBadge(
     size: Dp = 30.dp,
 ) {
     val badgeColor = color.toComposeTagColor() ?: MaterialTheme.colorScheme.primary
+    val iconColor = if (badgeColor.luminance() > 0.55f) Color.Black else Color.White
     Box(
         Modifier
             .size(size)
@@ -49,7 +51,7 @@ internal fun WalletBadge(
             painter = walletIconPainter(iconKey),
             contentDescription = null,
             modifier = Modifier.size(size * 0.58f),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White),
+            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(iconColor),
         )
     }
 }

@@ -17,6 +17,7 @@ internal object SettingsValidation {
         val normalizedCurrency = currency.trim().uppercase()
         return when {
             name.isBlank() -> "Wallet name is required"
+            name.trim().length > 100 -> "Wallet name must be 100 characters or fewer"
             currencyError != null -> currencyError
             balanceError != null -> "Initial balance must be zero or a positive number"
             else -> null

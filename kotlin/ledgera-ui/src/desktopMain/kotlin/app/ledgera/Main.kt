@@ -119,6 +119,7 @@ private fun runApplication(args: Array<String>) = application {
                                 debtsViewModel.refresh()
                                 mandatoryViewModel.refresh()
                                 reportsViewModel.refreshLookups()
+                                dashboardViewModel.refresh()
                             },
                         )
                     }

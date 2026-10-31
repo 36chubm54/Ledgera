@@ -1026,6 +1026,9 @@ pub fn create_wallet_with_profile(
     if name.is_empty() {
         return Err("Wallet name is required".to_owned());
     }
+    if name.chars().count() > 100 {
+        return Err("Wallet name must be 100 characters or fewer".to_owned());
+    }
     if wallet_name_exists_in_tx(&tx, name)? {
         return Err(format!("Wallet name already exists: {name}"));
     }
@@ -7989,6 +7992,17 @@ mod tests {
             )
             .unwrap_err()
             .contains("Wallet name is required")
+        );
+        assert!(
+            create_wallet(
+                &db_path,
+                &WalletCreatePayload {
+                    name: "x".repeat(101),
+                    ..request.clone()
+                }
+            )
+            .unwrap_err()
+            .contains("100 characters or fewer")
         );
         assert!(
             create_wallet(

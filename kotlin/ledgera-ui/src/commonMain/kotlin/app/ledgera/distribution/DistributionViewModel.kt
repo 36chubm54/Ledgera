@@ -43,6 +43,7 @@ class DistributionViewModel(
     private val mutableState = MutableStateFlow(DistributionUiState(loading = true))
     private var refreshJob: Job? = null
     private var generation = 0L
+    private var automaticFreezeInitialized = false
     val state: StateFlow<DistributionUiState> = mutableState.asStateFlow()
 
     init { refresh() }
@@ -72,6 +73,12 @@ class DistributionViewModel(
         mutableState.value = current.copy(loading = true, error = null, notice = null)
         refreshJob = scope.launch {
             runCatching {
+                val today = currentLedgerDate()
+                val cutoffMonth = "${today.year}-${today.month.toString().padStart(2, '0')}"
+                if (!automaticFreezeInitialized) {
+                    engine.freezeClosedDistributionMonths(cutoffMonth)
+                    automaticFreezeInitialized = true
+                }
                 RefreshPayload(
                     engine.distributionItems(true),
                     engine.distributionHistory(current.startMonth, current.endMonth),
