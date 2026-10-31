@@ -1,6 +1,11 @@
 package app.ledgera.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,10 +14,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -47,8 +56,12 @@ import app.ledgera.model.CurrencyProviderDefinitionRequest
 import app.ledgera.model.CurrencyProviderSettingRequest
 import app.ledgera.model.CurrencyProviderTestRequest
 import app.ledgera.model.WalletSettingsItem
+import app.ledgera.model.UpdateWalletProfileRequest
 import app.ledgera.theme.ThemeMode
 import app.ledgera.ui.LedgerDateField
+import app.ledgera.ui.WalletBadge
+import app.ledgera.ui.WalletIconKeys
+import app.ledgera.ui.toComposeTagColor
 import app.ledgera.validation.CurrencyValidation
 import app.ledgera.validation.DateValidation
 import app.ledgera.validation.currentLedgerDate
@@ -78,6 +91,7 @@ fun SettingsScreen(
     var showCurrencyRateHistory by remember { mutableStateOf(false) }
     var editingCurrencyRate by remember { mutableStateOf<CurrencyRate?>(null) }
     var walletPendingDelete by remember { mutableStateOf<WalletSettingsItem?>(null) }
+    var walletPendingEdit by remember { mutableStateOf<WalletSettingsItem?>(null) }
     var showAuditReport by remember { mutableStateOf(false) }
     var showProviderDialog by remember { mutableStateOf(false) }
     var editingProvider by remember { mutableStateOf<CurrencyProviderDefinition?>(null) }
@@ -105,6 +119,11 @@ fun SettingsScreen(
                 state.notice?.startsWith("Wallet deactivated") == true)
         ) {
             walletPendingDelete = null
+        }
+    }
+    LaunchedEffect(walletPendingEdit, state.notice) {
+        if (walletPendingEdit != null && state.notice?.startsWith("Wallet profile saved") == true) {
+            walletPendingEdit = null
         }
     }
     LaunchedEffect(state.notice) {
@@ -136,6 +155,10 @@ fun SettingsScreen(
             onDeleteWallet = { wallet ->
                 viewModel.clearFeedback()
                 walletPendingDelete = wallet
+            },
+            onEditWallet = { wallet ->
+                viewModel.clearFeedback()
+                walletPendingEdit = wallet
             },
         )
         CurrencySection(
@@ -220,6 +243,19 @@ fun SettingsScreen(
             submitting = state.loading,
             onSubmit = viewModel::createWallet,
             onCancel = { showCreateWalletDialog = false },
+            colorPalette = state.walletColorPalette,
+            iconCatalog = state.walletIconCatalog,
+        )
+    }
+    walletPendingEdit?.let { wallet ->
+        WalletProfileDialog(
+            wallet = wallet,
+            colorPalette = state.walletColorPalette,
+            iconCatalog = state.walletIconCatalog,
+            engineError = state.error,
+            submitting = state.loading,
+            onSave = viewModel::updateWalletProfile,
+            onCancel = { walletPendingEdit = null },
         )
     }
     if (showCurrencyRateDialog) {
@@ -861,6 +897,7 @@ private fun WalletsSection(
     loading: Boolean,
     onAddWallet: () -> Unit,
     onDeleteWallet: (WalletSettingsItem) -> Unit,
+    onEditWallet: (WalletSettingsItem) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -878,7 +915,7 @@ private fun WalletsSection(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(wallets, key = { it.id }) { wallet ->
-                        WalletRow(wallet, onDeleteWallet)
+                        WalletRow(wallet, onDeleteWallet, onEditWallet)
                     }
                 }
             }
@@ -887,14 +924,21 @@ private fun WalletsSection(
 }
 
 @Composable
-private fun WalletRow(wallet: WalletSettingsItem, onDeleteWallet: (WalletSettingsItem) -> Unit) {
+private fun WalletRow(
+    wallet: WalletSettingsItem,
+    onDeleteWallet: (WalletSettingsItem) -> Unit,
+    onEditWallet: (WalletSettingsItem) -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(wallet.name, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    WalletBadge(wallet)
+                    Text(wallet.name, fontWeight = FontWeight.SemiBold)
+                }
                 Text("${wallet.balance} ${wallet.balanceCurrency}")
             }
             Text("Initial ${wallet.initialBalance} ${wallet.currency}")
@@ -907,8 +951,11 @@ private fun WalletRow(wallet: WalletSettingsItem, onDeleteWallet: (WalletSetting
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (wallet.active && !wallet.system) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { onEditWallet(wallet) }) {
+                    Text("Edit")
+                }
+                if (wallet.active && !wallet.system) {
                     TextButton(onClick = { onDeleteWallet(wallet) }) {
                         Text("Delete")
                     }
@@ -1061,6 +1108,8 @@ private fun CreateWalletDialog(
     submitting: Boolean,
     onSubmit: (CreateWalletRequest) -> Unit,
     onCancel: () -> Unit,
+    colorPalette: List<String>,
+    iconCatalog: List<String>,
 ) {
     var name by remember { mutableStateOf("") }
     var initialBalance by remember { mutableStateOf("0") }
@@ -1068,6 +1117,8 @@ private fun CreateWalletDialog(
     var currency by remember(baseCurrency, supportedCurrencies) {
         mutableStateOf(baseCurrency.ifBlank { supportedCurrencies.firstOrNull() ?: "KZT" })
     }
+    var color by remember { mutableStateOf(colorPalette.firstOrNull() ?: "#2acbb9") }
+    var iconKey by remember { mutableStateOf(iconCatalog.firstOrNull() ?: "wallet") }
     val validationError = SettingsValidation.validateWalletFields(
         name = name,
         currency = currency,
@@ -1109,6 +1160,15 @@ private fun CreateWalletDialog(
                     Checkbox(checked = allowNegative, onCheckedChange = { allowNegative = it })
                     Text("Allow negative balance")
                 }
+                WalletAppearanceControls(
+                    previewName = name.ifBlank { "New wallet" },
+                    color = color,
+                    iconKey = iconKey,
+                    colorPalette = colorPalette,
+                    iconCatalog = iconCatalog,
+                    onColorSelected = { color = it },
+                    onIconSelected = { iconKey = it },
+                )
                 Spacer(Modifier.height(2.dp))
                 (validationError ?: engineError)?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)
@@ -1124,6 +1184,8 @@ private fun CreateWalletDialog(
                             currency = currency,
                             initialBalance = initialBalance.ifBlank { "0" },
                             allowNegative = allowNegative,
+                            color = color,
+                            iconKey = iconKey,
                         )
                     )
                 },
@@ -1136,6 +1198,129 @@ private fun CreateWalletDialog(
             TextButton(onClick = onCancel) { Text("Cancel") }
         },
     )
+}
+
+@Composable
+private fun WalletProfileDialog(
+    wallet: WalletSettingsItem,
+    colorPalette: List<String>,
+    iconCatalog: List<String>,
+    engineError: String?,
+    submitting: Boolean,
+    onSave: (UpdateWalletProfileRequest) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var name by remember(wallet.id) { mutableStateOf(wallet.name) }
+    var color by remember(wallet.id) { mutableStateOf(wallet.color) }
+    var iconKey by remember(wallet.id) { mutableStateOf(wallet.iconKey) }
+    val nameError = when {
+        name.trim().isEmpty() -> "Wallet name is required"
+        name.trim().length > 100 -> "Wallet name must be 100 characters or fewer"
+        else -> null
+    }
+    val selectedColor = color.takeIf { it in colorPalette } ?: colorPalette.firstOrNull().orEmpty()
+    val selectedIcon = iconKey.takeIf { it in iconCatalog } ?: "wallet"
+    AlertDialog(
+        onDismissRequest = { if (!submitting) onCancel() },
+        title = { Text("Edit wallet") },
+        text = {
+            Column(
+                Modifier.width(DialogContentWidth).heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                WalletBadge(name.ifBlank { wallet.name }, selectedColor, selectedIcon, 48.dp)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = nameError != null,
+                )
+                WalletAppearanceControls(
+                    previewName = name.ifBlank { wallet.name },
+                    color = selectedColor,
+                    iconKey = selectedIcon,
+                    colorPalette = colorPalette,
+                    iconCatalog = iconCatalog,
+                    onColorSelected = { color = it },
+                    onIconSelected = { iconKey = it },
+                    showPreview = false,
+                )
+                nameError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                engineError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(UpdateWalletProfileRequest(wallet.id, name.trim(), selectedColor, selectedIcon))
+                },
+                enabled = nameError == null && selectedColor.isNotBlank() && !submitting,
+            ) { Text(if (submitting) "Saving..." else "Save") }
+        },
+        dismissButton = { TextButton(onClick = onCancel, enabled = !submitting) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun WalletAppearanceControls(
+    previewName: String,
+    color: String,
+    iconKey: String,
+    colorPalette: List<String>,
+    iconCatalog: List<String>,
+    onColorSelected: (String) -> Unit,
+    onIconSelected: (String) -> Unit,
+    showPreview: Boolean = true,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (showPreview) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WalletBadge(previewName, color, iconKey, 38.dp)
+                Text(previewName, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        Text("Color", style = MaterialTheme.typography.labelLarge)
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            colorPalette.forEach { paletteColor ->
+                Box(
+                    Modifier
+                        .size(32.dp)
+                        .background(paletteColor.toComposeTagColor() ?: MaterialTheme.colorScheme.primary, CircleShape)
+                        .border(
+                            width = if (paletteColor.equals(color, ignoreCase = true)) 3.dp else 1.dp,
+                            color = if (paletteColor.equals(color, ignoreCase = true)) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                            shape = CircleShape,
+                        )
+                        .clickable { onColorSelected(paletteColor) },
+                )
+            }
+        }
+        Text("Icon", style = MaterialTheme.typography.labelLarge)
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            iconCatalog.ifEmpty { WalletIconKeys }.forEach { key ->
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .background(
+                            if (key == iconKey) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            CircleShape,
+                        )
+                        .clickable { onIconSelected(key) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    WalletBadge(previewName, color, key, 30.dp)
+                }
+            }
+        }
+    }
 }
 
 private val DialogContentWidth = 360.dp

@@ -114,6 +114,12 @@ private fun runApplication(args: Array<String>) = application {
                                 distributionViewModel.refresh()
                                 dashboardViewModel.refresh()
                             },
+                            onWalletProfileChanged = {
+                                operationsViewModel.refresh()
+                                debtsViewModel.refresh()
+                                mandatoryViewModel.refresh()
+                                reportsViewModel.refreshLookups()
+                            },
                         )
                     }
                     val appShellViewModel = remember(engine) { AppShellViewModel(engine) }

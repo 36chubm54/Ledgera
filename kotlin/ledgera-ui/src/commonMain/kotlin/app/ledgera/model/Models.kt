@@ -205,6 +205,8 @@ data class WalletOption(
     val currency: String,
     val balance: String = "0.00",
     val balanceCurrency: String = currency,
+    val color: String = "#2acbb9",
+    val iconKey: String = "wallet",
 )
 
 data class WalletSettingsItem(
@@ -217,6 +219,8 @@ data class WalletSettingsItem(
     val allowNegative: Boolean,
     val active: Boolean,
     val balanceCurrency: String = currency,
+    val color: String = "#2acbb9",
+    val iconKey: String = "wallet",
 )
 
 data class CurrencyRate(
@@ -384,6 +388,15 @@ data class CreateWalletRequest(
     val currency: String,
     val initialBalance: String,
     val allowNegative: Boolean,
+    val color: String = "",
+    val iconKey: String = "wallet",
+)
+
+data class UpdateWalletProfileRequest(
+    val walletId: Long,
+    val name: String,
+    val color: String,
+    val iconKey: String,
 )
 
 data class WalletDeleteResult(

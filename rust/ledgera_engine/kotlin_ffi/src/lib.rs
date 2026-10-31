@@ -16,12 +16,13 @@ use ledgera_engine_storage::{
     ReportTagRow, SUPPORTED_CURRENCY_PROVIDER_NAMES, StandaloneRecordCreatePayload,
     StandaloneRecordUpdatePayload, TagColorAssignment as StorageTagColorAssignment,
     TransferCreatePayload, TransferRow, TransferUpdatePayload, WalletBalanceRow,
-    WalletCreatePayload, WalletRow, analytics_generate, analytics_list_categories,
-    analytics_list_months, analytics_list_tags, analytics_list_years, asset_add_snapshot,
+    WalletCreatePayload, WalletProfileUpdatePayload, WalletRow, analytics_generate,
+    analytics_list_categories, analytics_list_months, analytics_list_tags, analytics_list_years, asset_add_snapshot,
     asset_add_snapshots_bulk, asset_create, asset_rows, asset_set_active, asset_update,
     audit_run_for_date, base_currency_code, budget_create, budget_delete, budget_results,
     budget_rows, budget_update_limit, create_currency_transfer,
     create_standalone_record_with_tag_colors, create_transfer, create_wallet,
+    create_wallet_with_profile,
     currency_provider_definition_rows, currency_provider_setting_rows, currency_rate_rows,
     currency_rate_snapshot_rows, currency_transfer_quote, current_local_date, dashboard_payload,
     debt_close_validated, debt_create, debt_delete, debt_delete_payment, debt_payment_rows,
@@ -52,8 +53,8 @@ use ledgera_engine_storage::{
     supported_currencies, tag_color_palette, tag_color_rows, tag_names,
     test_currency_provider_definition, transfer_get_row, update_standalone_record_with_tag_colors,
     update_transfer, upsert_currency_provider_definition, upsert_currency_provider_setting,
-    upsert_currency_rate, wallet_balance_row, wallet_balance_rows, wallet_current_balance_rows,
-    wallet_list_rows,
+    upsert_currency_rate, update_wallet_profile, wallet_balance_row, wallet_balance_rows,
+    wallet_color_palette, wallet_current_balance_rows, wallet_icon_catalog, wallet_list_rows,
 };
 use std::fmt;
 use std::path::Path;
@@ -146,6 +147,24 @@ pub struct CreateWalletRequest {
     pub currency: String,
     pub initial_balance: String,
     pub allow_negative: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateWalletProfileRequest {
+    pub name: String,
+    pub currency: String,
+    pub initial_balance: String,
+    pub allow_negative: bool,
+    pub color: String,
+    pub icon: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WalletProfileRequest {
+    pub wallet_id: i64,
+    pub name: String,
+    pub color: String,
+    pub icon: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -411,6 +430,8 @@ pub struct WalletDto {
     pub system: bool,
     pub allow_negative: bool,
     pub is_active: bool,
+    pub color: String,
+    pub icon: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -419,6 +440,8 @@ pub struct WalletBalanceDto {
     pub name: String,
     pub currency: String,
     pub balance: String,
+    pub color: String,
+    pub icon: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1827,6 +1850,46 @@ impl LedgeraEngine {
             .map_err(storage_error)
     }
 
+    pub fn create_wallet_with_profile(
+        &self,
+        request: CreateWalletProfileRequest,
+    ) -> Result<WalletDto, LedgeraEngineError> {
+        let payload = WalletCreatePayload {
+            name: request.name,
+            currency: request.currency,
+            initial_balance: request.initial_balance,
+            allow_negative: request.allow_negative,
+        };
+        create_wallet_with_profile(&self.db_path, &payload, &request.color, &request.icon)
+            .map(wallet_to_dto)
+            .map_err(storage_error)
+    }
+
+    pub fn update_wallet_profile(
+        &self,
+        request: WalletProfileRequest,
+    ) -> Result<WalletDto, LedgeraEngineError> {
+        update_wallet_profile(
+            &self.db_path,
+            &WalletProfileUpdatePayload {
+                wallet_id: request.wallet_id,
+                name: request.name,
+                color: request.color,
+                icon: request.icon,
+            },
+        )
+        .map(wallet_to_dto)
+        .map_err(storage_error)
+    }
+
+    pub fn wallet_color_palette(&self) -> Vec<String> {
+        wallet_color_palette()
+    }
+
+    pub fn wallet_icon_catalog(&self) -> Vec<String> {
+        wallet_icon_catalog()
+    }
+
     pub fn delete_wallet(
         &self,
         wallet_id: i64,
@@ -2444,14 +2507,24 @@ impl LedgeraEngine {
     }
 
     pub fn wallet_balances(&self) -> Result<Vec<WalletBalanceDto>, LedgeraEngineError> {
+        let styles = wallet_list_rows(&self.db_path)
+            .map_err(storage_error)?
+            .into_iter()
+            .map(|wallet| (wallet.id, (wallet.color, wallet.icon)))
+            .collect::<std::collections::HashMap<_, _>>();
         wallet_balance_rows(&self.db_path, None)
-            .map(|rows| rows.into_iter().map(wallet_balance_to_dto).collect())
+            .map(|rows| rows.into_iter().map(|row| wallet_balance_to_dto(row, &styles)).collect())
             .map_err(storage_error)
     }
 
     pub fn wallet_current_balances(&self) -> Result<Vec<WalletBalanceDto>, LedgeraEngineError> {
+        let styles = wallet_list_rows(&self.db_path)
+            .map_err(storage_error)?
+            .into_iter()
+            .map(|wallet| (wallet.id, (wallet.color, wallet.icon)))
+            .collect::<std::collections::HashMap<_, _>>();
         wallet_current_balance_rows(&self.db_path)
-            .map(|rows| rows.into_iter().map(wallet_balance_to_dto).collect())
+            .map(|rows| rows.into_iter().map(|row| wallet_balance_to_dto(row, &styles)).collect())
             .map_err(storage_error)
     }
 
@@ -2459,8 +2532,13 @@ impl LedgeraEngine {
         &self,
         wallet_id: i64,
     ) -> Result<Option<WalletBalanceDto>, LedgeraEngineError> {
+        let styles = wallet_list_rows(&self.db_path)
+            .map_err(storage_error)?
+            .into_iter()
+            .map(|wallet| (wallet.id, (wallet.color, wallet.icon)))
+            .collect::<std::collections::HashMap<_, _>>();
         wallet_balance_row(&self.db_path, wallet_id)
-            .map(|row| row.map(wallet_balance_to_dto))
+            .map(|row| row.map(|value| wallet_balance_to_dto(value, &styles)))
             .map_err(storage_error)
     }
 }
@@ -2824,6 +2902,8 @@ fn wallet_to_dto(row: WalletRow) -> WalletDto {
         system: row.system,
         allow_negative: row.allow_negative,
         is_active: row.is_active,
+        color: row.color,
+        icon: row.icon,
     }
 }
 
@@ -2964,12 +3044,21 @@ fn currency_transfer_quote_to_dto(row: CurrencyTransferQuoteRow) -> CurrencyTran
     }
 }
 
-fn wallet_balance_to_dto(row: WalletBalanceRow) -> WalletBalanceDto {
+fn wallet_balance_to_dto(
+    row: WalletBalanceRow,
+    styles: &std::collections::HashMap<i64, (String, String)>,
+) -> WalletBalanceDto {
+    let (color, icon) = styles
+        .get(&row.0)
+        .cloned()
+        .unwrap_or_else(|| ("#2acbb9".to_owned(), "wallet".to_owned()));
     WalletBalanceDto {
         wallet_id: row.0,
         name: row.1,
         currency: row.2,
         balance: format_money(row.3 + row.4),
+        color,
+        icon,
     }
 }
 

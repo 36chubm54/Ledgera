@@ -54,6 +54,7 @@ import app.ledgera.model.WalletOption
 import app.ledgera.ui.AutocompleteTextField
 import app.ledgera.ui.LedgerDateField
 import app.ledgera.ui.TagAutocompleteField
+import app.ledgera.ui.WalletBadge
 import app.ledgera.ui.toComposeTagColor
 import app.ledgera.validation.currentLedgerDate
 import app.ledgera.validation.DateValidation
@@ -348,8 +349,11 @@ private fun AddOperationLauncher(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     wallets.forEach { wallet ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(wallet.name)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                WalletBadge(wallet, 28.dp)
+                                Text(wallet.name)
+                            }
                             Text("${wallet.balance} ${wallet.balanceCurrency}")
                         }
                     }
@@ -466,7 +470,12 @@ private fun OperationFilters(
                 FilterChip(
                     selected = filter.walletId == wallet.id,
                     onClick = { onFilterChanged(filter.copy(walletId = wallet.id)) },
-                    label = { Text(wallet.name) },
+                    label = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            WalletBadge(wallet, 20.dp)
+                            Text(wallet.name)
+                        }
+                    },
                 )
             }
         }
@@ -692,7 +701,12 @@ private fun WalletChips(
             FilterChip(
                 selected = wallet.id == selectedWalletId,
                 onClick = { onWalletChanged(wallet) },
-                label = { Text("${wallet.name} · ${wallet.currency}") },
+                label = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        WalletBadge(wallet, 20.dp)
+                        Text("${wallet.name} · ${wallet.currency}")
+                    }
+                },
             )
         }
     }
@@ -873,7 +887,12 @@ private fun CreateOperationForm(
                     FilterChip(
                         selected = wallet.id == walletId,
                         onClick = { onWalletChanged(wallet) },
-                        label = { Text("${wallet.name} · ${wallet.currency}") },
+                        label = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                WalletBadge(wallet, 20.dp)
+                                Text("${wallet.name} · ${wallet.currency}")
+                            }
+                        },
                     )
                 }
             }
@@ -1031,7 +1050,12 @@ private fun EditOperationFields(
                     onClick = {
                         onDraftChanged(draft.copy(walletId = wallet.id))
                     },
-                    label = { Text("${wallet.name} · ${wallet.currency}") },
+                    label = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            WalletBadge(wallet, 20.dp)
+                            Text("${wallet.name} · ${wallet.currency}")
+                        }
+                    },
                 )
             }
         }
@@ -1363,10 +1387,11 @@ private fun OperationRow(
             }
             Column(Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(
-                        item.title,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        item.wallet?.let { WalletBadge(it, 26.dp) }
+                        Text(item.title, fontWeight = FontWeight.SemiBold)
+                        item.targetWallet?.let { WalletBadge(it, 26.dp) }
+                    }
                     Text(item.amount)
                 }
                 Spacer(Modifier.height(4.dp))

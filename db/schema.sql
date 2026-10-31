@@ -56,7 +56,9 @@ CREATE TABLE IF NOT EXISTS wallets (
     initial_balance_minor INTEGER DEFAULT NULL CHECK(initial_balance_minor >= 0 OR initial_balance_minor IS NULL),
     system INTEGER NOT NULL DEFAULT 0 CHECK(system IN (0, 1)),
     allow_negative INTEGER NOT NULL DEFAULT 0 CHECK(allow_negative IN (0, 1)),
-    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1))
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+    color TEXT NOT NULL DEFAULT '#2acbb9',
+    icon TEXT NOT NULL DEFAULT 'wallet'
 );
 
 CREATE TABLE IF NOT EXISTS transfers (

@@ -4,6 +4,7 @@ mod currency_refresh;
 mod dashboard;
 mod excel;
 mod tag_palette;
+mod wallet_profile;
 
 pub use backup::{
     FullBackupResult, export_full_backup_json, import_full_backup_json, preview_full_backup_json,
@@ -35,6 +36,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 pub use tag_palette::{NO_COLOR, TAG_PALETTE, is_valid_tag_color};
+pub use wallet_profile::{WALLET_ICON_KEYS, is_valid_wallet_icon};
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
     MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
@@ -54,6 +56,8 @@ pub struct WalletRow {
     pub system: bool,
     pub allow_negative: bool,
     pub is_active: bool,
+    pub color: String,
+    pub icon: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -255,6 +259,14 @@ pub struct WalletCreatePayload {
     pub currency: String,
     pub initial_balance: String,
     pub allow_negative: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WalletProfileUpdatePayload {
+    pub wallet_id: i64,
+    pub name: String,
+    pub color: String,
+    pub icon: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -555,6 +567,7 @@ pub fn initialize_database(db_path: &str) -> StorageResult<()> {
     conn.execute_batch(INITIAL_SCHEMA).map_err(sqlite_err)?;
     ensure_currency_refresh_schema(&conn)?;
     ensure_transfer_currency_columns_on_conn(&conn)?;
+    ensure_wallet_profile_schema(&conn)?;
     conn.execute(
         "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('base_currency', 'KZT')",
         [],
@@ -648,6 +661,108 @@ pub(crate) fn table_has_column(
         }
     }
     Ok(false)
+}
+
+fn ensure_wallet_profile_schema(conn: &Connection) -> StorageResult<()> {
+    if !table_has_column(conn, "wallets", "color")? {
+        conn.execute(
+            &format!(
+                "ALTER TABLE wallets ADD COLUMN color TEXT NOT NULL DEFAULT '{}'",
+                TAG_PALETTE[12]
+            ),
+            [],
+        )
+        .map_err(sqlite_err)?;
+    }
+    if !table_has_column(conn, "wallets", "icon")? {
+        conn.execute(
+            "ALTER TABLE wallets ADD COLUMN icon TEXT NOT NULL DEFAULT 'wallet'",
+            [],
+        )
+        .map_err(sqlite_err)?;
+    }
+    let mut stmt = conn
+        .prepare("SELECT id, color, icon FROM wallets ORDER BY id")
+        .map_err(sqlite_err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(sqlite_err)?;
+    let mut updates = Vec::new();
+    for row in rows {
+        let (id, color, icon) = row.map_err(sqlite_err)?;
+        let normalized_color = color.trim().to_lowercase();
+        let replacement_color = if is_valid_tag_color(&normalized_color) && !normalized_color.is_empty() {
+            normalized_color
+        } else {
+            TAG_PALETTE[(id.unsigned_abs() as usize) % TAG_PALETTE.len()].to_owned()
+        };
+        let replacement_icon = if is_valid_wallet_icon(icon.trim()) {
+            icon.trim().to_owned()
+        } else {
+            "wallet".to_owned()
+        };
+        if replacement_color != color || replacement_icon != icon {
+            updates.push((id, replacement_color, replacement_icon));
+        }
+    }
+    drop(stmt);
+    for (id, color, icon) in updates {
+        conn.execute(
+            "UPDATE wallets SET color = ?1, icon = ?2 WHERE id = ?3",
+            (color, icon, id),
+        )
+        .map_err(sqlite_err)?;
+    }
+    Ok(())
+}
+
+fn normalize_wallet_color(value: &str) -> StorageResult<String> {
+    let normalized = value.trim().to_lowercase();
+    if normalized.is_empty() || !is_valid_tag_color(&normalized) {
+        return Err(format!("Unsupported wallet color: {value}"));
+    }
+    Ok(normalized)
+}
+
+fn normalize_wallet_color_in_tx(
+    tx: &rusqlite::Transaction<'_>,
+    value: &str,
+) -> StorageResult<String> {
+    if !value.trim().is_empty() {
+        return normalize_wallet_color(value);
+    }
+    let mut stmt = tx
+        .prepare("SELECT color FROM wallets WHERE color IS NOT NULL AND trim(color) <> ''")
+        .map_err(sqlite_err)?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(sqlite_err)?;
+    let used = rows
+        .collect::<Result<HashSet<_>, _>>()
+        .map_err(sqlite_err)?;
+    Ok(TAG_PALETTE
+        .iter()
+        .find(|color| !used.contains(**color))
+        .unwrap_or(&TAG_PALETTE[0])
+        .to_string())
+}
+
+fn normalize_wallet_icon(value: &str) -> StorageResult<String> {
+    let normalized = if value.trim().is_empty() {
+        "wallet"
+    } else {
+        value.trim()
+    };
+    if !is_valid_wallet_icon(normalized) {
+        return Err(format!("Unsupported wallet icon: {value}"));
+    }
+    Ok(normalized.to_owned())
 }
 
 fn money_value_from_sql_row(
@@ -850,6 +965,7 @@ pub fn cashflow_sum(
 
 pub fn wallet_list_rows(db_path: &str) -> StorageResult<Vec<WalletRow>> {
     let conn = open_sqlite_connection(db_path)?;
+    ensure_wallet_profile_schema(&conn)?;
     let mut stmt = conn
         .prepare(
             "SELECT
@@ -860,7 +976,9 @@ pub fn wallet_list_rows(db_path: &str) -> StorageResult<Vec<WalletRow>> {
                 initial_balance_minor,
                 system,
                 allow_negative,
-                is_active
+                is_active,
+                color,
+                icon
              FROM wallets
              ORDER BY id",
         )
@@ -875,6 +993,8 @@ pub fn wallet_list_rows(db_path: &str) -> StorageResult<Vec<WalletRow>> {
                 system: row.get::<_, i64>(5)? != 0,
                 allow_negative: row.get::<_, i64>(6)? != 0,
                 is_active: row.get::<_, i64>(7)? != 0,
+                color: row.get(8)?,
+                icon: row.get(9)?,
             })
         })
         .map_err(sqlite_err)?;
@@ -887,7 +1007,17 @@ pub fn wallet_list_rows(db_path: &str) -> StorageResult<Vec<WalletRow>> {
 }
 
 pub fn create_wallet(db_path: &str, payload: &WalletCreatePayload) -> StorageResult<WalletRow> {
+    create_wallet_with_profile(db_path, payload, "", "")
+}
+
+pub fn create_wallet_with_profile(
+    db_path: &str,
+    payload: &WalletCreatePayload,
+    color: &str,
+    icon: &str,
+) -> StorageResult<WalletRow> {
     let mut conn = open_sqlite_connection(db_path)?;
+    ensure_wallet_profile_schema(&conn)?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(sqlite_err)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
@@ -908,6 +1038,8 @@ pub fn create_wallet(db_path: &str, payload: &WalletCreatePayload) -> StorageRes
     let initial_balance = quantize_money_text(&payload.initial_balance)?
         .parse::<f64>()
         .map_err(|_| "invalid initial_balance".to_owned())?;
+    let normalized_color = normalize_wallet_color_in_tx(&tx, color)?;
+    let normalized_icon = normalize_wallet_icon(icon)?;
     let is_first_wallet = tx
         .query_row("SELECT COUNT(*) FROM wallets", [], |row| {
             row.get::<_, i64>(0)
@@ -923,9 +1055,11 @@ pub fn create_wallet(db_path: &str, payload: &WalletCreatePayload) -> StorageRes
             initial_balance_minor,
             system,
             allow_negative,
-            is_active
+            is_active,
+            color,
+            icon
         )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)",
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8)",
         (
             name,
             currency.as_str(),
@@ -933,6 +1067,8 @@ pub fn create_wallet(db_path: &str, payload: &WalletCreatePayload) -> StorageRes
             initial_balance_minor,
             i64::from(is_first_wallet),
             i64::from(payload.allow_negative),
+            normalized_color.as_str(),
+            normalized_icon.as_str(),
         ),
     )
     .map_err(sqlite_err)?;
@@ -943,6 +1079,70 @@ pub fn create_wallet(db_path: &str, payload: &WalletCreatePayload) -> StorageRes
         .into_iter()
         .find(|row| row.id == wallet_id)
         .ok_or_else(|| format!("Wallet not found: {wallet_id}"))
+}
+
+pub fn update_wallet_profile(
+    db_path: &str,
+    payload: &WalletProfileUpdatePayload,
+) -> StorageResult<WalletRow> {
+    if payload.wallet_id <= 0 {
+        return Err("Wallet id is required".to_owned());
+    }
+    let mut conn = open_sqlite_connection(db_path)?;
+    ensure_wallet_profile_schema(&conn)?;
+    conn.pragma_update(None, "foreign_keys", "ON")
+        .map_err(sqlite_err)?;
+    let tx = conn.transaction().map_err(sqlite_err)?;
+    let name = payload.name.trim();
+    if name.is_empty() {
+        return Err("Wallet name is required".to_owned());
+    }
+    if name.chars().count() > 100 {
+        return Err("Wallet name must be 100 characters or fewer".to_owned());
+    }
+    let exists: Option<i64> = tx
+        .query_row(
+            "SELECT id FROM wallets WHERE id = ?1",
+            [payload.wallet_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(sqlite_err)?;
+    if exists.is_none() {
+        return Err(format!("Wallet not found: {}", payload.wallet_id));
+    }
+    let duplicate: Option<i64> = tx
+        .query_row(
+            "SELECT id FROM wallets WHERE LOWER(TRIM(name)) = LOWER(?1) AND id <> ?2 LIMIT 1",
+            (name, payload.wallet_id),
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(sqlite_err)?;
+    if duplicate.is_some() {
+        return Err(format!("Wallet name already exists: {name}"));
+    }
+    let color = normalize_wallet_color(&payload.color)?;
+    let icon = normalize_wallet_icon(&payload.icon)?;
+    tx.execute(
+        "UPDATE wallets SET name = ?1, color = ?2, icon = ?3 WHERE id = ?4",
+        (name, color.as_str(), icon.as_str(), payload.wallet_id),
+    )
+    .map_err(sqlite_err)?;
+    tx.commit().map_err(sqlite_err)?;
+    storage_clear_read_connection_cache();
+    wallet_list_rows(db_path)?
+        .into_iter()
+        .find(|row| row.id == payload.wallet_id)
+        .ok_or_else(|| format!("Wallet not found: {}", payload.wallet_id))
+}
+
+pub fn wallet_color_palette() -> Vec<String> {
+    TAG_PALETTE.iter().map(|color| (*color).to_owned()).collect()
+}
+
+pub fn wallet_icon_catalog() -> Vec<String> {
+    WALLET_ICON_KEYS.iter().map(|icon| (*icon).to_owned()).collect()
 }
 
 pub fn set_system_wallet_initial_balance(
@@ -7495,6 +7695,16 @@ mod tests {
     fn full_backup_round_trips_budgets_and_supports_legacy_scope_fields() {
         let db_path = create_balance_test_db();
         let backup_path = temp_test_path("ledgera_budget_backup", "json");
+        update_wallet_profile(
+            &db_path,
+            &WalletProfileUpdatePayload {
+                wallet_id: 2,
+                name: "Card profile".to_owned(),
+                color: TAG_PALETTE[4].to_owned(),
+                icon: "card".to_owned(),
+            },
+        )
+        .unwrap();
         let conn = Connection::open(&db_path).unwrap();
         conn.execute(
             "INSERT INTO budgets (
@@ -7584,6 +7794,14 @@ mod tests {
         let imported = import_full_backup_json(&db_path, backup_path.to_str().unwrap()).unwrap();
         assert_eq!(imported.budget_rows, 1);
         assert_eq!(budget_rows(&db_path).unwrap()[0].id, 7);
+        let restored_wallet = wallet_list_rows(&db_path)
+            .unwrap()
+            .into_iter()
+            .find(|wallet| wallet.id == 2)
+            .unwrap();
+        assert_eq!(restored_wallet.name, "Card profile");
+        assert_eq!(restored_wallet.color, TAG_PALETTE[4]);
+        assert_eq!(restored_wallet.icon, "card");
         assert_eq!(currency_rate_snapshot_rows(&db_path).unwrap().len(), 1);
         assert_eq!(
             latest_currency_refresh_status(&db_path)
@@ -12403,6 +12621,125 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         )
         .unwrap_err();
         assert!(invalid.contains("Unsupported tag color"));
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn wallet_profile_migration_preserves_ids_and_assigns_defaults() {
+        let db_path = create_balance_test_db();
+
+        let wallets = wallet_list_rows(&db_path).unwrap();
+        assert_eq!(wallets.iter().map(|wallet| wallet.id).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert!(wallets
+            .iter()
+            .all(|wallet| is_valid_tag_color(&wallet.color) && is_valid_wallet_icon(&wallet.icon)));
+        assert!(wallets.iter().all(|wallet| wallet.icon == "wallet"));
+
+        let conn = Connection::open(&db_path).unwrap();
+        let transfer_wallet_ids: (i64, i64) = conn
+            .query_row(
+                "SELECT from_wallet_id, to_wallet_id FROM transfers WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(transfer_wallet_ids, (1, 2));
+        drop(conn);
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn wallet_profile_update_validates_and_preserves_wallet_identity() {
+        let db_path = create_balance_test_db();
+        let before = wallet_list_rows(&db_path)
+            .unwrap()
+            .into_iter()
+            .find(|wallet| wallet.id == 2)
+            .unwrap();
+
+        let updated = update_wallet_profile(
+            &db_path,
+            &WalletProfileUpdatePayload {
+                wallet_id: 2,
+                name: "Travel card".to_owned(),
+                color: TAG_PALETTE[3].to_owned(),
+                icon: "card".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.id, before.id);
+        assert_eq!(updated.currency, before.currency);
+        assert_eq!(updated.initial_balance, before.initial_balance);
+        assert_eq!(updated.name, "Travel card");
+        assert_eq!(updated.color, TAG_PALETTE[3]);
+        assert_eq!(updated.icon, "card");
+
+        let duplicate = update_wallet_profile(
+            &db_path,
+            &WalletProfileUpdatePayload {
+                wallet_id: 2,
+                name: " Cash ".to_owned(),
+                color: TAG_PALETTE[3].to_owned(),
+                icon: "card".to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert!(duplicate.contains("already exists"));
+
+        let invalid_icon = update_wallet_profile(
+            &db_path,
+            &WalletProfileUpdatePayload {
+                wallet_id: 2,
+                name: "Travel card".to_owned(),
+                color: TAG_PALETTE[3].to_owned(),
+                icon: "unknown".to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert!(invalid_icon.contains("Unsupported wallet icon"));
+
+        let invalid_color = update_wallet_profile(
+            &db_path,
+            &WalletProfileUpdatePayload {
+                wallet_id: 2,
+                name: "Travel card".to_owned(),
+                color: "#ffffff".to_owned(),
+                icon: "card".to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert!(invalid_color.contains("Unsupported wallet color"));
+
+        remove_test_db(&db_path);
+    }
+
+    #[test]
+    fn wallet_profiles_allow_duplicate_colors_and_expose_stable_catalogs() {
+        let db_path = create_balance_test_db();
+        let color = TAG_PALETTE[5].to_owned();
+        update_wallet_profile(
+            &db_path,
+            &WalletProfileUpdatePayload {
+                wallet_id: 1,
+                name: "Cash primary".to_owned(),
+                color: color.clone(),
+                icon: "cash".to_owned(),
+            },
+        )
+        .unwrap();
+        let second = update_wallet_profile(
+            &db_path,
+            &WalletProfileUpdatePayload {
+                wallet_id: 2,
+                name: "Cash secondary".to_owned(),
+                color: color.clone(),
+                icon: "bank".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(second.color, color);
+        assert_eq!(wallet_icon_catalog(), WALLET_ICON_KEYS.iter().map(|value| (*value).to_owned()).collect::<Vec<_>>());
+        assert_eq!(wallet_color_palette(), TAG_PALETTE.iter().map(|value| (*value).to_owned()).collect::<Vec<_>>());
         remove_test_db(&db_path);
     }
 }

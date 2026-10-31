@@ -4,6 +4,7 @@ import app.ledgera.bridge.SettingsEngine
 import app.ledgera.model.AuditFinding
 import app.ledgera.model.AuditSummary
 import app.ledgera.model.CreateWalletRequest
+import app.ledgera.model.UpdateWalletProfileRequest
 import app.ledgera.model.FullBackupResult
 import app.ledgera.model.WalletSettingsItem
 import app.ledgera.model.CurrencyRate
@@ -32,6 +33,8 @@ import kotlin.random.Random
 data class SettingsUiState(
     val loading: Boolean = false,
     val wallets: List<WalletSettingsItem> = emptyList(),
+    val walletColorPalette: List<String> = emptyList(),
+    val walletIconCatalog: List<String> = listOf("wallet", "cash", "card", "bank", "savings", "investment"),
     val baseCurrency: String = "KZT",
     val supportedCurrencies: List<String> = listOf("KZT"),
     val currencyRates: List<CurrencyRate> = emptyList(),
@@ -55,6 +58,7 @@ class SettingsViewModel(
     private val engine: SettingsEngine,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
     private val onCurrencyRefreshSuccess: suspend () -> Unit = {},
+    private val onWalletProfileChanged: suspend () -> Unit = {},
 ) {
     private val mutableState = MutableStateFlow(SettingsUiState(loading = true))
     val state: StateFlow<SettingsUiState> = mutableState.asStateFlow()
@@ -72,6 +76,8 @@ class SettingsViewModel(
             runCatching {
                 val baseCurrency = engine.baseCurrency()
                 val wallets = engine.listWalletsForSettings()
+                val walletColorPalette = runCatching { engine.walletColorPalette() }.getOrDefault(emptyList())
+                val walletIconCatalog = runCatching { engine.walletIconCatalog() }.getOrDefault(emptyList())
                 val currencies = engine.supportedCurrencies()
                 val rates = engine.currencyRates()
                 val refreshStatus = runCatching { engine.currencyRefreshStatus() }.getOrNull()
@@ -93,6 +99,10 @@ class SettingsViewModel(
                 mutableState.value = mutableState.value.copy(
                     loading = false,
                     wallets = wallets,
+                    walletColorPalette = walletColorPalette,
+                    walletIconCatalog = walletIconCatalog.ifEmpty {
+                        listOf("wallet", "cash", "card", "bank", "savings", "investment")
+                    },
                     baseCurrency = baseCurrency,
                     supportedCurrencies = currencies.ifEmpty { listOf(baseCurrency) },
                     currencyRates = rates,
@@ -292,6 +302,18 @@ class SettingsViewModel(
             runCatching {
                 val created = engine.createWallet(request.copy(initialBalance = request.initialBalance.ifBlank { "0" }))
                 refresh("Wallet created (id=${created.id})")
+                onWalletProfileChanged()
+            }.onFailure(::showError)
+        }
+    }
+
+    fun updateWalletProfile(request: UpdateWalletProfileRequest) {
+        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        launchSafely {
+            runCatching {
+                val updated = engine.updateWalletProfile(request)
+                refresh("Wallet profile saved (id=${updated.id})")
+                onWalletProfileChanged()
             }.onFailure(::showError)
         }
     }

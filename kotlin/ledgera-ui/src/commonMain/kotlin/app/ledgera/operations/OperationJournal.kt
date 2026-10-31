@@ -16,6 +16,8 @@ internal data class OperationJournalItem(
     val linkedLabel: String?,
     val selected: Boolean,
     val bulkSelectable: Boolean,
+    val wallet: WalletOption? = null,
+    val targetWallet: WalletOption? = null,
 )
 
 internal fun operationJournalItems(
@@ -71,6 +73,7 @@ private fun standaloneJournalItem(
         linkedLabel = if (record.relatedDebtId != null) "Debt-linked" else null,
         selected = selectedRecordId == record.id || selected,
         bulkSelectable = bulkSelectable,
+        wallet = wallets.firstOrNull { it.id == record.walletId },
     )
 }
 
@@ -100,6 +103,12 @@ private fun transferJournalItem(
         linkedLabel = "Transfer-linked",
         selected = selectedBulkTransferIds.contains(transferId),
         bulkSelectable = true,
+        wallet = wallets.firstOrNull { it.id == primary.walletId },
+        targetWallet = if (expense != null && income != null) {
+            wallets.firstOrNull { it.id == income.walletId }
+        } else {
+            null
+        },
     )
 }
 

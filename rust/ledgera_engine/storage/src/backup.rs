@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 const BACKUP_FORMAT: &str = "ledgera.full_backup";
-const BACKUP_VERSION: i64 = 5;
+const BACKUP_VERSION: i64 = 6;
 const MAX_BACKUP_BYTES: u64 = 50 * 1024 * 1024;
 
 const BACKUP_TABLES: &[&str] = &[
@@ -170,7 +170,7 @@ fn sections(payload: &JsonValue) -> StorageResult<&Map<String, JsonValue>> {
     let version = object.get("version").and_then(JsonValue::as_i64);
     if !matches!(
         version,
-        Some(1) | Some(2) | Some(3) | Some(4) | Some(BACKUP_VERSION)
+        Some(1) | Some(2) | Some(3) | Some(4) | Some(5) | Some(BACKUP_VERSION)
     ) {
         return Err("Unsupported backup version".to_owned());
     }

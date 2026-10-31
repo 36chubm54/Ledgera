@@ -108,6 +108,22 @@ dictionary CreateWalletRequest {
     boolean allow_negative;
 };
 
+dictionary CreateWalletProfileRequest {
+    string name;
+    string currency;
+    string initial_balance;
+    boolean allow_negative;
+    string color;
+    string icon;
+};
+
+dictionary WalletProfileRequest {
+    i64 wallet_id;
+    string name;
+    string color;
+    string icon;
+};
+
 dictionary CurrencyRateDto {
     i64 id;
     string base_currency;
@@ -522,6 +538,8 @@ dictionary WalletDto {
     boolean system;
     boolean allow_negative;
     boolean is_active;
+    string color;
+    string icon;
 };
 
 dictionary TransferDto {
@@ -582,6 +600,8 @@ dictionary WalletBalanceDto {
     string name;
     string currency;
     string balance;
+    string color;
+    string icon;
 };
 
 dictionary EngineStatusDto {
@@ -953,6 +973,12 @@ interface LedgeraEngine {
     WalletDto set_system_wallet_details(string name, string initial_balance);
     [Throws=LedgeraEngineError]
     WalletDto create_wallet(CreateWalletRequest request);
+    [Throws=LedgeraEngineError]
+    WalletDto create_wallet_with_profile(CreateWalletProfileRequest request);
+    [Throws=LedgeraEngineError]
+    WalletDto update_wallet_profile(WalletProfileRequest request);
+    sequence<string> wallet_color_palette();
+    sequence<string> wallet_icon_catalog();
     [Throws=LedgeraEngineError]
     WalletDeleteResultDto delete_wallet(i64 wallet_id);
     [Throws=LedgeraEngineError]

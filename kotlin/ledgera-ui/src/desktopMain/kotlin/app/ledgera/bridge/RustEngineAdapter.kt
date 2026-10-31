@@ -10,6 +10,8 @@ import app.ledgera.engine.CreateDistributionSubitemRequest as NativeCreateDistri
 import app.ledgera.engine.CreateTransferRequest as NativeCreateTransferRequest
 import app.ledgera.engine.CurrencyTransferRequest as NativeCurrencyTransferRequest
 import app.ledgera.engine.CreateWalletRequest as NativeCreateWalletRequest
+import app.ledgera.engine.CreateWalletProfileRequest as NativeCreateWalletProfileRequest
+import app.ledgera.engine.WalletProfileRequest as NativeWalletProfileRequest
 import app.ledgera.engine.LedgeraEngine
 import app.ledgera.engine.DashboardAssetSnapshotUpdate as NativeDashboardAssetSnapshotUpdate
 import app.ledgera.engine.FullBackupResultDto
@@ -48,6 +50,7 @@ import app.ledgera.model.CurrencyTransferRequest
 import app.ledgera.model.CurrencyTransferResult
 import app.ledgera.model.CurrencyTransferQuote
 import app.ledgera.model.CreateWalletRequest
+import app.ledgera.model.UpdateWalletProfileRequest
 import app.ledgera.model.FullBackupResult
 import app.ledgera.model.DebtItem
 import app.ledgera.model.DebtPaymentItem
@@ -694,13 +697,20 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
 
     override suspend fun listWallets(): List<WalletOption> = withContext(Dispatchers.IO) {
         engine.listWallets().filter { it.isActive }.map {
-            WalletOption(id = it.id, name = it.name, currency = it.currency)
+            WalletOption(id = it.id, name = it.name, currency = it.currency, color = it.color, iconKey = it.icon)
         }
     }
 
     override suspend fun walletBalances(): List<WalletOption> = withContext(Dispatchers.IO) {
         engine.walletBalances().map {
-            WalletOption(id = it.walletId, name = it.name, currency = it.currency, balance = it.balance)
+            WalletOption(
+                id = it.walletId,
+                name = it.name,
+                currency = it.currency,
+                balance = it.balance,
+                color = it.color,
+                iconKey = it.icon,
+            )
         }
     }
 
@@ -713,6 +723,8 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 currency = currenciesById[it.walletId] ?: it.currency,
                 balance = it.balance,
                 balanceCurrency = it.currency,
+                color = it.color,
+                iconKey = it.icon,
             )
         }
     }
@@ -732,18 +744,22 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 allowNegative = wallet.allowNegative,
                 active = wallet.isActive,
                 balanceCurrency = currentBalance?.currency ?: wallet.currency,
+                color = wallet.color,
+                iconKey = wallet.icon,
             )
         }
     }
 
     override suspend fun createWallet(request: CreateWalletRequest): WalletSettingsItem =
         withContext(Dispatchers.IO) {
-            val created = engine.createWallet(
-                NativeCreateWalletRequest(
+            val created = engine.createWalletWithProfile(
+                NativeCreateWalletProfileRequest(
                     name = request.name,
                     currency = request.currency,
                     initialBalance = request.initialBalance,
                     allowNegative = request.allowNegative,
+                    color = request.color,
+                    icon = request.iconKey,
                 )
             )
             WalletSettingsItem(
@@ -755,8 +771,42 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 system = created.system,
                 allowNegative = created.allowNegative,
                 active = created.isActive,
+                color = created.color,
+                iconKey = created.icon,
             )
         }
+
+    override suspend fun updateWalletProfile(request: UpdateWalletProfileRequest): WalletSettingsItem =
+        withContext(Dispatchers.IO) {
+            val updated = engine.updateWalletProfile(
+                NativeWalletProfileRequest(
+                    walletId = request.walletId,
+                    name = request.name,
+                    color = request.color,
+                    icon = request.iconKey,
+                )
+            )
+            WalletSettingsItem(
+                id = updated.id,
+                name = updated.name,
+                currency = updated.currency,
+                initialBalance = updated.initialBalance,
+                balance = updated.initialBalance,
+                system = updated.system,
+                allowNegative = updated.allowNegative,
+                active = updated.isActive,
+                color = updated.color,
+                iconKey = updated.icon,
+            )
+        }
+
+    override suspend fun walletColorPalette(): List<String> = withContext(Dispatchers.IO) {
+        engine.walletColorPalette()
+    }
+
+    override suspend fun walletIconCatalog(): List<String> = withContext(Dispatchers.IO) {
+        engine.walletIconCatalog()
+    }
 
     override suspend fun setSystemWalletInitialBalance(initialBalance: String): WalletSettingsItem =
         withContext(Dispatchers.IO) {
@@ -770,6 +820,8 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                     system = wallet.system,
                     allowNegative = wallet.allowNegative,
                     active = wallet.isActive,
+                    color = wallet.color,
+                    iconKey = wallet.icon,
                 )
             }
         }
@@ -786,6 +838,8 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                     system = wallet.system,
                     allowNegative = wallet.allowNegative,
                     active = wallet.isActive,
+                    color = wallet.color,
+                    iconKey = wallet.icon,
                 )
             }
         }

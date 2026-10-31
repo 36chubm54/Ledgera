@@ -256,6 +256,8 @@ fn wallet_to_dict(py: Python<'_>, row: WalletRow) -> PyResult<Py<PyAny>> {
     payload.set_item("system", row.system)?;
     payload.set_item("allow_negative", row.allow_negative)?;
     payload.set_item("is_active", row.is_active)?;
+    payload.set_item("color", row.color)?;
+    payload.set_item("icon", row.icon)?;
     Ok(payload.into_any().unbind())
 }
 

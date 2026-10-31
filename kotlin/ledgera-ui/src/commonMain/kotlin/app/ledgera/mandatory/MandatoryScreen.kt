@@ -25,7 +25,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -44,10 +43,8 @@ import app.ledgera.model.MandatoryTemplateItem
 import app.ledgera.model.WalletOption
 import app.ledgera.ui.LedgerDateField
 import app.ledgera.ui.AutocompleteTextField
+import app.ledgera.ui.WalletBadge
 import app.ledgera.validation.DateValidation
-import app.ledgera.resources.Res
-import app.ledgera.resources.ic_wallet
-import org.jetbrains.compose.resources.painterResource
 
 interface MandatoryFileActions {
     fun openImportPath(): String?
@@ -236,11 +233,7 @@ private fun MandatoryTemplateRow(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(template.description, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_wallet),
-                        contentDescription = "Wallet",
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+                    wallet?.let { WalletBadge(it, 26.dp) }
                     Text("${template.category} · ${template.period} · ${wallet?.name ?: "Unknown wallet"}")
                 }
                 Text(if (template.autoPay) "Auto-pay anchor ${template.date}" else "Manual template")
@@ -589,11 +582,17 @@ private fun WalletChips(
                 val selected = wallet.id == selectedWalletId
                 if (selected) {
                     Button(onClick = { onSelected(wallet.id) }) {
-                        Text("${wallet.name} · ${wallet.currency}")
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            WalletBadge(wallet, 22.dp)
+                            Text("${wallet.name} · ${wallet.currency}")
+                        }
                     }
                 } else {
                     OutlinedButton(onClick = { onSelected(wallet.id) }) {
-                        Text("${wallet.name} · ${wallet.currency}")
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            WalletBadge(wallet, 22.dp)
+                            Text("${wallet.name} · ${wallet.currency}")
+                        }
                     }
                 }
             }

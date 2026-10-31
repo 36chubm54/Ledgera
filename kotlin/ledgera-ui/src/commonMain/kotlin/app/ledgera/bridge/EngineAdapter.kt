@@ -11,6 +11,7 @@ import app.ledgera.model.CurrencyTransferRequest
 import app.ledgera.model.CurrencyTransferQuote
 import app.ledgera.model.CurrencyTransferResult
 import app.ledgera.model.CreateWalletRequest
+import app.ledgera.model.UpdateWalletProfileRequest
 import app.ledgera.model.FullBackupResult
 import app.ledgera.model.AuditFinding
 import app.ledgera.model.AddMandatoryToRecordsRequest
@@ -161,6 +162,9 @@ interface SettingsEngine {
     suspend fun testCurrencyProvider(request: CurrencyProviderTestRequest): CurrencyProviderTestResult = error("Currency provider test is unavailable")
     suspend fun listWalletsForSettings(): List<WalletSettingsItem>
     suspend fun createWallet(request: CreateWalletRequest): WalletSettingsItem
+    suspend fun updateWalletProfile(request: UpdateWalletProfileRequest): WalletSettingsItem = error("Wallet profile editing is unavailable")
+    suspend fun walletColorPalette(): List<String> = emptyList()
+    suspend fun walletIconCatalog(): List<String> = listOf("wallet", "cash", "card", "bank", "savings", "investment")
     suspend fun setSystemWalletInitialBalance(initialBalance: String): WalletSettingsItem = error("Initial balance setup is unavailable")
     suspend fun setSystemWalletDetails(name: String, initialBalance: String): WalletSettingsItem = error("Initial system wallet setup is unavailable")
     suspend fun deleteWallet(walletId: Long): WalletDeleteResult
