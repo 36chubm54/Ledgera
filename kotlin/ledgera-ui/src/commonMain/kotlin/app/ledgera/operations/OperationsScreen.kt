@@ -93,12 +93,6 @@ fun OperationsScreen(
             showCreateDialog = false
         }
     }
-    LaunchedEffect(showTransferDialog, state.notice) {
-        if (showTransferDialog && state.notice?.startsWith("Transfer created") == true) {
-            showTransferDialog = false
-        }
-    }
-
     Column(
         modifier = modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -227,7 +221,9 @@ fun OperationsScreen(
             descriptionSuggestions = state.descriptionSuggestions,
             engineError = state.error,
             submitting = state.loading,
-            onCurrencySubmit = viewModel::createCurrencyTransfer,
+            onCurrencySubmit = { request ->
+                viewModel.createCurrencyTransfer(request) { showTransferDialog = false }
+            },
             onQuote = viewModel::quoteCurrencyTransfer,
             quote = state.currencyTransferQuote,
             onCancel = { showTransferDialog = false },

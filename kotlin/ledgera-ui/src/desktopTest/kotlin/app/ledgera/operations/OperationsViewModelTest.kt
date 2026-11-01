@@ -9,6 +9,8 @@ import app.ledgera.model.CreateOperationRequest
 import app.ledgera.model.CreateTransferRequest
 import app.ledgera.model.CreateTransferResult
 import app.ledgera.model.CreateWalletRequest
+import app.ledgera.model.CurrencyTransferRequest
+import app.ledgera.model.CurrencyTransferResult
 import app.ledgera.model.DebtItem
 import app.ledgera.model.DebtPaymentItem
 import app.ledgera.model.EngineStatus
@@ -275,6 +277,28 @@ class OperationsViewModelTest {
         assertEquals(1, adapter.createCalls)
         assertEquals("2026-01-01", adapter.lastCreateRequest?.date)
         assertEquals("Operation added", viewModel.state.value.notice)
+    }
+
+    @Test
+    fun successfulCurrencyTransferInvokesCloseCallback() {
+        val adapter = FakeEngineAdapter(records = mutableListOf())
+        val viewModel = OperationsViewModel(adapter, CoroutineScope(Dispatchers.Unconfined))
+        var closed = false
+
+        viewModel.createCurrencyTransfer(
+            CurrencyTransferRequest(
+                fromWalletId = 1,
+                toWalletId = 2,
+                date = "01.01.2026",
+                amount = "10",
+                amountCurrency = "KZT",
+                description = "Move",
+            ),
+        ) { closed = true }
+
+        assertEquals(true, closed)
+        assertEquals(1, adapter.createCurrencyTransferCalls)
+        assertEquals("Currency transfer created (id=42)", viewModel.state.value.notice)
     }
 
     @Test
@@ -1041,6 +1065,7 @@ private class FakeEngineAdapter(
 ) : EngineAdapter {
     var createCalls = 0
     var createTransferCalls = 0
+    var createCurrencyTransferCalls = 0
     var getTransferCalls = 0
     var updateTransferCalls = 0
     var deleteTransferCalls = 0
@@ -1158,6 +1183,22 @@ private class FakeEngineAdapter(
             transferId = transferId,
         )
         return CreateTransferResult(transferId = transferId)
+    }
+
+    override suspend fun createCurrencyTransfer(request: CurrencyTransferRequest): CurrencyTransferResult {
+        createCurrencyTransferCalls += 1
+        return CurrencyTransferResult(
+            id = 42L,
+            fromWalletId = request.fromWalletId,
+            toWalletId = request.toWalletId,
+            date = request.date,
+            sourceAmount = request.amount,
+            sourceCurrency = request.amountCurrency,
+            targetAmount = request.amount,
+            targetCurrency = request.amountCurrency,
+            conversionRate = "1",
+            description = request.description,
+        )
     }
 
     override suspend fun getTransfer(transferId: Long): TransferDetails? {

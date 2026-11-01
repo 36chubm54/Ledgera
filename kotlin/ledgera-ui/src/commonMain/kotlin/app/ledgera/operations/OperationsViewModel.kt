@@ -522,7 +522,7 @@ class OperationsViewModel(
         }
     }
 
-    fun createCurrencyTransfer(request: CurrencyTransferRequest) {
+    fun createCurrencyTransfer(request: CurrencyTransferRequest, onSuccess: () -> Unit = {}) {
         val amount = request.amount.toDoubleOrNull()
         val dateError = DateValidation.validateDmyNotFuture(request.date)
         val error = when {
@@ -540,6 +540,7 @@ class OperationsViewModel(
         launchSafely {
             runCatching {
                 val result = engine.createCurrencyTransfer(request.copy(date = request.date.toStorageDate()))
+                onSuccess()
                 refresh(notice = "Currency transfer created (id=${result.id})")
             }.onFailure { failure ->
                 mutableState.value = mutableState.value.copy(
