@@ -7,7 +7,9 @@ import app.ledgera.model.CreateBudgetRequest
 import app.ledgera.validation.DateValidation
 import app.ledgera.validation.currentLedgerDate
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,15 +45,23 @@ class BudgetViewModel(
 ) {
     private val mutableState = MutableStateFlow(BudgetUiState(loading = true))
     val state: StateFlow<BudgetUiState> = mutableState.asStateFlow()
+    private var suggestionsJob: Job? = null
+    private var suggestionsGeneration = 0L
 
-    init { refresh() }
+    init { refresh(reloadSuggestions = true) }
 
-    fun refresh() {
+    fun refresh(reloadSuggestions: Boolean = false) {
         val previous = mutableState.value
         mutableState.value = previous.copy(loading = true, error = null)
         scope.launch {
             runCatching {
-                Triple(engine.listBudgets(), engine.listBudgetResults(), engine.budgetScopeSuggestions("category"))
+                val suggestionScopeType = previous.createDraft?.scopeType ?: "category"
+                val suggestions = if (reloadSuggestions || previous.suggestions.isEmpty()) {
+                    engine.budgetScopeSuggestions(suggestionScopeType)
+                } else {
+                    previous.suggestions
+                }
+                Triple(engine.listBudgets(), engine.listBudgetResults(), suggestions)
             }.onSuccess { (budgets, results, suggestions) ->
                 mutableState.value = mutableState.value.copy(
                     loading = false,
@@ -71,14 +81,52 @@ class BudgetViewModel(
 
     fun clearFeedback() { mutableState.value = mutableState.value.copy(error = null, notice = null) }
     fun selectBudget(id: Long) { mutableState.value = mutableState.value.copy(selectedBudgetId = id, error = null) }
-    fun openCreateDialog() { mutableState.value = mutableState.value.copy(createDraft = BudgetDraft(), error = null, notice = null) }
-    fun closeCreateDialog() { mutableState.value = mutableState.value.copy(createDraft = null, error = null) }
+    fun openCreateDialog() {
+        val shouldLoadSuggestions = mutableState.value.suggestions.isEmpty()
+        mutableState.value = mutableState.value.copy(createDraft = BudgetDraft(), error = null, notice = null)
+        if (shouldLoadSuggestions) loadSuggestions("category")
+    }
+
+    fun closeCreateDialog() {
+        cancelSuggestionsJob()
+        mutableState.value = mutableState.value.copy(createDraft = null, error = null)
+    }
+
     fun updateDraft(draft: BudgetDraft) {
+        val previousScopeType = mutableState.value.createDraft?.scopeType
         mutableState.value = mutableState.value.copy(createDraft = draft, error = null, notice = null)
-        scope.launch {
-            runCatching { engine.budgetScopeSuggestions(draft.scopeType) }
-                .onSuccess { mutableState.value = mutableState.value.copy(suggestions = it) }
+        if (draft.scopeType != previousScopeType) {
+            loadSuggestions(draft.scopeType)
         }
+    }
+
+    private fun loadSuggestions(scopeType: String) {
+        cancelSuggestionsJob()
+        val generation = ++suggestionsGeneration
+        mutableState.value = mutableState.value.copy(suggestions = emptyList())
+        suggestionsJob = scope.launch {
+            try {
+                val suggestions = engine.budgetScopeSuggestions(scopeType)
+                if (generation == suggestionsGeneration && mutableState.value.createDraft?.scopeType == scopeType) {
+                    mutableState.value = mutableState.value.copy(suggestions = suggestions)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (generation == suggestionsGeneration && mutableState.value.createDraft?.scopeType == scopeType) {
+                    mutableState.value = mutableState.value.copy(
+                        error = error.message ?: "Failed to load budget suggestions",
+                        suggestions = emptyList(),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun cancelSuggestionsJob() {
+        suggestionsGeneration += 1
+        suggestionsJob?.cancel()
+        suggestionsJob = null
     }
 
     fun createBudget() {

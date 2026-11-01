@@ -27,7 +27,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -39,7 +38,6 @@ import app.ledgera.ui.LedgerDateField
 @Composable
 fun BudgetScreen(viewModel: BudgetViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsState()
-    LaunchedEffect(Unit) { viewModel.refresh() }
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Budget", style = MaterialTheme.typography.headlineLarge)
