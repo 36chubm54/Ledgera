@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
 import app.ledgera.ui.AutocompleteTextField
@@ -121,7 +122,12 @@ fun ReportsScreen(
                                 Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
                                     ReportTableCell(row.category, widths[0])
                                     ReportTableCell(row.operationsCount.toString(), widths[1], alignEnd = true)
-                                    ReportTableCell("%.2f".format(amount), widths[2], alignEnd = true)
+                                    ReportTableCell(
+                                        reportSignedAmount(amount),
+                                        widths[2],
+                                        alignEnd = true,
+                                        textColor = reportAmountColor(amount),
+                                    )
                                 }
                                 HorizontalDivider(Modifier.fillMaxWidth())
                             }
@@ -149,8 +155,18 @@ fun ReportsScreen(
                         Column(Modifier.fillMaxWidth()) {
                             Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
                                 ReportTableCell(row.month, widths[0])
-                                ReportTableCell("%.2f".format(income), widths[1], alignEnd = true)
-                                ReportTableCell("%.2f".format(expenses), widths[2], alignEnd = true)
+                                ReportTableCell(
+                                    reportPositiveAmount(income),
+                                    widths[1],
+                                    alignEnd = true,
+                                    textColor = MaterialTheme.colorScheme.primary,
+                                )
+                                ReportTableCell(
+                                    reportNegativeAmount(expenses),
+                                    widths[2],
+                                    alignEnd = true,
+                                    textColor = MaterialTheme.colorScheme.error,
+                                )
                             }
                             HorizontalDivider(Modifier.fillMaxWidth())
                         }
@@ -172,7 +188,12 @@ fun ReportsScreen(
                             Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
                                 ReportTableCell("#${row.tag}", widths[0])
                                 ReportTableCell(row.operationsCount.toString(), widths[1], alignEnd = true)
-                                ReportTableCell("%.2f".format(amount), widths[2], alignEnd = true)
+                                ReportTableCell(
+                                    reportSignedAmount(amount),
+                                    widths[2],
+                                    alignEnd = true,
+                                    textColor = reportAmountColor(amount),
+                                )
                             }
                             HorizontalDivider(Modifier.fillMaxWidth())
                         }
@@ -325,7 +346,12 @@ private fun ReportOperationsTable(result: app.ledgera.model.ReportResult, tagCol
                                     ReportTableCell(row.category, categoryWidth)
                                     ReportTableCell(row.description.ifBlank { "-" }, descriptionWidth)
                                     ReportTagChips(row.tagsText, tagColors, Modifier.width(tagsWidth))
-                                    ReportTableCell("%.2f".format(amount), amountWidth, alignEnd = true)
+                                    ReportTableCell(
+                                        reportSignedAmount(amount),
+                                        amountWidth,
+                                        alignEnd = true,
+                                        textColor = reportAmountColor(amount),
+                                    )
                                 }
                                 HorizontalDivider(Modifier.fillMaxWidth())
                             }
@@ -344,11 +370,12 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Transfers", style = MaterialTheme.typography.titleMedium)
             BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val tableWidth = maxOf(maxWidth, 1480.dp)
                 val widths = listOf(
-                    110.dp, 90.dp, 210.dp, 170.dp, 210.dp,
-                    170.dp, 130.dp, 170.dp, 190.dp, 230.dp,
+                    110.dp, 90.dp, 210.dp, 320.dp, 210.dp,
+                    130.dp, 170.dp, 230.dp, 220.dp,
                 )
+                val minimumTableWidth = widths.fold(0.dp) { total, width -> total + width }
+                val tableWidth = maxOf(maxWidth, minimumTableWidth)
                 Column(Modifier.horizontalScroll(rememberScrollState()).width(tableWidth)) {
                     Row(
                         Modifier
@@ -358,7 +385,7 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
                             .padding(horizontal = 0.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        listOf("Date", "ID", "From", "Source", "To", "Target", "Rate", "Commission", "Base amount", "Status")
+                        listOf("Date", "ID", "From", "Amount", "To", "Rate", "Commission", "Base amount", "Status")
                             .forEachIndexed { index, title -> ReportTableCell(title, widths[index], isHeader = true) }
                     }
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
@@ -374,18 +401,31 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
                                     ReportTableCell(row.date, widths[0])
                                     ReportTableCell("#${row.transferId}", widths[1])
                                     ReportTableCell("${row.fromWalletName} (#${row.fromWalletId})", widths[2])
-                                    ReportTableCell("%.2f %s".format(row.sourceAmount, row.sourceCurrency), widths[3])
-                                    ReportTableCell("${row.toWalletName} (#${row.toWalletId})", widths[4])
-                                    ReportTableCell("%.2f %s".format(row.targetAmount, row.targetCurrency), widths[5])
-                                    ReportTableCell(row.historicalRate, widths[6])
                                     ReportTableCell(
-                                        if (row.commissionAmount > 0.0) "%.2f %s".format(row.commissionAmount, row.commissionCurrency) else "-",
-                                        widths[7],
+                                        "%.2f %s -> %.2f %s".format(
+                                            row.sourceAmount,
+                                            row.sourceCurrency,
+                                            row.targetAmount,
+                                            row.targetCurrency,
+                                        ),
+                                        widths[3],
+                                        textColor = MaterialTheme.colorScheme.secondary,
                                     )
-                                    ReportTableCell("%.2f / %.2f ${result.baseCurrency}".format(sourceBase, targetBase), widths[8])
+                                    ReportTableCell("${row.toWalletName} (#${row.toWalletId})", widths[4])
+                                    ReportTableCell(row.historicalRate, widths[5])
+                                    ReportTableCell(
+                                        if (row.commissionAmount > 0.0) "-%.2f %s".format(row.commissionAmount, row.commissionCurrency) else "-",
+                                        widths[6],
+                                        textColor = if (row.commissionAmount > 0.0) MaterialTheme.colorScheme.error else null,
+                                    )
+                                    ReportTableCell(
+                                        "%.2f ${result.baseCurrency}".format(sourceBase, targetBase),
+                                        widths[7],
+                                        textColor = MaterialTheme.colorScheme.secondary,
+                                    )
                                     ReportTableCell(
                                         if (row.integrityStatus == "ok") "OK" else "Error: ${row.integrityMessage}",
-                                        widths[9],
+                                        widths[8],
                                     )
                                 }
                                 if (row.description.isNotBlank() || row.tagsText.isNotBlank()) {
@@ -412,6 +452,7 @@ private fun ReportTableCell(
     width: androidx.compose.ui.unit.Dp,
     isHeader: Boolean = false,
     alignEnd: Boolean = false,
+    textColor: Color? = null,
 ) {
     Box(
         Modifier.width(width).padding(horizontal = 8.dp),
@@ -420,9 +461,26 @@ private fun ReportTableCell(
         Text(
             value,
             fontWeight = if (isHeader) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
-            color = if (isHeader) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            color = textColor ?: if (isHeader) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+private fun reportSignedAmount(value: Double): String = when {
+    value > 0.0 -> reportPositiveAmount(value)
+    value < 0.0 -> reportNegativeAmount(value)
+    else -> "0.00"
+}
+
+private fun reportPositiveAmount(value: Double): String = "+%.2f".format(kotlin.math.abs(value))
+
+private fun reportNegativeAmount(value: Double): String = "-%.2f".format(kotlin.math.abs(value))
+
+@Composable
+private fun reportAmountColor(value: Double): Color = when {
+    value > 0.0 -> MaterialTheme.colorScheme.primary
+    value < 0.0 -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.onSurface
 }
 
 @Composable
