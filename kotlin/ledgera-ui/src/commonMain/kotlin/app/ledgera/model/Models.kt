@@ -682,6 +682,9 @@ data class ReportSummary(
     val recordsCount: Long,
     val balanceLabel: String,
     val activeTag: String,
+    val transfersCount: Long = 0,
+    val transferNetFixed: Double = 0.0,
+    val transferNetCurrent: Double = 0.0,
 )
 
 data class ReportOperationRow(
@@ -693,6 +696,32 @@ data class ReportOperationRow(
     val amountBase: Double,
     val amountCurrent: Double,
     val description: String,
+)
+
+data class ReportTransferRow(
+    val transferId: Long,
+    val date: String,
+    val fromWalletId: Long,
+    val fromWalletName: String,
+    val toWalletId: Long,
+    val toWalletName: String,
+    val sourceAmount: Double,
+    val sourceCurrency: String,
+    val targetAmount: Double,
+    val targetCurrency: String,
+    val historicalRate: String,
+    val sourceAmountBase: Double,
+    val targetAmountBase: Double,
+    val sourceAmountCurrent: Double,
+    val targetAmountCurrent: Double,
+    val commissionAmount: Double,
+    val commissionCurrency: String,
+    val commissionAmountBase: Double,
+    val commissionAmountCurrent: Double,
+    val tagsText: String,
+    val description: String,
+    val integrityStatus: String,
+    val integrityMessage: String,
 )
 
 data class ReportMonthlyRow(val month: String, val income: Double, val expenses: Double, val incomeCurrent: Double, val expensesCurrent: Double)
@@ -722,6 +751,7 @@ data class ReportResult(
     val categories: List<ReportCategoryRow>,
     val tags: List<ReportTagRow>,
     val debts: List<ReportDebtRow>,
+    val transfers: List<ReportTransferRow> = emptyList(),
 )
 
 data class ReportExportResult(val exportedRows: Long, val path: String)

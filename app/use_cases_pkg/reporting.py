@@ -25,12 +25,17 @@ class GenerateReport:
         self._currency = currency
 
     def execute(self, wallet_id: int | None = None) -> Report:
+        records = self._repository.load_all()
+        load_transfers = getattr(self._repository, "load_transfers", None)
+        loaded_transfers = load_transfers() if callable(load_transfers) else []
+        transfers = loaded_transfers if isinstance(loaded_transfers, list) else []
         wallets = self._repository.load_wallets()
         if not isinstance(wallets, list):
             return Report(
-                self._repository.load_all(),
+                records,
                 self._repository.load_initial_balance(),
                 wallet_id=wallet_id,
+                transfers=transfers,
             )
         if wallet_id is None:
             initial_balance = sum(
@@ -42,7 +47,7 @@ class GenerateReport:
                 if wallet.id == wallet_id:
                     initial_balance = wallet_initial_balance_base(wallet, self._currency)
                     break
-        return Report(self._repository.load_all(), initial_balance, wallet_id=wallet_id)
+        return Report(records, initial_balance, wallet_id=wallet_id, transfers=transfers)
 
 
 class ImportFromCSV:

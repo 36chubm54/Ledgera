@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
 import app.ledgera.ui.AutocompleteTextField
 import app.ledgera.ui.LedgerDateField
@@ -130,6 +131,9 @@ fun ReportsScreen(
             } else {
                 ReportOperationsTable(result, state.tagColors)
             }
+            if (result.transfers.isNotEmpty()) {
+                ReportTransfersTable(result)
+            }
             ReportSection("Monthly") {
                 val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
                 ReportDataTable(
@@ -215,6 +219,13 @@ private fun ReportSummaryCard(result: app.ledgera.model.ReportResult) {
             Text("Operations: ${"%.2f".format(operationsTotal)} ${result.baseCurrency}")
             Text("Final: ${"%.2f".format(finalBalance)} ${result.baseCurrency}")
             Text("Count: ${result.summary.recordsCount}")
+            if (result.summary.transfersCount > 0) {
+                Text("Transfers: ${result.summary.transfersCount}")
+                val transferNet = if (currentMode) result.summary.transferNetCurrent else result.summary.transferNetFixed
+                if (transferNet != 0.0) {
+                    Text("Transfer net: ${"%.2f".format(transferNet)} ${result.baseCurrency}")
+                }
+            }
             if (result.summary.fxDifference != 0.0) Text("FX difference: ${"%.2f".format(result.summary.fxDifference)}")
         }
     }
@@ -315,6 +326,75 @@ private fun ReportOperationsTable(result: app.ledgera.model.ReportResult, tagCol
                                     ReportTableCell(row.description.ifBlank { "-" }, descriptionWidth)
                                     ReportTagChips(row.tagsText, tagColors, Modifier.width(tagsWidth))
                                     ReportTableCell("%.2f".format(amount), amountWidth, alignEnd = true)
+                                }
+                                HorizontalDivider(Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
+    val currentMode = result.filters.totalsMode.equals("current", ignoreCase = true)
+    Surface(Modifier.fillMaxWidth(), tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Transfers", style = MaterialTheme.typography.titleMedium)
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val tableWidth = maxOf(maxWidth, 1480.dp)
+                val widths = listOf(
+                    110.dp, 90.dp, 210.dp, 170.dp, 210.dp,
+                    170.dp, 130.dp, 170.dp, 190.dp, 230.dp,
+                )
+                Column(Modifier.horizontalScroll(rememberScrollState()).width(tableWidth)) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(horizontal = 0.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        listOf("Date", "ID", "From", "Source", "To", "Target", "Rate", "Commission", "Base amount", "Status")
+                            .forEachIndexed { index, title -> ReportTableCell(title, widths[index], isHeader = true) }
+                    }
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                        items(result.transfers) { row ->
+                            val sourceBase = if (currentMode) row.sourceAmountCurrent else row.sourceAmountBase
+                            val targetBase = if (currentMode) row.targetAmountCurrent else row.targetAmountBase
+                            val commission = if (currentMode) row.commissionAmountCurrent else row.commissionAmountBase
+                            Column(Modifier.fillMaxWidth()) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    ReportTableCell(row.date, widths[0])
+                                    ReportTableCell("#${row.transferId}", widths[1])
+                                    ReportTableCell("${row.fromWalletName} (#${row.fromWalletId})", widths[2])
+                                    ReportTableCell("%.2f %s".format(row.sourceAmount, row.sourceCurrency), widths[3])
+                                    ReportTableCell("${row.toWalletName} (#${row.toWalletId})", widths[4])
+                                    ReportTableCell("%.2f %s".format(row.targetAmount, row.targetCurrency), widths[5])
+                                    ReportTableCell(row.historicalRate, widths[6])
+                                    ReportTableCell(
+                                        if (row.commissionAmount > 0.0) "%.2f %s".format(row.commissionAmount, row.commissionCurrency) else "-",
+                                        widths[7],
+                                    )
+                                    ReportTableCell("%.2f / %.2f ${result.baseCurrency}".format(sourceBase, targetBase), widths[8])
+                                    ReportTableCell(
+                                        if (row.integrityStatus == "ok") "OK" else "Error: ${row.integrityMessage}",
+                                        widths[9],
+                                    )
+                                }
+                                if (row.description.isNotBlank() || row.tagsText.isNotBlank()) {
+                                    Text(
+                                        listOf(row.description, row.tagsText).filter(String::isNotBlank).joinToString(" · "),
+                                        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                                 HorizontalDivider(Modifier.fillMaxWidth())
                             }

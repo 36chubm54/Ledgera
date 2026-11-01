@@ -13,7 +13,7 @@ use ledgera_engine_storage::{
     MandatoryTemplateUpdatePayload, OperationDeleteResult, OperationExportResult,
     OperationImportResult, RecordFilterPayload, RecordRow, ReportCategoryRow, ReportDebtRow,
     ReportExportResult, ReportFilters, ReportMonthlyRow, ReportOperationRow, ReportResult,
-    ReportTagRow, SUPPORTED_CURRENCY_PROVIDER_NAMES, StandaloneRecordCreatePayload,
+    ReportTagRow, ReportTransferRow, SUPPORTED_CURRENCY_PROVIDER_NAMES, StandaloneRecordCreatePayload,
     StandaloneRecordUpdatePayload, TagColorAssignment as StorageTagColorAssignment,
     TransferCreatePayload, TransferRow, TransferUpdatePayload, WalletBalanceRow,
     WalletCreatePayload, WalletProfileUpdatePayload, WalletRow, analytics_generate,
@@ -532,6 +532,9 @@ pub struct ReportSummaryDto {
     pub final_balance_current: f64,
     pub fx_difference: f64,
     pub records_count: i64,
+    pub transfers_count: i64,
+    pub transfer_net_fixed: f64,
+    pub transfer_net_current: f64,
     pub balance_label: String,
     pub active_tag: String,
 }
@@ -546,6 +549,33 @@ pub struct ReportOperationRowDto {
     pub amount_base: f64,
     pub amount_current: f64,
     pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportTransferRowDto {
+    pub transfer_id: i64,
+    pub date: String,
+    pub from_wallet_id: i64,
+    pub from_wallet_name: String,
+    pub to_wallet_id: i64,
+    pub to_wallet_name: String,
+    pub source_amount: f64,
+    pub source_currency: String,
+    pub target_amount: f64,
+    pub target_currency: String,
+    pub historical_rate: String,
+    pub source_amount_base: f64,
+    pub target_amount_base: f64,
+    pub source_amount_current: f64,
+    pub target_amount_current: f64,
+    pub commission_amount: f64,
+    pub commission_currency: String,
+    pub commission_amount_base: f64,
+    pub commission_amount_current: f64,
+    pub tags_text: String,
+    pub description: String,
+    pub integrity_status: String,
+    pub integrity_message: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -593,6 +623,7 @@ pub struct ReportResultDto {
     pub filters: ReportFiltersDto,
     pub summary: ReportSummaryDto,
     pub operations: Vec<ReportOperationRowDto>,
+    pub transfers: Vec<ReportTransferRowDto>,
     pub monthly: Vec<ReportMonthlyRowDto>,
     pub categories: Vec<ReportCategoryRowDto>,
     pub tags: Vec<ReportTagRowDto>,
@@ -2671,6 +2702,9 @@ fn report_to_dto(result: ReportResult) -> ReportResultDto {
             final_balance_current: result.summary.final_balance_current,
             fx_difference: result.summary.fx_difference,
             records_count: result.summary.records_count,
+            transfers_count: result.summary.transfers_count,
+            transfer_net_fixed: result.summary.transfer_net_fixed,
+            transfer_net_current: result.summary.transfer_net_current,
             balance_label: result.summary.balance_label,
             active_tag: result.summary.active_tag,
         },
@@ -2678,6 +2712,11 @@ fn report_to_dto(result: ReportResult) -> ReportResultDto {
             .operations
             .into_iter()
             .map(report_operation_to_dto)
+            .collect(),
+        transfers: result
+            .transfers
+            .into_iter()
+            .map(report_transfer_to_dto)
             .collect(),
         monthly: result
             .monthly
@@ -2829,6 +2868,34 @@ fn report_operation_to_dto(row: ReportOperationRow) -> ReportOperationRowDto {
         amount_base: row.amount_base,
         amount_current: row.amount_current,
         description: row.description,
+    }
+}
+
+fn report_transfer_to_dto(row: ReportTransferRow) -> ReportTransferRowDto {
+    ReportTransferRowDto {
+        transfer_id: row.transfer_id,
+        date: row.date,
+        from_wallet_id: row.from_wallet_id,
+        from_wallet_name: row.from_wallet_name,
+        to_wallet_id: row.to_wallet_id,
+        to_wallet_name: row.to_wallet_name,
+        source_amount: row.source_amount,
+        source_currency: row.source_currency,
+        target_amount: row.target_amount,
+        target_currency: row.target_currency,
+        historical_rate: row.historical_rate,
+        source_amount_base: row.source_amount_base,
+        target_amount_base: row.target_amount_base,
+        source_amount_current: row.source_amount_current,
+        target_amount_current: row.target_amount_current,
+        commission_amount: row.commission_amount,
+        commission_currency: row.commission_currency,
+        commission_amount_base: row.commission_amount_base,
+        commission_amount_current: row.commission_amount_current,
+        tags_text: row.tags_text,
+        description: row.description,
+        integrity_status: row.integrity_status,
+        integrity_message: row.integrity_message,
     }
 }
 

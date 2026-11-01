@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date as dt_date
 
 from domain.records import IncomeRecord, MandatoryExpenseRecord, Record
-from domain.reports import Report
+from domain.reports import Report, ReportTransferRow
 from utils.records.tags import format_tags_inline, normalize_tag_names
 
 
@@ -32,6 +32,9 @@ class ReportSummary:
     records_count: int
     balance_label: str
     active_tag: str = ""
+    transfers_count: int = 0
+    transfer_net_fixed: float = 0.0
+    transfer_net_current: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +76,7 @@ class ReportsResult:
     operations: list[ReportOperationRow]
     monthly: list[MonthlySummaryRow]
     categories: list[str]
+    transfers: list[ReportTransferRow] = field(default_factory=list)
 
 
 def report_record_type_label(record: Record) -> str:
@@ -111,6 +115,29 @@ def build_operations_rows(report: Report) -> list[ReportOperationRow]:
             )
         )
     return rows
+
+
+def build_transfer_rows(
+    report: Report,
+    currency_service=None,
+    *,
+    category: str = "",
+    tag: str = "",
+    tag_mode: str = "or",
+) -> list[ReportTransferRow]:
+    if category.strip() and category.strip().casefold() != "transfer":
+        return []
+    rows = report.transfer_rows(currency_service)
+    wanted = set(parse_filter_tags(tag))
+    if not wanted:
+        return rows
+    filtered: list[ReportTransferRow] = []
+    for row in rows:
+        actual = set(parse_filter_tags(row.tags_text))
+        matches = wanted.issubset(actual) if tag_mode.casefold() == "and" else bool(wanted & actual)
+        if matches:
+            filtered.append(row)
+    return filtered
 
 
 def build_category_group_rows(rows: Iterable[ReportOperationRow]) -> list[CategoryGroupRow]:

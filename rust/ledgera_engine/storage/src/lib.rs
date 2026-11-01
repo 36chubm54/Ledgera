@@ -532,8 +532,8 @@ pub use planning::{
 };
 pub use reporting::{
     ReportCategoryRow, ReportDebtRow, ReportExportResult, ReportFilters, ReportMonthlyRow,
-    ReportOperationRow, ReportResult, ReportSummary, ReportTagRow, report_export_csv,
-    report_export_pdf, report_export_xlsx, report_generate,
+    ReportOperationRow, ReportResult, ReportSummary, ReportTagRow, ReportTransferRow,
+    report_export_csv, report_export_pdf, report_export_xlsx, report_generate,
 };
 pub use timeline::{
     timeline_cumulative_income_expense, timeline_monthly_cashflow,
@@ -11805,7 +11805,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
     }
 
     #[test]
-    fn report_exports_keep_five_columns_and_sections() {
+    fn report_exports_keep_operation_and_transfer_sections() {
         let db_path = create_balance_test_db();
         let csv_path = temp_test_path("ledgera_report", "csv");
         let xlsx_path = temp_test_path("ledgera_report", "xlsx");
@@ -11819,18 +11819,24 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         report_export_csv(&db_path, &filters, csv_path.to_str().unwrap()).unwrap();
         let mut reader = ::csv::ReaderBuilder::new()
             .has_headers(false)
+            .flexible(true)
             .from_path(&csv_path)
             .unwrap();
         let rows: Vec<::csv::StringRecord> = reader.records().map(Result::unwrap).collect();
         assert!(!rows.is_empty());
-        assert!(rows.iter().all(|row| row.len() == 5));
+        let transfer_section = rows
+            .iter()
+            .position(|row| row.get(1) == Some("Transfers"))
+            .expect("CSV transfer section");
+        assert!(rows[..transfer_section].iter().all(|row| row.len() == 13));
+        assert_eq!(rows[transfer_section + 1].len(), 13);
         assert_eq!(rows[1].get(4), Some("Tags"));
 
         report_export_xlsx(&db_path, &filters, xlsx_path.to_str().unwrap()).unwrap();
         let mut workbook = open_workbook_auto(&xlsx_path).unwrap();
         assert_eq!(
             workbook.sheet_names(),
-            vec!["Report", "By Tag", "Yearly Report"]
+            vec!["Report", "Transfers", "By Tag", "Yearly Report"]
         );
         let report_range = workbook.worksheet_range("Report").unwrap();
         assert_eq!(
@@ -11858,12 +11864,20 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         .unwrap();
         let mut grouped_reader = ::csv::ReaderBuilder::new()
             .has_headers(false)
+            .flexible(true)
             .from_path(&grouped_csv_path)
             .unwrap();
         let grouped_rows: Vec<::csv::StringRecord> =
             grouped_reader.records().map(Result::unwrap).collect();
         assert!(!grouped_rows.is_empty());
-        assert!(grouped_rows.iter().all(|row| row.len() == 3));
+        let grouped_transfer_section = grouped_rows
+            .iter()
+            .position(|row| row.get(1) == Some("Transfers"))
+            .expect("grouped CSV transfer section");
+        assert!(grouped_rows[..grouped_transfer_section]
+            .iter()
+            .all(|row| row.len() == 13));
+        assert_eq!(grouped_rows[grouped_transfer_section + 1].len(), 13);
         report_export_xlsx(
             &db_path,
             &grouped_filters,
@@ -11871,7 +11885,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         )
         .unwrap();
         let grouped_workbook = open_workbook_auto(&grouped_xlsx_path).unwrap();
-        assert_eq!(grouped_workbook.sheet_names(), vec!["Report"]);
+        assert_eq!(grouped_workbook.sheet_names(), vec!["Report", "Transfers"]);
         report_export_pdf(
             &db_path,
             &grouped_filters,

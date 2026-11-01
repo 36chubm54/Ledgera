@@ -95,6 +95,7 @@ import app.ledgera.model.ReportResult
 import app.ledgera.model.ReportExportResult
 import app.ledgera.model.ReportSummary
 import app.ledgera.model.ReportTagRow
+import app.ledgera.model.ReportTransferRow
 import app.ledgera.model.AnalyticsFilters
 import app.ledgera.runtime.DesktopCredentialStore
 import app.ledgera.model.AnalyticsSnapshot
@@ -170,6 +171,9 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                         recordsCount = value.recordsCount,
                         balanceLabel = value.balanceLabel,
                         activeTag = value.activeTag,
+                        transfersCount = value.transfersCount,
+                        transferNetFixed = value.transferNetFixed,
+                        transferNetCurrent = value.transferNetCurrent,
                     )
                 },
                 operations = dto.operations.map { value -> ReportOperationRow(value.date, value.typeLabel, value.kind, value.category, value.tagsText, value.amountBase, value.amountCurrent, value.description) },
@@ -177,6 +181,33 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 categories = dto.categories.map { value -> ReportCategoryRow(value.category, value.operationsCount, value.totalBase, value.totalCurrent) },
                 tags = dto.tags.map { value -> ReportTagRow(value.tag, value.operationsCount, value.totalBase, value.totalCurrent) },
                 debts = dto.debts.map { value -> ReportDebtRow(value.contactName, value.kind, value.status, value.createdAt, value.closedAt, value.currency, value.totalAmount, value.remainingAmount, value.settledAmount, value.progressPercent) },
+                transfers = dto.transfers.map { value ->
+                    ReportTransferRow(
+                        transferId = value.transferId,
+                        date = value.date,
+                        fromWalletId = value.fromWalletId,
+                        fromWalletName = value.fromWalletName,
+                        toWalletId = value.toWalletId,
+                        toWalletName = value.toWalletName,
+                        sourceAmount = value.sourceAmount,
+                        sourceCurrency = value.sourceCurrency,
+                        targetAmount = value.targetAmount,
+                        targetCurrency = value.targetCurrency,
+                        historicalRate = value.historicalRate,
+                        sourceAmountBase = value.sourceAmountBase,
+                        targetAmountBase = value.targetAmountBase,
+                        sourceAmountCurrent = value.sourceAmountCurrent,
+                        targetAmountCurrent = value.targetAmountCurrent,
+                        commissionAmount = value.commissionAmount,
+                        commissionCurrency = value.commissionCurrency,
+                        commissionAmountBase = value.commissionAmountBase,
+                        commissionAmountCurrent = value.commissionAmountCurrent,
+                        tagsText = value.tagsText,
+                        description = value.description,
+                        integrityStatus = value.integrityStatus,
+                        integrityMessage = value.integrityMessage,
+                    )
+                },
             )
         }
     }

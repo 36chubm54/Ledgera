@@ -9,6 +9,7 @@ from services.analytics.report import (
     ReportSummary,
     build_monthly_rows,
     build_operations_rows,
+    build_transfer_rows,
     extract_categories,
     parse_filter_tags,
 )
@@ -29,6 +30,13 @@ class ReportsController:
         report = self._apply_filters(report, filters)
 
         operations = build_operations_rows(report)
+        transfers = build_transfer_rows(
+            report,
+            self._currency,
+            category=filters.category,
+            tag=filters.tag,
+            tag_mode=filters.tag_mode,
+        )
         categories = extract_categories(operations)
 
         monthly = build_monthly_rows(report)
@@ -40,17 +48,31 @@ class ReportsController:
             net_worth_fixed = float(report.total_fixed())
             net_worth_current = float(report.total_current(self._currency))
 
+        transfer_net_fixed = sum(
+            (-row.source_amount_base if filters.wallet_id == row.from_wallet_id else row.target_amount_base)
+            for row in transfers
+            if row.integrity_status == "ok" and filters.wallet_id is not None
+        )
+        transfer_net_current = sum(
+            (-row.source_amount_current if filters.wallet_id == row.from_wallet_id else row.target_amount_current)
+            for row in transfers
+            if row.integrity_status == "ok" and filters.wallet_id is not None
+        )
+        operations_fixed = sum(record.signed_amount_base() for record in report.display_records())
         summary = ReportSummary(
             net_worth_fixed=net_worth_fixed,
             net_worth_current=net_worth_current,
             initial_balance=float(report.initial_balance),
-            records_total_fixed=float(report.net_profit_fixed()),
+            records_total_fixed=float(operations_fixed),
             final_balance_fixed=float(report.total_fixed()),
             final_balance_current=float(report.total_current(self._currency)),
             fx_difference=float(report.fx_difference(self._currency)),
             records_count=len(report.display_records()),
             balance_label=str(report.balance_label),
             active_tag=", ".join(parse_filter_tags(filters.tag)) if filters.tag else "",
+            transfers_count=len(transfers),
+            transfer_net_fixed=float(transfer_net_fixed),
+            transfer_net_current=float(transfer_net_current),
         )
 
         return ReportsResult(
@@ -60,6 +82,7 @@ class ReportsController:
             operations=operations,
             monthly=monthly,
             categories=categories,
+            transfers=transfers,
         )
 
     @staticmethod

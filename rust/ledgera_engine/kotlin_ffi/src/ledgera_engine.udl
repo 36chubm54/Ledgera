@@ -631,6 +631,9 @@ dictionary ReportSummaryDto {
     double final_balance_current;
     double fx_difference;
     i64 records_count;
+    i64 transfers_count;
+    double transfer_net_fixed;
+    double transfer_net_current;
     string balance_label;
     string active_tag;
 };
@@ -644,6 +647,32 @@ dictionary ReportOperationRowDto {
     double amount_base;
     double amount_current;
     string description;
+};
+
+dictionary ReportTransferRowDto {
+    i64 transfer_id;
+    string date;
+    i64 from_wallet_id;
+    string from_wallet_name;
+    i64 to_wallet_id;
+    string to_wallet_name;
+    double source_amount;
+    string source_currency;
+    double target_amount;
+    string target_currency;
+    string historical_rate;
+    double source_amount_base;
+    double target_amount_base;
+    double source_amount_current;
+    double target_amount_current;
+    double commission_amount;
+    string commission_currency;
+    double commission_amount_base;
+    double commission_amount_current;
+    string tags_text;
+    string description;
+    string integrity_status;
+    string integrity_message;
 };
 
 dictionary ReportMonthlyRowDto {
@@ -688,6 +717,7 @@ dictionary ReportResultDto {
     ReportFiltersDto filters;
     ReportSummaryDto summary;
     sequence<ReportOperationRowDto> operations;
+    sequence<ReportTransferRowDto> transfers;
     sequence<ReportMonthlyRowDto> monthly;
     sequence<ReportCategoryRowDto> categories;
     sequence<ReportTagRowDto> tags;

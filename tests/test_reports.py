@@ -5,6 +5,7 @@ import pytest
 import domain.reports as reports_module
 from domain.records import ExpenseRecord, IncomeRecord, MandatoryExpenseRecord
 from domain.reports import Report
+from domain.transfers import Transfer
 
 
 class TestReport:
@@ -137,6 +138,53 @@ class TestReport:
         assert len(rows) == 2
         assert rows[0][0] == "2025-01"
         assert rows[1][0] == "2025-02"
+
+    def test_transfer_rows_are_logical_and_wallet_specific_balance_keeps_transfer_net(self):
+        records = [
+            ExpenseRecord(
+                id=10,
+                date="2025-01-02",
+                wallet_id=1,
+                transfer_id=7,
+                _amount_init=25.0,
+                category="Transfer",
+            ),
+            IncomeRecord(
+                id=11,
+                date="2025-01-02",
+                wallet_id=2,
+                transfer_id=7,
+                _amount_init=25.0,
+                category="Transfer",
+            ),
+        ]
+        transfer = Transfer(
+            id=7,
+            from_wallet_id=1,
+            to_wallet_id=2,
+            date="2025-01-02",
+            amount_original=25.0,
+            currency="KZT",
+            rate_at_operation=1.0,
+            amount_base=25.0,
+        )
+
+        all_wallets = Report(records, wallet_id=None, transfers=[transfer])
+        rows = all_wallets.transfer_rows()
+        assert len(rows) == 1
+        assert rows[0].source_amount == 25.0
+        assert rows[0].target_amount == 25.0
+        assert rows[0].integrity_status == "ok"
+        assert all_wallets.display_records() == []
+
+        source_wallet = Report(
+            records,
+            initial_balance=100.0,
+            wallet_id=1,
+            transfers=[transfer],
+        )
+        assert source_wallet.total_fixed() == 75.0
+        assert source_wallet.transfer_rows()[0].source_amount_base == 25.0
 
 
 def _build_opening_balance_test_report() -> Report:

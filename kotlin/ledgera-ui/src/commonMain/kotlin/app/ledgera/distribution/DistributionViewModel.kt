@@ -50,6 +50,10 @@ class DistributionViewModel(
 
     fun updateStartMonth(value: String) = mutableState.update { it.copy(startMonth = value, error = null) }
     fun updateEndMonth(value: String) = mutableState.update { it.copy(endMonth = value, error = null) }
+    fun close() {
+        refreshJob?.cancel()
+        refreshJob = null
+    }
     fun selectMonth(month: String) = mutableState.update { it.copy(selectedMonth = month) }
     fun selectItem(itemId: Long) = mutableState.update { it.copy(selectedItemId = itemId, selectedSubitemId = null) }
     fun selectSubitem(itemId: Long, subitemId: Long) = mutableState.update { it.copy(selectedItemId = itemId, selectedSubitemId = subitemId) }

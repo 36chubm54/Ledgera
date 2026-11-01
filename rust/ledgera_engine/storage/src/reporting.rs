@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 
@@ -11,8 +11,8 @@ use rusqlite::Connection;
 use rust_xlsxwriter::{Format, FormatAlign, FormatBorder, FormatPattern, Workbook, Worksheet};
 
 use crate::{
-    RecordRow, StorageResult, base_currency_code, current_local_date, record_list_rows,
-    round_money, sqlite_err, with_cached_read_connection,
+    RecordRow, StorageResult, base_currency_code, current_local_date, record_list_rows, round_money,
+    sqlite_err, table_columns_for_connection, with_cached_read_connection,
 };
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -38,6 +38,9 @@ pub struct ReportSummary {
     pub final_balance_current: f64,
     pub fx_difference: f64,
     pub records_count: i64,
+    pub transfers_count: i64,
+    pub transfer_net_fixed: f64,
+    pub transfer_net_current: f64,
     pub balance_label: String,
     pub active_tag: String,
 }
@@ -101,6 +104,7 @@ pub struct ReportResult {
     pub filters: ReportFilters,
     pub summary: ReportSummary,
     pub operations: Vec<ReportOperationRow>,
+    pub transfers: Vec<ReportTransferRow>,
     pub monthly: Vec<ReportMonthlyRow>,
     pub categories: Vec<ReportCategoryRow>,
     pub tags: Vec<ReportTagRow>,
@@ -153,6 +157,347 @@ fn current_amount(
 
 fn load_cached_rates(db_path: &str) -> StorageResult<std::collections::HashMap<String, f64>> {
     crate::current_currency_rates(db_path)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReportTransferRow {
+    pub transfer_id: i64,
+    pub date: String,
+    pub from_wallet_id: i64,
+    pub from_wallet_name: String,
+    pub to_wallet_id: i64,
+    pub to_wallet_name: String,
+    pub source_amount: f64,
+    pub source_currency: String,
+    pub target_amount: f64,
+    pub target_currency: String,
+    pub historical_rate: String,
+    pub source_amount_base: f64,
+    pub target_amount_base: f64,
+    pub source_amount_current: f64,
+    pub target_amount_current: f64,
+    pub commission_amount: f64,
+    pub commission_currency: String,
+    pub commission_amount_base: f64,
+    pub commission_amount_current: f64,
+    pub tags_text: String,
+    pub description: String,
+    pub integrity_status: String,
+    pub integrity_message: String,
+}
+
+#[derive(Debug, Clone)]
+struct TransferReportSource {
+    id: i64,
+    from_wallet_id: i64,
+    to_wallet_id: i64,
+    date: String,
+    amount_original: f64,
+    currency: String,
+    amount_base: f64,
+    source_amount: Option<f64>,
+    source_currency: Option<String>,
+    target_amount: Option<f64>,
+    target_currency: Option<String>,
+    conversion_rate: Option<String>,
+    description: String,
+}
+
+fn transfer_report_sources(db_path: &str) -> StorageResult<Vec<TransferReportSource>> {
+    with_cached_read_connection(db_path, |conn| {
+        let columns = table_columns_for_connection(conn, "transfers")?;
+        let optional_column = |name: &str| {
+            if columns.iter().any(|column| column == name) {
+                name.to_owned()
+            } else {
+                "NULL".to_owned()
+            }
+        };
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT id, from_wallet_id, to_wallet_id, date,
+                        amount_original, currency, amount_base,
+                        {source_amount} AS source_amount_original,
+                        {source_currency} AS source_currency,
+                        {target_amount} AS target_amount_original,
+                        {target_currency} AS target_currency,
+                        {conversion_rate} AS conversion_rate_text,
+                        description
+                 FROM transfers ORDER BY id",
+                source_amount = optional_column("source_amount_original"),
+                source_currency = optional_column("source_currency"),
+                target_amount = optional_column("target_amount_original"),
+                target_currency = optional_column("target_currency"),
+                conversion_rate = optional_column("conversion_rate_text"),
+            ))
+            .map_err(sqlite_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(TransferReportSource {
+                    id: row.get(0)?,
+                    from_wallet_id: row.get(1)?,
+                    to_wallet_id: row.get(2)?,
+                    date: row.get(3)?,
+                    amount_original: row.get(4)?,
+                    currency: row.get(5)?,
+                    amount_base: row.get(6)?,
+                    source_amount: row.get(7)?,
+                    source_currency: row.get(8)?,
+                    target_amount: row.get(9)?,
+                    target_currency: row.get(10)?,
+                    conversion_rate: row.get(11)?,
+                    description: row.get(12)?,
+                })
+            })
+            .map_err(sqlite_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
+    })
+}
+
+fn report_transfer_tags(records: &[&RecordRow]) -> Vec<String> {
+    let mut tags = BTreeMap::<String, String>::new();
+    for record in records {
+        for tag in &record.tags {
+            let normalized = tag.trim().to_lowercase();
+            if !normalized.is_empty() {
+                tags.entry(normalized).or_insert_with(|| tag.trim().to_owned());
+            }
+        }
+    }
+    tags.into_values().collect()
+}
+
+fn report_transfer_current_amount(
+    amount: f64,
+    currency: &str,
+    rates: &HashMap<String, f64>,
+    base: &str,
+) -> StorageResult<f64> {
+    if currency.eq_ignore_ascii_case(base) {
+        return Ok(amount);
+    }
+    let rate = rates.get(&currency.to_uppercase()).copied().ok_or_else(|| {
+        format!(
+            "Current report rate is unavailable for currency {}",
+            currency
+        )
+    })?;
+    Ok(amount * rate)
+}
+
+fn build_report_transfers(
+    db_path: &str,
+    filters: &ReportFilters,
+    all_records: &[RecordRow],
+    rates: &HashMap<String, f64>,
+    base_currency: &str,
+) -> StorageResult<(Vec<ReportTransferRow>, f64, f64, f64)> {
+    let wallets = crate::wallet_list_rows(db_path)?
+        .into_iter()
+        .map(|wallet| (wallet.id, wallet.name))
+        .collect::<HashMap<_, _>>();
+    let mut linked_by_transfer: HashMap<i64, Vec<&RecordRow>> = HashMap::new();
+    let mut commissions_by_transfer: HashMap<i64, Vec<&RecordRow>> = HashMap::new();
+    for record in all_records {
+        if let Some(transfer_id) = record.transfer_id {
+            linked_by_transfer.entry(transfer_id).or_default().push(record);
+        } else if record.category.eq_ignore_ascii_case("commission") {
+            if let Some(id) = record
+                .description
+                .strip_prefix("[transfer:")
+                .and_then(|value| value.strip_suffix(']'))
+                .and_then(|value| value.parse::<i64>().ok())
+            {
+                commissions_by_transfer.entry(id).or_default().push(record);
+            }
+        }
+    }
+
+    let start = filters.period_start.as_deref();
+    let end = filters.period_end.as_deref();
+    let use_current = filters.totals_mode.eq_ignore_ascii_case("current");
+    let mut rows = Vec::new();
+    let mut period_net_fixed = 0.0;
+    let mut period_net_current = 0.0;
+    let mut opening_net_fixed = 0.0;
+
+    for transfer in transfer_report_sources(db_path)? {
+        let linked = linked_by_transfer.get(&transfer.id).cloned().unwrap_or_default();
+        let tags = report_transfer_tags(&linked);
+        if !filters.category.trim().is_empty()
+            && !"Transfer".eq_ignore_ascii_case(filters.category.trim())
+        {
+            continue;
+        }
+        if !tag_matches(&tags, &filters.tag, &filters.tag_mode) {
+            continue;
+        }
+        if start.is_some_and(|value| transfer.date.as_str() < value)
+            || end.is_some_and(|value| transfer.date.as_str() > value)
+        {
+            if start.is_some_and(|value| transfer.date.as_str() < value) {
+                if filters.wallet_id.is_none() {
+                    continue;
+                }
+                let has_wallet = linked.iter().any(|record| {
+                    Some(record.wallet_id) == filters.wallet_id
+                }) || transfer.from_wallet_id == filters.wallet_id.unwrap_or_default()
+                    || transfer.to_wallet_id == filters.wallet_id.unwrap_or_default();
+                if !has_wallet {
+                    continue;
+                }
+                let source = linked.iter().find(|record| {
+                    record.wallet_id == transfer.from_wallet_id && record.record_type == "expense"
+                });
+                let target = linked.iter().find(|record| {
+                    record.wallet_id == transfer.to_wallet_id && record.record_type == "income"
+                });
+                if let (Some(source), Some(target)) = (source, target) {
+                    opening_net_fixed += if filters.wallet_id == Some(transfer.from_wallet_id) {
+                        -source.amount_base
+                    } else if filters.wallet_id == Some(transfer.to_wallet_id) {
+                        target.amount_base
+                    } else {
+                        0.0
+                    };
+                }
+            }
+            continue;
+        }
+        if filters
+            .wallet_id
+            .is_some_and(|wallet_id| wallet_id != transfer.from_wallet_id && wallet_id != transfer.to_wallet_id)
+        {
+            continue;
+        }
+
+        let source = linked.iter().find(|record| {
+            record.wallet_id == transfer.from_wallet_id && record.record_type == "expense"
+        });
+        let target = linked.iter().find(|record| {
+            record.wallet_id == transfer.to_wallet_id && record.record_type == "income"
+        });
+        let commissions = commissions_by_transfer.get(&transfer.id).cloned().unwrap_or_default();
+        let commission = commissions.first().copied();
+        let mut errors = Vec::new();
+        if source.is_none() {
+            errors.push("source leg is missing".to_owned());
+        }
+        if target.is_none() {
+            errors.push("target leg is missing".to_owned());
+        }
+        if linked.iter().filter(|record| record.record_type == "expense").count() != 1 {
+            errors.push("expected exactly one source leg".to_owned());
+        }
+        if linked.iter().filter(|record| record.record_type == "income").count() != 1 {
+            errors.push("expected exactly one target leg".to_owned());
+        }
+        if commissions.len() > 1 {
+            errors.push("multiple commission records found".to_owned());
+        }
+
+        let source_amount = source
+            .map(|record| record.amount_original)
+            .or(transfer.source_amount)
+            .unwrap_or(transfer.amount_original);
+        let target_amount = target
+            .map(|record| record.amount_original)
+            .or(transfer.target_amount)
+            .unwrap_or(transfer.amount_original);
+        let source_currency = source
+            .map(|record| record.currency.clone())
+            .or(transfer.source_currency.clone())
+            .unwrap_or_else(|| transfer.currency.clone());
+        let target_currency = target
+            .map(|record| record.currency.clone())
+            .or(transfer.target_currency.clone())
+            .unwrap_or_else(|| source_currency.clone());
+        let source_base = source
+            .map(|record| record.amount_base)
+            .unwrap_or(transfer.amount_base);
+        let target_base = target
+            .map(|record| record.amount_base)
+            .unwrap_or(transfer.amount_base);
+        if source.is_none() && transfer.source_amount.is_none() {
+            errors.push("source amount is unavailable".to_owned());
+        }
+        if target.is_none() && transfer.target_amount.is_none() {
+            errors.push("target amount is unavailable".to_owned());
+        }
+        let source_current = if use_current {
+            report_transfer_current_amount(source_amount, &source_currency, rates, base_currency)?
+        } else {
+            source_base
+        };
+        let target_current = if use_current {
+            report_transfer_current_amount(target_amount, &target_currency, rates, base_currency)?
+        } else {
+            target_base
+        };
+        let commission_amount = commission.map(|record| record.amount_original).unwrap_or(0.0);
+        let commission_currency = commission
+            .map(|record| record.currency.clone())
+            .unwrap_or_default();
+        let commission_base = commission.map(|record| record.amount_base).unwrap_or(0.0);
+        let commission_current = if use_current && commission.is_some() {
+            report_transfer_current_amount(
+                commission_amount,
+                &commission_currency,
+                rates,
+                base_currency,
+            )?
+        } else {
+            commission_base
+        };
+        let valid = errors.is_empty();
+        let wallet_net_fixed = if valid {
+            match filters.wallet_id {
+                Some(wallet_id) if wallet_id == transfer.from_wallet_id => -source_base,
+                Some(wallet_id) if wallet_id == transfer.to_wallet_id => target_base,
+                _ => 0.0,
+            }
+        } else {
+            0.0
+        };
+        let wallet_net_current = if valid {
+            match filters.wallet_id {
+                Some(wallet_id) if wallet_id == transfer.from_wallet_id => -source_current,
+                Some(wallet_id) if wallet_id == transfer.to_wallet_id => target_current,
+                _ => 0.0,
+            }
+        } else {
+            0.0
+        };
+        period_net_fixed += wallet_net_fixed;
+        period_net_current += wallet_net_current;
+        rows.push(ReportTransferRow {
+            transfer_id: transfer.id,
+            date: transfer.date,
+            from_wallet_id: transfer.from_wallet_id,
+            from_wallet_name: wallets.get(&transfer.from_wallet_id).cloned().unwrap_or_else(|| format!("Wallet #{}", transfer.from_wallet_id)),
+            to_wallet_id: transfer.to_wallet_id,
+            to_wallet_name: wallets.get(&transfer.to_wallet_id).cloned().unwrap_or_else(|| format!("Wallet #{}", transfer.to_wallet_id)),
+            source_amount,
+            source_currency,
+            target_amount,
+            target_currency,
+            historical_rate: transfer.conversion_rate.unwrap_or_else(|| "1".to_owned()),
+            source_amount_base: source_base,
+            target_amount_base: target_base,
+            source_amount_current: source_current,
+            target_amount_current: target_current,
+            commission_amount,
+            commission_currency,
+            commission_amount_base: commission_base,
+            commission_amount_current: commission_current,
+            tags_text: tags.join(" "),
+            description: transfer.description,
+            integrity_status: if valid { "ok".to_owned() } else { "error".to_owned() },
+            integrity_message: errors.join("; "),
+        });
+    }
+    rows.sort_by(|left, right| right.date.cmp(&left.date).then_with(|| right.transfer_id.cmp(&left.transfer_id)));
+    Ok((rows, period_net_fixed, period_net_current, opening_net_fixed))
 }
 
 fn tags_for_records(
@@ -397,9 +742,11 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
             }
         }
     }
-    let initial = wallet_initial + opening_balance;
-    let final_fixed = initial + fixed_total;
-    let final_current = initial + current_total;
+    let (transfers, transfer_net_fixed, transfer_net_current, transfer_opening_fixed) =
+        build_report_transfers(db_path, &normalized, &all_records, &rates, &base_currency)?;
+    let initial = wallet_initial + opening_balance + transfer_opening_fixed;
+    let final_fixed = initial + fixed_total + transfer_net_fixed;
+    let final_current = initial + current_total + transfer_net_current;
     let summary = ReportSummary {
         net_worth_fixed: final_fixed,
         net_worth_current: final_current,
@@ -408,8 +755,12 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
         records_total_current: current_total,
         final_balance_fixed: final_fixed,
         final_balance_current: final_current,
-        fx_difference: current_total - fixed_total,
+        fx_difference: (current_total - fixed_total)
+            + (transfer_net_current - transfer_net_fixed),
         records_count: operations.len() as i64,
+        transfers_count: transfers.len() as i64,
+        transfer_net_fixed,
+        transfer_net_current,
         balance_label: if start.is_some() {
             "Opening balance".to_owned()
         } else {
@@ -469,6 +820,7 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
         filters: normalized,
         summary,
         operations,
+        transfers,
         monthly,
         categories: if include_categories {
             categories
@@ -502,6 +854,83 @@ fn atomic_replace(path: &Path, bytes: &[u8]) -> StorageResult<()> {
     Ok(())
 }
 
+fn csv_transfer_section(
+    writer: &mut csv::Writer<Vec<u8>>,
+    report: &ReportResult,
+    use_current: bool,
+) -> StorageResult<()> {
+    if report.transfers.is_empty() {
+        return Ok(());
+    }
+    write_report_csv_row(writer, &["", "Transfers"], 13)?;
+    writer
+        .write_record([
+            "Date",
+            "Transfer ID",
+            "From wallet",
+            "Source amount",
+            "To wallet",
+            "Target amount",
+            "Historical rate",
+            "Commission",
+            "Base source",
+            "Base target",
+            "Status",
+            "Description",
+            "Tags",
+        ])
+        .map_err(|err| err.to_string())?;
+    for row in &report.transfers {
+        let source_base = if use_current {
+            row.source_amount_current
+        } else {
+            row.source_amount_base
+        };
+        let target_base = if use_current {
+            row.target_amount_current
+        } else {
+            row.target_amount_base
+        };
+        let commission = if row.commission_amount > 0.0 {
+            format!("{:.2} {}", row.commission_amount, row.commission_currency)
+        } else {
+            "-".to_owned()
+        };
+        writer
+            .write_record([
+                row.date.as_str(),
+                &row.transfer_id.to_string(),
+                &format!("{} (#{})", row.from_wallet_name, row.from_wallet_id),
+                &format!("{:.2} {}", row.source_amount, row.source_currency),
+                &format!("{} (#{})", row.to_wallet_name, row.to_wallet_id),
+                &format!("{:.2} {}", row.target_amount, row.target_currency),
+                row.historical_rate.as_str(),
+                commission.as_str(),
+                &format!("{source_base:.2}"),
+                &format!("{target_base:.2}"),
+                if row.integrity_status == "ok" {
+                    "OK"
+                } else {
+                    row.integrity_status.as_str()
+                },
+                row.description.as_str(),
+                row.tags_text.as_str(),
+            ])
+            .map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
+fn write_report_csv_row(
+    writer: &mut csv::Writer<Vec<u8>>,
+    values: &[&str],
+    width: usize,
+) -> StorageResult<()> {
+    let mut row = values.to_vec();
+    row.resize(width, "");
+    writer.write_record(row).map_err(|err| err.to_string())
+}
+
 pub fn report_export_csv(
     db_path: &str,
     filters: &ReportFilters,
@@ -511,19 +940,22 @@ pub fn report_export_csv(
     let use_current = report.filters.totals_mode.eq_ignore_ascii_case("current");
     if report.filters.group_by_category {
         let mut writer = csv::Writer::from_writer(Vec::new());
-        writer
-            .write_record([report.title.as_str(), "", ""])
-            .map_err(|err| err.to_string())?;
-        writer
-            .write_record([
+        let csv_width = if report.transfers.is_empty() { 3 } else { 13 };
+        write_report_csv_row(&mut writer, &[report.title.as_str(), "", ""], csv_width)?;
+        write_report_csv_row(
+            &mut writer,
+            &[
                 "Category",
                 "Operations",
                 &format!("Amount ({})", report.base_currency),
-            ])
-            .map_err(|err| err.to_string())?;
-        writer
-            .write_record(["", "", &report_amounts_note(&report.filters.totals_mode)])
-            .map_err(|err| err.to_string())?;
+            ],
+            csv_width,
+        )?;
+        write_report_csv_row(
+            &mut writer,
+            &["", "", &report_amounts_note(&report.filters.totals_mode)],
+            csv_width,
+        )?;
         let mut total = 0.0;
         for row in &report.categories {
             let amount = if use_current {
@@ -532,58 +964,73 @@ pub fn report_export_csv(
                 row.total_base
             };
             total += amount;
-            writer
-                .write_record([
+            write_report_csv_row(
+                &mut writer,
+                &[
                     row.category.as_str(),
                     &row.operations_count.to_string(),
                     &format!("{amount:.2}"),
-                ])
-                .map_err(|err| err.to_string())?;
+                ],
+                csv_width,
+            )?;
         }
-        writer
-            .write_record(["Total", "", &format!("{total:.2}")])
-            .map_err(|err| err.to_string())?;
+        write_report_csv_row(
+            &mut writer,
+            &["Total", "", &format!("{total:.2}")],
+            csv_width,
+        )?;
+        csv_transfer_section(&mut writer, &report, use_current)?;
         let bytes = writer.into_inner().map_err(|err| err.to_string())?;
         atomic_replace(Path::new(path), &bytes)?;
         return Ok(ReportExportResult {
-            exported_rows: report.categories.len() as i64,
+            exported_rows: (report.categories.len() + report.transfers.len()) as i64,
             path: path.to_owned(),
         });
     }
     let mut writer = csv::Writer::from_writer(Vec::new());
-    writer
-        .write_record([report.title.as_str(), "", "", "", ""])
-        .map_err(|err| err.to_string())?;
-    writer
-        .write_record([
+    let csv_width = if report.transfers.is_empty() { 5 } else { 13 };
+    write_report_csv_row(
+        &mut writer,
+        &[report.title.as_str(), "", "", "", ""],
+        csv_width,
+    )?;
+    write_report_csv_row(
+        &mut writer,
+        &[
             "Date",
             "Type",
             "Category",
             &format!("Amount ({})", report.base_currency),
             "Tags",
-        ])
-        .map_err(|err| err.to_string())?;
-    writer
-        .write_record([
+        ],
+        csv_width,
+    )?;
+    write_report_csv_row(
+        &mut writer,
+        &[
             "",
             "",
             "",
             &report_amounts_note(&report.filters.totals_mode),
             "",
-        ])
-        .map_err(|err| err.to_string())?;
-    writer
-        .write_record([
+        ],
+        csv_width,
+    )?;
+    write_report_csv_row(
+        &mut writer,
+        &[
             "",
             report.summary.balance_label.as_str(),
             "",
             &format!("{:.2}", report.summary.initial_balance),
             "",
-        ])
-        .map_err(|err| err.to_string())?;
+        ],
+        csv_width,
+    )?;
     for row in &report.operations {
-        writer
-            .write_record([
+        write_report_csv_row(
+            &mut writer,
+            &[
                 row.date.as_str(),
                 row.type_label.as_str(),
                 row.category.as_str(),
@@ -596,11 +1043,13 @@ pub fn report_export_csv(
                     }
                 ),
                 row.tags_text.as_str(),
-            ])
-            .map_err(|err| err.to_string())?;
+            ],
+            csv_width,
+        )?;
     }
-    writer
-        .write_record([
+    write_report_csv_row(
+        &mut writer,
+        &[
             "",
             "Subtotal",
             "",
@@ -613,10 +1062,12 @@ pub fn report_export_csv(
                 }
             ),
             "",
-        ])
-        .map_err(|err| err.to_string())?;
-    writer
-        .write_record([
+        ],
+        csv_width,
+    )?;
+    write_report_csv_row(
+        &mut writer,
+        &[
             "",
             "Final balance",
             "",
@@ -629,12 +1080,14 @@ pub fn report_export_csv(
                 }
             ),
             "",
-        ])
-        .map_err(|err| err.to_string())?;
+        ],
+        csv_width,
+    )?;
+    csv_transfer_section(&mut writer, &report, use_current)?;
     let bytes = writer.into_inner().map_err(|err| err.to_string())?;
     atomic_replace(Path::new(path), &bytes)?;
     Ok(ReportExportResult {
-        exported_rows: report.operations.len() as i64,
+        exported_rows: (report.operations.len() + report.transfers.len()) as i64,
         path: path.to_owned(),
     })
 }
@@ -774,6 +1227,7 @@ pub fn report_export_xlsx(
         .autofilter(1, 0, final_row, 4)
         .map_err(|err| err.to_string())?;
     set_report_column_widths(worksheet)?;
+    write_report_transfer_sheet(&mut workbook, &report, &header, &data, use_current)?;
 
     if !report.categories.is_empty() {
         write_report_category_sheet(&mut workbook, &report, &header, &data, &amount)?;
@@ -788,7 +1242,7 @@ pub fn report_export_xlsx(
     let bytes = workbook.save_to_buffer().map_err(|err| err.to_string())?;
     atomic_replace(Path::new(path), &bytes)?;
     Ok(ReportExportResult {
-        exported_rows: report.operations.len() as i64,
+        exported_rows: (report.operations.len() + report.transfers.len()) as i64,
         path: path.to_owned(),
     })
 }
@@ -877,6 +1331,80 @@ fn set_report_column_widths(worksheet: &mut Worksheet) -> StorageResult<()> {
     Ok(())
 }
 
+fn write_report_transfer_sheet(
+    workbook: &mut Workbook,
+    report: &ReportResult,
+    header: &Format,
+    data: &Format,
+    use_current: bool,
+) -> StorageResult<()> {
+    if report.transfers.is_empty() {
+        return Ok(());
+    }
+    let worksheet = workbook
+        .add_worksheet()
+        .set_name("Transfers")
+        .map_err(|err| err.to_string())?;
+    let columns = [
+        "Date", "Transfer ID", "From wallet", "Source amount", "To wallet",
+        "Target amount", "Historical rate", "Commission", "Base source",
+        "Base target", "Status", "Description", "Tags",
+    ];
+    for (column, title) in columns.into_iter().enumerate() {
+        worksheet
+            .write_string_with_format(0, column as u16, title, header)
+            .map_err(|err| err.to_string())?;
+    }
+    for (index, row) in report.transfers.iter().enumerate() {
+        let line = (index + 1) as u32;
+        let source_base = if use_current { row.source_amount_current } else { row.source_amount_base };
+        let target_base = if use_current { row.target_amount_current } else { row.target_amount_base };
+        let commission = if row.commission_amount > 0.0 {
+            format!("{:.2} {}", row.commission_amount, row.commission_currency)
+        } else {
+            "-".to_owned()
+        };
+        let values = [
+            row.date.clone(),
+            row.transfer_id.to_string(),
+            format!("{} (#{})", row.from_wallet_name, row.from_wallet_id),
+            format!("{:.2} {}", row.source_amount, row.source_currency),
+            format!("{} (#{})", row.to_wallet_name, row.to_wallet_id),
+            format!("{:.2} {}", row.target_amount, row.target_currency),
+            row.historical_rate.clone(),
+            commission,
+            format!("{source_base:.2}"),
+            format!("{target_base:.2}"),
+            if row.integrity_status == "ok" { "OK".to_owned() } else { format!("{}: {}", row.integrity_status, row.integrity_message) },
+            row.description.clone(),
+            row.tags_text.clone(),
+        ];
+        for (column, value) in values.into_iter().enumerate() {
+            worksheet
+                .write_string_with_format(line, column as u16, &value, data)
+                .map_err(|err| err.to_string())?;
+        }
+    }
+    worksheet
+        .set_freeze_panes(1, 0)
+        .map_err(|err| err.to_string())?;
+    worksheet
+        .autofilter(0, 0, report.transfers.len() as u32, (columns.len() - 1) as u16)
+        .map_err(|err| err.to_string())?;
+    for (column, width) in [
+        14.0, 12.0, 28.0, 20.0, 28.0, 20.0, 18.0, 18.0, 16.0, 16.0,
+        28.0, 36.0, 28.0,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        worksheet
+            .set_column_width(column as u16, width)
+            .map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
 fn report_export_grouped_xlsx(
     report: &ReportResult,
     path: &str,
@@ -949,10 +1477,11 @@ fn report_export_grouped_xlsx(
             .set_column_width(column as u16, width)
             .map_err(|err| err.to_string())?;
     }
+    write_report_transfer_sheet(&mut workbook, report, &header, &data, use_current)?;
     let bytes = workbook.save_to_buffer().map_err(|err| err.to_string())?;
     atomic_replace(Path::new(path), &bytes)?;
     Ok(ReportExportResult {
-        exported_rows: report.categories.len() as i64,
+        exported_rows: (report.categories.len() + report.transfers.len()) as i64,
         path: path.to_owned(),
     })
 }
@@ -1331,6 +1860,7 @@ pub fn report_export_pdf(
         ],
         PdfRowStyle::Final,
     ));
+    append_pdf_transfer_section(&mut rows, &report, use_current);
     rows.push(PdfReportRow::merged(
         "Monthly summary".to_owned(),
         PdfRowStyle::Section,
@@ -1461,9 +1991,60 @@ pub fn report_export_pdf(
         .save(&PdfSaveOptions::default(), &mut Vec::new());
     atomic_replace(Path::new(path), &pdf)?;
     Ok(ReportExportResult {
-        exported_rows: report.operations.len() as i64,
+        exported_rows: (report.operations.len() + report.transfers.len()) as i64,
         path: path.to_owned(),
     })
+}
+
+fn append_pdf_transfer_section(rows: &mut Vec<PdfReportRow>, report: &ReportResult, use_current: bool) {
+    if report.transfers.is_empty() {
+        return;
+    }
+    rows.push(PdfReportRow::merged("Transfers".to_owned(), PdfRowStyle::Section));
+    rows.push(PdfReportRow::new(
+        ["Date", "Transfer", "Source -> Target", "Rate / Commission", "Status"],
+        PdfRowStyle::Header,
+    ));
+    for row in &report.transfers {
+        let source_base = if use_current { row.source_amount_current } else { row.source_amount_base };
+        let target_base = if use_current { row.target_amount_current } else { row.target_amount_base };
+        let commission = if row.commission_amount > 0.0 {
+            format!("{:.2} {}", row.commission_amount, row.commission_currency)
+        } else {
+            "-".to_owned()
+        };
+        let status = if row.integrity_status == "ok" {
+            "OK".to_owned()
+        } else {
+            format!("{}: {}", row.integrity_status, row.integrity_message)
+        };
+        rows.push(PdfReportRow::new(
+            [
+                row.date.clone(),
+                format!("#{}", row.transfer_id),
+                format!(
+                    "{}: {:.2} {} -> {}: {:.2} {} (base {:.2} / {:.2})",
+                    row.from_wallet_name,
+                    row.source_amount,
+                    row.source_currency,
+                    row.to_wallet_name,
+                    row.target_amount,
+                    row.target_currency,
+                    source_base,
+                    target_base,
+                ),
+                format!("{} / commission {}", row.historical_rate, commission),
+                status,
+            ],
+            PdfRowStyle::Data,
+        ));
+        if !row.description.is_empty() || !row.tags_text.is_empty() {
+            rows.push(PdfReportRow::merged(
+                format!("  {} {}", row.description, row.tags_text),
+                PdfRowStyle::Note,
+            ));
+        }
+    }
 }
 
 fn report_export_grouped_pdf(
@@ -1511,6 +2092,7 @@ fn report_export_grouped_pdf(
         ],
         PdfRowStyle::Final,
     ));
+    append_pdf_transfer_section(&mut rows, report, use_current);
     let font_bytes = load_report_font()?;
     let font = ParsedFont::from_bytes(&font_bytes, 0, &mut Vec::new())
         .ok_or_else(|| "unable to parse report font".to_owned())?;
@@ -1522,7 +2104,7 @@ fn report_export_grouped_pdf(
         .save(&PdfSaveOptions::default(), &mut Vec::new());
     atomic_replace(Path::new(path), &pdf)?;
     Ok(ReportExportResult {
-        exported_rows: report.categories.len() as i64,
+        exported_rows: (report.categories.len() + report.transfers.len()) as i64,
         path: path.to_owned(),
     })
 }
@@ -1786,5 +2368,159 @@ fn wrap_pdf_line(value: &str, max_chars: usize) -> Vec<String> {
         vec![String::new()]
     } else {
         lines
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        create_currency_transfer, create_transfer, create_wallet, initialize_database,
+        upsert_currency_rate, CurrencyRatePayload, CurrencyTransferCreatePayload,
+        TransferCreatePayload, WalletCreatePayload,
+    };
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn report_exposes_one_logical_transfer_without_double_counting() {
+        let path = std::env::temp_dir().join(format!(
+            "ledgera_report_transfer_{}.db",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let db_path = path.to_string_lossy().to_string();
+        initialize_database(&db_path).expect("initialize database");
+        let source = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "Source".to_owned(),
+                currency: "KZT".to_owned(),
+                initial_balance: "100".to_owned(),
+                allow_negative: false,
+            },
+        )
+        .expect("create source");
+        let target = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "Target".to_owned(),
+                currency: "KZT".to_owned(),
+                initial_balance: "0".to_owned(),
+                allow_negative: false,
+            },
+        )
+        .expect("create target");
+        create_transfer(
+            &db_path,
+            &TransferCreatePayload {
+                from_wallet_id: source.id,
+                to_wallet_id: target.id,
+                date: "2026-01-02".to_owned(),
+                amount: "25".to_owned(),
+                currency: "KZT".to_owned(),
+                description: "Move to target".to_owned(),
+                commission_amount: "0".to_owned(),
+                commission_currency: "KZT".to_owned(),
+            },
+        )
+        .expect("create transfer");
+
+        let all_wallets = report_generate(&db_path, &ReportFilters::default()).expect("report");
+        assert_eq!(all_wallets.operations.len(), 0);
+        assert_eq!(all_wallets.transfers.len(), 1);
+        assert_eq!(all_wallets.summary.records_total_fixed, 0.0);
+        assert_eq!(all_wallets.summary.transfer_net_fixed, 0.0);
+        assert_eq!(all_wallets.summary.final_balance_fixed, 100.0);
+        assert_eq!(all_wallets.transfers[0].historical_rate, "1");
+        assert_eq!(all_wallets.transfers[0].source_amount, 25.0);
+        assert_eq!(all_wallets.transfers[0].target_amount, 25.0);
+
+        let source_report = report_generate(
+            &db_path,
+            &ReportFilters {
+                wallet_id: Some(source.id),
+                ..ReportFilters::default()
+            },
+        )
+        .expect("source report");
+        assert_eq!(source_report.summary.transfer_net_fixed, -25.0);
+        assert_eq!(source_report.summary.final_balance_fixed, 75.0);
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn report_keeps_both_sides_of_a_foreign_currency_transfer() {
+        let path = std::env::temp_dir().join(format!(
+            "ledgera_report_fx_transfer_{}.db",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let db_path = path.to_string_lossy().to_string();
+        initialize_database(&db_path).expect("initialize database");
+        let source = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "KZT source".to_owned(),
+                currency: "KZT".to_owned(),
+                initial_balance: "100000".to_owned(),
+                allow_negative: false,
+            },
+        )
+        .expect("create source");
+        let target = create_wallet(
+            &db_path,
+            &WalletCreatePayload {
+                name: "USD target".to_owned(),
+                currency: "USD".to_owned(),
+                initial_balance: "0".to_owned(),
+                allow_negative: false,
+            },
+        )
+        .expect("create target");
+        upsert_currency_rate(
+            &db_path,
+            &CurrencyRatePayload {
+                base_currency: "KZT".to_owned(),
+                currency: "USD".to_owned(),
+                rate: "500".to_owned(),
+                effective_date: "2026-01-01".to_owned(),
+                source: "manual".to_owned(),
+            },
+        )
+        .expect("save USD rate");
+        create_currency_transfer(
+            &db_path,
+            &CurrencyTransferCreatePayload {
+                from_wallet_id: source.id,
+                to_wallet_id: target.id,
+                date: "2026-01-02".to_owned(),
+                amount: "1000".to_owned(),
+                amount_currency: "KZT".to_owned(),
+                description: "Foreign transfer".to_owned(),
+                commission_amount: "0".to_owned(),
+                commission_currency: "KZT".to_owned(),
+            },
+        )
+        .expect("create foreign transfer");
+
+        let report = report_generate(&db_path, &ReportFilters::default()).expect("report");
+        let row = report.transfers.first().expect("transfer row");
+        assert_eq!(report.transfers.len(), 1);
+        assert_eq!(row.source_currency, "KZT");
+        assert_eq!(row.target_currency, "USD");
+        assert_eq!(row.source_amount, 1000.0);
+        assert_eq!(row.target_amount, 2.0);
+        assert_eq!(row.source_amount_base, 1000.0);
+        assert_eq!(row.target_amount_base, 1000.0);
+        assert_eq!(row.integrity_status, "ok");
+        assert_eq!(report.summary.records_total_fixed, 0.0);
+        assert_eq!(report.summary.transfer_net_fixed, 0.0);
+
+        std::fs::remove_file(path).ok();
     }
 }

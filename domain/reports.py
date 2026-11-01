@@ -1,10 +1,37 @@
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import date as dt_date
 
 from utils.records.tags import normalize_tag_name, normalize_tag_names
 
 from .records import IncomeRecord, Record
+from .transfers import Transfer
 from .validation import parse_report_period_end, parse_report_period_start, parse_ymd
+
+
+@dataclass(frozen=True, slots=True)
+class ReportTransferRow:
+    transfer_id: int
+    date: str
+    from_wallet_id: int
+    to_wallet_id: int
+    source_amount: float
+    source_currency: str
+    target_amount: float
+    target_currency: str
+    historical_rate: str
+    source_amount_base: float
+    target_amount_base: float
+    source_amount_current: float
+    target_amount_current: float
+    commission_amount: float
+    commission_currency: str
+    commission_amount_base: float
+    commission_amount_current: float
+    tags_text: str
+    description: str
+    integrity_status: str
+    integrity_message: str
 
 
 class Report:
@@ -45,17 +72,138 @@ class Report:
         opening_start_date: str | None = None,
         period_start_date: str | None = None,
         period_end_date: str | None = None,
+        transfers: Iterable[Transfer] | None = None,
+        all_records: Iterable[Record] | None = None,
     ):
+        visible_records = list(records)
+        source_records = visible_records if all_records is None else list(all_records)
         if wallet_id is None:
-            self._records = list(records)
+            self._records = visible_records
         else:
-            self._records = [record for record in records if record.wallet_id == wallet_id]
+            self._records = [record for record in visible_records if record.wallet_id == wallet_id]
+        self._all_records = source_records
+        self._transfers = list(transfers or ())
         self._wallet_id = wallet_id
         self._initial_balance = initial_balance
         self._balance_label = balance_label
         self._opening_start_date = opening_start_date
         self._period_start_date = period_start_date
         self._period_end_date = period_end_date
+
+    def transfer_rows(self, currency_service=None) -> list["ReportTransferRow"]:
+        """Build one reproducible row per transfer from stored linked legs."""
+        records_by_transfer: dict[int, list[Record]] = {}
+        commissions_by_transfer: dict[int, list[Record]] = {}
+        for record in self._all_records:
+            transfer_id = getattr(record, "transfer_id", None)
+            if isinstance(transfer_id, int) and transfer_id > 0:
+                records_by_transfer.setdefault(transfer_id, []).append(record)
+            elif str(getattr(record, "category", "")).strip().casefold() == "commission":
+                description = str(getattr(record, "description", "") or "")
+                if description.startswith("[transfer:") and description.endswith("]"):
+                    try:
+                        transfer_id = int(description[10:-1])
+                    except ValueError:
+                        transfer_id = 0
+                    if transfer_id > 0:
+                        commissions_by_transfer.setdefault(transfer_id, []).append(record)
+
+        rows: list[ReportTransferRow] = []
+        for transfer in self._transfers:
+            transfer_id = int(transfer.id)
+            if self._period_start_date and str(transfer.date) < self._period_start_date:
+                continue
+            if self._period_end_date and str(transfer.date) > self._period_end_date:
+                continue
+            if self._wallet_id is not None and self._wallet_id not in {
+                int(transfer.from_wallet_id),
+                int(transfer.to_wallet_id),
+            }:
+                continue
+            linked = records_by_transfer.get(transfer_id, [])
+            source = next(
+                (
+                    record
+                    for record in linked
+                    if record.wallet_id == transfer.from_wallet_id and record.type == "expense"
+                ),
+                None,
+            )
+            target = next(
+                (
+                    record
+                    for record in linked
+                    if record.wallet_id == transfer.to_wallet_id and record.type == "income"
+                ),
+                None,
+            )
+            errors: list[str] = []
+            if source is None:
+                errors.append("source leg is missing")
+            if target is None:
+                errors.append("target leg is missing")
+            if len([record for record in linked if record.type == "expense"]) != 1:
+                errors.append("expected exactly one source leg")
+            if len([record for record in linked if record.type == "income"]) != 1:
+                errors.append("expected exactly one target leg")
+            source_amount = float(source.amount_original if source else transfer.amount_original)
+            target_amount = float(target.amount_original if target else transfer.amount_original)
+            source_currency = str(source.currency if source else transfer.currency).upper()
+            target_currency = str(target.currency if target else source_currency).upper()
+            source_base = float(source.amount_base if source else transfer.amount_base)
+            target_base = float(target.amount_base if target else transfer.amount_base)
+            commission = commissions_by_transfer.get(transfer_id, [])
+            if len(commission) > 1:
+                errors.append("multiple commission records found")
+            commission_record = commission[0] if commission else None
+            current_source = source_base
+            current_target = target_base
+            commission_current = float(commission_record.amount_base) if commission_record else 0.0
+            if currency_service is not None and not errors:
+                current_source = float(currency_service.convert(source_amount, source_currency))
+                current_target = float(currency_service.convert(target_amount, target_currency))
+                if commission_record:
+                    commission_current = float(
+                        currency_service.convert(
+                            commission_record.amount_original,
+                            commission_record.currency,
+                        )
+                    )
+            tags = sorted(
+                {
+                    str(tag).strip()
+                    for record in linked
+                    for tag in tuple(getattr(record, "tags", ()) or ())
+                    if str(tag).strip()
+                },
+                key=str.casefold,
+            )
+            rows.append(
+                ReportTransferRow(
+                    transfer_id=transfer_id,
+                    date=str(transfer.date),
+                    from_wallet_id=int(transfer.from_wallet_id),
+                    to_wallet_id=int(transfer.to_wallet_id),
+                    source_amount=source_amount,
+                    source_currency=source_currency,
+                    target_amount=target_amount,
+                    target_currency=target_currency,
+                    historical_rate=str(transfer.rate_at_operation),
+                    source_amount_base=source_base,
+                    target_amount_base=target_base,
+                    source_amount_current=current_source,
+                    target_amount_current=current_target,
+                    commission_amount=float(commission_record.amount_original) if commission_record else 0.0,
+                    commission_currency=str(commission_record.currency).upper() if commission_record else "",
+                    commission_amount_base=float(commission_record.amount_base) if commission_record else 0.0,
+                    commission_amount_current=commission_current,
+                    tags_text=" ".join(tags),
+                    description=str(transfer.description or ""),
+                    integrity_status="ok" if not errors else "error",
+                    integrity_message="; ".join(errors),
+                )
+            )
+        return sorted(rows, key=lambda row: (row.date, row.transfer_id), reverse=True)
 
     def total_fixed(self) -> float:
         """Accounting total by operation-time rates."""
@@ -94,6 +242,8 @@ class Report:
             opening_start_date=start_date,
             period_start_date=start_date,
             period_end_date=end_date,
+            transfers=self._transfers,
+            all_records=self._all_records,
         )
 
     def filter_by_period_range(self, start_prefix: str, end_prefix: str | None = None) -> "Report":
@@ -119,6 +269,8 @@ class Report:
             opening_start_date=start_date,
             period_start_date=start_date,
             period_end_date=end_date,
+            transfers=self._transfers,
+            all_records=self._all_records,
         )
 
     def filter_by_category(self, category: str) -> "Report":
@@ -134,6 +286,8 @@ class Report:
             opening_start_date=None,
             period_start_date=self._period_start_date,
             period_end_date=self._period_end_date,
+            transfers=self._transfers,
+            all_records=self._all_records,
         )
 
     def filter_by_tag(self, tag: str) -> "Report":
@@ -156,6 +310,8 @@ class Report:
             opening_start_date=None,
             period_start_date=self._period_start_date,
             period_end_date=self._period_end_date,
+            transfers=self._transfers,
+            all_records=self._all_records,
         )
 
     def filter_by_any_tags(self, tags: Iterable[str]) -> "Report":
@@ -175,6 +331,8 @@ class Report:
             opening_start_date=None,
             period_start_date=self._period_start_date,
             period_end_date=self._period_end_date,
+            transfers=self._transfers,
+            all_records=self._all_records,
         )
 
     def filter_by_all_tags(self, tags: Iterable[str]) -> "Report":
@@ -194,6 +352,8 @@ class Report:
             opening_start_date=None,
             period_start_date=self._period_start_date,
             period_end_date=self._period_end_date,
+            transfers=self._transfers,
+            all_records=self._all_records,
         )
 
     def grouped_by_category(self) -> dict[str, "Report"]:
@@ -211,6 +371,8 @@ class Report:
                 opening_start_date=self._opening_start_date,
                 period_start_date=self._period_start_date,
                 period_end_date=self._period_end_date,
+                transfers=self._transfers,
+                all_records=self._all_records,
             )
             for cat, recs in groups.items()
         }
@@ -234,6 +396,8 @@ class Report:
             opening_start_date=self._opening_start_date,
             period_start_date=self._period_start_date,
             period_end_date=self._period_end_date,
+            transfers=self._transfers,
+            all_records=self._all_records,
         )
 
     def records(self) -> list[Record]:
@@ -394,4 +558,4 @@ class Report:
         return [record for record in self._records if record.transfer_id is None]
 
     def _display_records(self) -> list[Record]:
-        return self._profit_records()
+        return [record for record in self._records if record.transfer_id is None]
