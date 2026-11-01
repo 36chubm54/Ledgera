@@ -345,6 +345,7 @@ Current report/export contract:
 - localized statement exports must stay compatible with the generic import parser, not only with direct `report_from_*` helpers
 - Linux export popup helpers must treat app-level focus loss as a real close condition so custom popup surfaces do not survive after app switching
 - Kotlin beta.1 Reports exports use English presentation labels and a fixed five-column Transactions statement (`Date`, `Type`, `Category`, `Amount (BASE)`, `Tags`); Rust owns CSV width consistency, XLSX sections, and PDF rendering while Reports import remains out of scope
+- Rust PDF statement export uses an A4 landscape layout with an Overview, separate Operations and Transfers sections, repeated headers, Unicode-safe amount formatting, and metadata; it consumes the same fixed/current `ReportResult` snapshot as CSV/XLSX
 
 ### Money and transfer semantics
 

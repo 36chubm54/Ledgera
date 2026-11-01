@@ -11,8 +11,8 @@ use rusqlite::Connection;
 use rust_xlsxwriter::{Format, FormatAlign, FormatBorder, FormatPattern, Workbook, Worksheet};
 
 use crate::{
-    RecordRow, StorageResult, base_currency_code, current_local_date, record_list_rows, round_money,
-    sqlite_err, table_columns_for_connection, with_cached_read_connection,
+    base_currency_code, current_local_date, record_list_rows, round_money, sqlite_err,
+    table_columns_for_connection, with_cached_read_connection, RecordRow, StorageResult,
 };
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -260,7 +260,8 @@ fn report_transfer_tags(records: &[&RecordRow]) -> Vec<String> {
         for tag in &record.tags {
             let normalized = tag.trim().to_lowercase();
             if !normalized.is_empty() {
-                tags.entry(normalized).or_insert_with(|| tag.trim().to_owned());
+                tags.entry(normalized)
+                    .or_insert_with(|| tag.trim().to_owned());
             }
         }
     }
@@ -276,12 +277,15 @@ fn report_transfer_current_amount(
     if currency.eq_ignore_ascii_case(base) {
         return Ok(amount);
     }
-    let rate = rates.get(&currency.to_uppercase()).copied().ok_or_else(|| {
-        format!(
-            "Current report rate is unavailable for currency {}",
-            currency
-        )
-    })?;
+    let rate = rates
+        .get(&currency.to_uppercase())
+        .copied()
+        .ok_or_else(|| {
+            format!(
+                "Current report rate is unavailable for currency {}",
+                currency
+            )
+        })?;
     Ok(amount * rate)
 }
 
@@ -300,7 +304,10 @@ fn build_report_transfers(
     let mut commissions_by_transfer: HashMap<i64, Vec<&RecordRow>> = HashMap::new();
     for record in all_records {
         if let Some(transfer_id) = record.transfer_id {
-            linked_by_transfer.entry(transfer_id).or_default().push(record);
+            linked_by_transfer
+                .entry(transfer_id)
+                .or_default()
+                .push(record);
         } else if record.category.eq_ignore_ascii_case("commission") {
             if let Some(id) = record
                 .description
@@ -322,7 +329,10 @@ fn build_report_transfers(
     let mut opening_net_fixed = 0.0;
 
     for transfer in transfer_report_sources(db_path)? {
-        let linked = linked_by_transfer.get(&transfer.id).cloned().unwrap_or_default();
+        let linked = linked_by_transfer
+            .get(&transfer.id)
+            .cloned()
+            .unwrap_or_default();
         let tags = report_transfer_tags(&linked);
         if !filters.category.trim().is_empty()
             && !"Transfer".eq_ignore_ascii_case(filters.category.trim())
@@ -339,9 +349,10 @@ fn build_report_transfers(
                 if filters.wallet_id.is_none() {
                     continue;
                 }
-                let has_wallet = linked.iter().any(|record| {
-                    Some(record.wallet_id) == filters.wallet_id
-                }) || transfer.from_wallet_id == filters.wallet_id.unwrap_or_default()
+                let has_wallet = linked
+                    .iter()
+                    .any(|record| Some(record.wallet_id) == filters.wallet_id)
+                    || transfer.from_wallet_id == filters.wallet_id.unwrap_or_default()
                     || transfer.to_wallet_id == filters.wallet_id.unwrap_or_default();
                 if !has_wallet {
                     continue;
@@ -364,10 +375,9 @@ fn build_report_transfers(
             }
             continue;
         }
-        if filters
-            .wallet_id
-            .is_some_and(|wallet_id| wallet_id != transfer.from_wallet_id && wallet_id != transfer.to_wallet_id)
-        {
+        if filters.wallet_id.is_some_and(|wallet_id| {
+            wallet_id != transfer.from_wallet_id && wallet_id != transfer.to_wallet_id
+        }) {
             continue;
         }
 
@@ -377,7 +387,10 @@ fn build_report_transfers(
         let target = linked.iter().find(|record| {
             record.wallet_id == transfer.to_wallet_id && record.record_type == "income"
         });
-        let commissions = commissions_by_transfer.get(&transfer.id).cloned().unwrap_or_default();
+        let commissions = commissions_by_transfer
+            .get(&transfer.id)
+            .cloned()
+            .unwrap_or_default();
         let commission = commissions.first().copied();
         let mut errors = Vec::new();
         if source.is_none() {
@@ -386,10 +399,20 @@ fn build_report_transfers(
         if target.is_none() {
             errors.push("target leg is missing".to_owned());
         }
-        if linked.iter().filter(|record| record.record_type == "expense").count() != 1 {
+        if linked
+            .iter()
+            .filter(|record| record.record_type == "expense")
+            .count()
+            != 1
+        {
             errors.push("expected exactly one source leg".to_owned());
         }
-        if linked.iter().filter(|record| record.record_type == "income").count() != 1 {
+        if linked
+            .iter()
+            .filter(|record| record.record_type == "income")
+            .count()
+            != 1
+        {
             errors.push("expected exactly one target leg".to_owned());
         }
         if commissions.len() > 1 {
@@ -434,7 +457,9 @@ fn build_report_transfers(
         } else {
             target_base
         };
-        let commission_amount = commission.map(|record| record.amount_original).unwrap_or(0.0);
+        let commission_amount = commission
+            .map(|record| record.amount_original)
+            .unwrap_or(0.0);
         let commission_currency = commission
             .map(|record| record.currency.clone())
             .unwrap_or_default();
@@ -474,9 +499,15 @@ fn build_report_transfers(
             transfer_id: transfer.id,
             date: transfer.date,
             from_wallet_id: transfer.from_wallet_id,
-            from_wallet_name: wallets.get(&transfer.from_wallet_id).cloned().unwrap_or_else(|| format!("Wallet #{}", transfer.from_wallet_id)),
+            from_wallet_name: wallets
+                .get(&transfer.from_wallet_id)
+                .cloned()
+                .unwrap_or_else(|| format!("Wallet #{}", transfer.from_wallet_id)),
             to_wallet_id: transfer.to_wallet_id,
-            to_wallet_name: wallets.get(&transfer.to_wallet_id).cloned().unwrap_or_else(|| format!("Wallet #{}", transfer.to_wallet_id)),
+            to_wallet_name: wallets
+                .get(&transfer.to_wallet_id)
+                .cloned()
+                .unwrap_or_else(|| format!("Wallet #{}", transfer.to_wallet_id)),
             source_amount,
             source_currency,
             target_amount,
@@ -492,12 +523,26 @@ fn build_report_transfers(
             commission_amount_current: commission_current,
             tags_text: tags.join(" "),
             description: transfer.description,
-            integrity_status: if valid { "ok".to_owned() } else { "error".to_owned() },
+            integrity_status: if valid {
+                "ok".to_owned()
+            } else {
+                "error".to_owned()
+            },
             integrity_message: errors.join("; "),
         });
     }
-    rows.sort_by(|left, right| right.date.cmp(&left.date).then_with(|| right.transfer_id.cmp(&left.transfer_id)));
-    Ok((rows, period_net_fixed, period_net_current, opening_net_fixed))
+    rows.sort_by(|left, right| {
+        right
+            .date
+            .cmp(&left.date)
+            .then_with(|| right.transfer_id.cmp(&left.transfer_id))
+    });
+    Ok((
+        rows,
+        period_net_fixed,
+        period_net_current,
+        opening_net_fixed,
+    ))
 }
 
 fn tags_for_records(
@@ -755,8 +800,7 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
         records_total_current: current_total,
         final_balance_fixed: final_fixed,
         final_balance_current: final_current,
-        fx_difference: (current_total - fixed_total)
-            + (transfer_net_current - transfer_net_fixed),
+        fx_difference: (current_total - fixed_total) + (transfer_net_current - transfer_net_fixed),
         records_count: operations.len() as i64,
         transfers_count: transfers.len() as i64,
         transfer_net_fixed,
@@ -1346,9 +1390,19 @@ fn write_report_transfer_sheet(
         .set_name("Transfers")
         .map_err(|err| err.to_string())?;
     let columns = [
-        "Date", "Transfer ID", "From wallet", "Source amount", "To wallet",
-        "Target amount", "Historical rate", "Commission", "Base source",
-        "Base target", "Status", "Description", "Tags",
+        "Date",
+        "Transfer ID",
+        "From wallet",
+        "Source amount",
+        "To wallet",
+        "Target amount",
+        "Historical rate",
+        "Commission",
+        "Base source",
+        "Base target",
+        "Status",
+        "Description",
+        "Tags",
     ];
     for (column, title) in columns.into_iter().enumerate() {
         worksheet
@@ -1357,8 +1411,16 @@ fn write_report_transfer_sheet(
     }
     for (index, row) in report.transfers.iter().enumerate() {
         let line = (index + 1) as u32;
-        let source_base = if use_current { row.source_amount_current } else { row.source_amount_base };
-        let target_base = if use_current { row.target_amount_current } else { row.target_amount_base };
+        let source_base = if use_current {
+            row.source_amount_current
+        } else {
+            row.source_amount_base
+        };
+        let target_base = if use_current {
+            row.target_amount_current
+        } else {
+            row.target_amount_base
+        };
         let commission = if row.commission_amount > 0.0 {
             format!("{:.2} {}", row.commission_amount, row.commission_currency)
         } else {
@@ -1375,7 +1437,11 @@ fn write_report_transfer_sheet(
             commission,
             format!("{source_base:.2}"),
             format!("{target_base:.2}"),
-            if row.integrity_status == "ok" { "OK".to_owned() } else { format!("{}: {}", row.integrity_status, row.integrity_message) },
+            if row.integrity_status == "ok" {
+                "OK".to_owned()
+            } else {
+                format!("{}: {}", row.integrity_status, row.integrity_message)
+            },
             row.description.clone(),
             row.tags_text.clone(),
         ];
@@ -1389,11 +1455,15 @@ fn write_report_transfer_sheet(
         .set_freeze_panes(1, 0)
         .map_err(|err| err.to_string())?;
     worksheet
-        .autofilter(0, 0, report.transfers.len() as u32, (columns.len() - 1) as u16)
+        .autofilter(
+            0,
+            0,
+            report.transfers.len() as u32,
+            (columns.len() - 1) as u16,
+        )
         .map_err(|err| err.to_string())?;
     for (column, width) in [
-        14.0, 12.0, 28.0, 20.0, 28.0, 20.0, 18.0, 18.0, 16.0, 16.0,
-        28.0, 36.0, 28.0,
+        14.0, 12.0, 28.0, 20.0, 28.0, 20.0, 18.0, 18.0, 16.0, 16.0, 28.0, 36.0, 28.0,
     ]
     .into_iter()
     .enumerate()
@@ -1776,6 +1846,779 @@ fn write_report_debt_sheet(
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+struct PdfLayoutRow {
+    cells: Vec<String>,
+    widths: Vec<f32>,
+    style: PdfRowStyle,
+    merged: bool,
+}
+
+const PDF_PAGE_WIDTH_PT: f32 = 841.89;
+const PDF_PAGE_HEIGHT_PT: f32 = 595.28;
+const PDF_MARGIN_PT: f32 = 34.0;
+const PDF_CONTENT_TOP_PT: f32 = 540.0;
+const PDF_CONTENT_BOTTOM_PT: f32 = 42.0;
+const PDF_CONTENT_WIDTH_PT: f32 = PDF_PAGE_WIDTH_PT - (PDF_MARGIN_PT * 2.0);
+
+fn pdf_layout_row(
+    cells: Vec<String>,
+    widths: &[f32],
+    style: PdfRowStyle,
+    merged: bool,
+) -> PdfLayoutRow {
+    PdfLayoutRow {
+        cells,
+        widths: widths.to_vec(),
+        style,
+        merged,
+    }
+}
+
+fn pdf_date(value: &str) -> String {
+    let parts = value.split('-').collect::<Vec<_>>();
+    if parts.len() == 3
+        && parts
+            .iter()
+            .all(|part| part.chars().all(|c| c.is_ascii_digit()))
+    {
+        format!("{}.{}.{}", parts[2], parts[1], parts[0])
+    } else {
+        value.to_owned()
+    }
+}
+
+fn pdf_money(value: f64, currency: &str, signed: bool) -> String {
+    let absolute = format!("{:.2}", value.abs());
+    let mut parts = absolute.split('.');
+    let integer = parts.next().unwrap_or("0");
+    let decimal = parts.next().unwrap_or("00");
+    let grouped = integer
+        .chars()
+        .rev()
+        .enumerate()
+        .fold(String::new(), |mut output, (index, character)| {
+            if index > 0 && index % 3 == 0 {
+                output.push('\u{202f}');
+            }
+            output.push(character);
+            output
+        })
+        .chars()
+        .rev()
+        .collect::<String>();
+    let sign = if value < 0.0 {
+        "\u{2212}"
+    } else if signed && value > 0.0 {
+        "+"
+    } else {
+        ""
+    };
+    format!("{sign}{grouped}.{decimal} {currency}")
+}
+
+fn pdf_amount(value: f64, currency: &str) -> String {
+    pdf_money(value, currency, true)
+}
+
+fn pdf_layout_row_value(row: &ReportOperationRow, use_current: bool, base: &str) -> String {
+    let amount = if use_current {
+        row.amount_current
+    } else {
+        row.amount_base
+    };
+    pdf_amount(amount, base)
+}
+
+fn pdf_layout_section(rows: &mut Vec<PdfLayoutRow>, title: &str, widths: &[f32]) {
+    rows.push(pdf_layout_row(
+        vec![title.to_owned()],
+        widths,
+        PdfRowStyle::Section,
+        true,
+    ));
+}
+
+fn build_pdf_statement_sections(report: &ReportResult, use_current: bool) -> Vec<PdfLayoutRow> {
+    let overview_widths = [PDF_CONTENT_WIDTH_PT / 4.0; 4];
+    let table_widths = [85.0, 92.0, 226.0, 190.0, 181.0];
+    let transfer_widths = [52.0, 70.0, 130.0, 130.0, 145.0, 78.0, 78.0, 91.0];
+    let monthly_widths = [155.0, 205.0, 205.0, 201.0];
+    let compact_widths = [360.0, 120.0, 294.0];
+    let mut rows = Vec::new();
+    rows.push(pdf_layout_row(
+        vec![report.title.clone()],
+        &overview_widths,
+        PdfRowStyle::Title,
+        true,
+    ));
+    rows.push(pdf_layout_row(
+        vec![format!(
+            "{} · {}",
+            if use_current { "Current" } else { "Fixed" },
+            report_amounts_note(&report.filters.totals_mode)
+        )],
+        &overview_widths,
+        PdfRowStyle::Note,
+        true,
+    ));
+
+    let mut income = 0.0;
+    let mut expenses = 0.0;
+    for operation in &report.operations {
+        let amount = if use_current {
+            operation.amount_current
+        } else {
+            operation.amount_base
+        };
+        if operation.kind == "income" {
+            income += amount.abs();
+        } else {
+            expenses += amount.abs();
+        }
+    }
+    let final_balance = if use_current {
+        report.summary.final_balance_current
+    } else {
+        report.summary.final_balance_fixed
+    };
+    rows.push(pdf_layout_row(
+        vec![
+            "Opening balance".to_owned(),
+            "Income".to_owned(),
+            "Expenses".to_owned(),
+            "Net worth".to_owned(),
+        ],
+        &overview_widths,
+        PdfRowStyle::Header,
+        false,
+    ));
+    rows.push(pdf_layout_row(
+        vec![
+            pdf_money(report.summary.initial_balance, &report.base_currency, true),
+            pdf_money(income, &report.base_currency, true),
+            pdf_money(-expenses, &report.base_currency, true),
+            pdf_money(final_balance, &report.base_currency, true),
+        ],
+        &overview_widths,
+        PdfRowStyle::Balance,
+        false,
+    ));
+    rows.push(pdf_layout_row(
+        vec![format!(
+            "Operations: {} · Transfers: {} · Currency: {}",
+            report.summary.records_count, report.summary.transfers_count, report.base_currency
+        )],
+        &overview_widths,
+        PdfRowStyle::Note,
+        true,
+    ));
+
+    pdf_layout_section(&mut rows, "Operations", &table_widths);
+    rows.push(pdf_layout_row(
+        ["Date", "Type", "Category", "Tags", "Amount"]
+            .map(str::to_owned)
+            .to_vec(),
+        &table_widths,
+        PdfRowStyle::Header,
+        false,
+    ));
+    if report.operations.is_empty() {
+        rows.push(pdf_layout_row(
+            vec!["No operations in the selected period".to_owned()],
+            &table_widths,
+            PdfRowStyle::Note,
+            true,
+        ));
+    } else {
+        for operation in &report.operations {
+            rows.push(pdf_layout_row(
+                vec![
+                    pdf_date(&operation.date),
+                    operation.type_label.clone(),
+                    operation.category.clone(),
+                    operation.tags_text.clone(),
+                    pdf_layout_row_value(operation, use_current, &report.base_currency),
+                ],
+                &table_widths,
+                PdfRowStyle::Data,
+                false,
+            ));
+        }
+    }
+    rows.push(pdf_layout_row(
+        vec![
+            "Subtotal".to_owned(),
+            String::new(),
+            String::new(),
+            String::new(),
+            pdf_money(
+                if use_current {
+                    report.summary.records_total_current
+                } else {
+                    report.summary.records_total_fixed
+                },
+                &report.base_currency,
+                true,
+            ),
+        ],
+        &table_widths,
+        PdfRowStyle::Subtotal,
+        false,
+    ));
+    rows.push(pdf_layout_row(
+        vec![
+            "Final balance".to_owned(),
+            String::new(),
+            String::new(),
+            String::new(),
+            pdf_money(final_balance, &report.base_currency, true),
+        ],
+        &table_widths,
+        PdfRowStyle::Final,
+        false,
+    ));
+
+    if !report.transfers.is_empty() {
+        pdf_layout_section(&mut rows, "Transfers", &transfer_widths);
+        rows.push(pdf_layout_row(
+            [
+                "#",
+                "Date",
+                "From",
+                "To",
+                "Amounts",
+                "Rate",
+                "Commission",
+                "Status",
+            ]
+            .map(str::to_owned)
+            .to_vec(),
+            &transfer_widths,
+            PdfRowStyle::Header,
+            false,
+        ));
+        for transfer in &report.transfers {
+            let source_base = if use_current {
+                transfer.source_amount_current
+            } else {
+                transfer.source_amount_base
+            };
+            let target_base = if use_current {
+                transfer.target_amount_current
+            } else {
+                transfer.target_amount_base
+            };
+            let commission = if transfer.commission_amount > 0.0 {
+                pdf_money(
+                    transfer.commission_amount,
+                    &transfer.commission_currency,
+                    false,
+                )
+            } else {
+                "—".to_owned()
+            };
+            let status = if transfer.integrity_status == "ok" {
+                "OK".to_owned()
+            } else {
+                format!("Error\n{}", transfer.integrity_message)
+            };
+            rows.push(pdf_layout_row(
+                vec![
+                    format!("#{}", transfer.transfer_id),
+                    pdf_date(&transfer.date),
+                    format!(
+                        "{} (#{})",
+                        transfer.from_wallet_name, transfer.from_wallet_id
+                    ),
+                    format!("{} (#{})", transfer.to_wallet_name, transfer.to_wallet_id),
+                    format!(
+                        "Source: {}\nTarget: {}\nBase: {} / {}",
+                        pdf_money(transfer.source_amount, &transfer.source_currency, false),
+                        pdf_money(transfer.target_amount, &transfer.target_currency, false),
+                        pdf_money(source_base, &report.base_currency, false),
+                        pdf_money(target_base, &report.base_currency, false),
+                    ),
+                    transfer.historical_rate.clone(),
+                    commission,
+                    status,
+                ],
+                &transfer_widths,
+                PdfRowStyle::Data,
+                false,
+            ));
+            if !transfer.description.is_empty() || !transfer.tags_text.is_empty() {
+                rows.push(pdf_layout_row(
+                    vec![format!(
+                        "{}{}",
+                        transfer.description,
+                        if transfer.tags_text.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" · {}", transfer.tags_text)
+                        }
+                    )],
+                    &transfer_widths,
+                    PdfRowStyle::Note,
+                    true,
+                ));
+            }
+        }
+    }
+
+    pdf_layout_section(&mut rows, "Monthly", &monthly_widths);
+    rows.push(pdf_layout_row(
+        ["Month", "Income", "Expenses", "Net"]
+            .map(str::to_owned)
+            .to_vec(),
+        &monthly_widths,
+        PdfRowStyle::Header,
+        false,
+    ));
+    if report.monthly.is_empty() {
+        rows.push(pdf_layout_row(
+            vec!["No monthly data in the selected period".to_owned()],
+            &monthly_widths,
+            PdfRowStyle::Note,
+            true,
+        ));
+    } else {
+        for month in &report.monthly {
+            let income = if use_current {
+                month.income_current
+            } else {
+                month.income
+            };
+            let expenses = if use_current {
+                month.expenses_current
+            } else {
+                month.expenses
+            };
+            rows.push(pdf_layout_row(
+                vec![
+                    month.month.clone(),
+                    pdf_money(income, &report.base_currency, true),
+                    pdf_money(-expenses, &report.base_currency, true),
+                    pdf_money(income - expenses, &report.base_currency, true),
+                ],
+                &monthly_widths,
+                PdfRowStyle::Data,
+                false,
+            ));
+        }
+    }
+
+    if !report.categories.is_empty() {
+        pdf_layout_section(&mut rows, "Categories", &compact_widths);
+        rows.push(pdf_layout_row(
+            ["Category", "Operations", "Amount"]
+                .map(str::to_owned)
+                .to_vec(),
+            &compact_widths,
+            PdfRowStyle::Header,
+            false,
+        ));
+        for category in &report.categories {
+            let amount = if use_current {
+                category.total_current
+            } else {
+                category.total_base
+            };
+            rows.push(pdf_layout_row(
+                vec![
+                    category.category.clone(),
+                    category.operations_count.to_string(),
+                    pdf_money(amount, &report.base_currency, true),
+                ],
+                &compact_widths,
+                PdfRowStyle::Data,
+                false,
+            ));
+        }
+    }
+    if !report.tags.is_empty() {
+        pdf_layout_section(&mut rows, "Tags", &compact_widths);
+        rows.push(pdf_layout_row(
+            ["Tag", "Operations", "Amount"].map(str::to_owned).to_vec(),
+            &compact_widths,
+            PdfRowStyle::Header,
+            false,
+        ));
+        for tag in &report.tags {
+            let amount = if use_current {
+                tag.total_current
+            } else {
+                tag.total_base
+            };
+            rows.push(pdf_layout_row(
+                vec![
+                    format!("#{}", tag.tag),
+                    tag.operations_count.to_string(),
+                    pdf_money(amount, &report.base_currency, true),
+                ],
+                &compact_widths,
+                PdfRowStyle::Data,
+                false,
+            ));
+        }
+    }
+    if !report.debts.is_empty() {
+        pdf_layout_section(&mut rows, "Debts", &monthly_widths);
+        rows.push(pdf_layout_row(
+            ["Contact", "Status", "Total", "Remaining"]
+                .map(str::to_owned)
+                .to_vec(),
+            &monthly_widths,
+            PdfRowStyle::Header,
+            false,
+        ));
+        for debt in &report.debts {
+            rows.push(pdf_layout_row(
+                vec![
+                    format!("{} · {}", debt.contact_name, debt.kind),
+                    debt.status.clone(),
+                    pdf_money(debt.total_amount, &debt.currency, false),
+                    pdf_money(debt.remaining_amount, &debt.currency, false),
+                ],
+                &monthly_widths,
+                PdfRowStyle::Data,
+                false,
+            ));
+        }
+    }
+    rows
+}
+
+fn build_pdf_grouped_sections(report: &ReportResult, use_current: bool) -> Vec<PdfLayoutRow> {
+    let widths = [460.0, 120.0, 194.0];
+    let mut rows = vec![pdf_layout_row(
+        vec![report.title.clone()],
+        &widths,
+        PdfRowStyle::Title,
+        true,
+    )];
+    rows.push(pdf_layout_row(
+        vec![report_amounts_note(&report.filters.totals_mode)],
+        &widths,
+        PdfRowStyle::Note,
+        true,
+    ));
+    pdf_layout_section(&mut rows, "Categories", &widths);
+    rows.push(pdf_layout_row(
+        ["Category", "Operations", "Amount"]
+            .map(str::to_owned)
+            .to_vec(),
+        &widths,
+        PdfRowStyle::Header,
+        false,
+    ));
+    let mut total = 0.0;
+    for category in &report.categories {
+        let amount = if use_current {
+            category.total_current
+        } else {
+            category.total_base
+        };
+        total += amount;
+        rows.push(pdf_layout_row(
+            vec![
+                category.category.clone(),
+                category.operations_count.to_string(),
+                pdf_money(amount, &report.base_currency, true),
+            ],
+            &widths,
+            PdfRowStyle::Data,
+            false,
+        ));
+    }
+    rows.push(pdf_layout_row(
+        vec![
+            "Total".to_owned(),
+            String::new(),
+            pdf_money(total, &report.base_currency, true),
+        ],
+        &widths,
+        PdfRowStyle::Final,
+        false,
+    ));
+    if !report.transfers.is_empty() {
+        let statement = build_pdf_statement_sections(report, use_current);
+        rows.extend(statement.into_iter().filter(|row| {
+            row.cells.first().is_some_and(|value| value == "Transfers")
+                || row.widths == [52.0, 70.0, 130.0, 130.0, 145.0, 78.0, 78.0, 91.0]
+        }));
+    }
+    rows
+}
+
+fn render_pdf_document(title: &str, rows: &[PdfLayoutRow]) -> StorageResult<Vec<u8>> {
+    let font_bytes = load_report_font()?;
+    let font = ParsedFont::from_bytes(&font_bytes, 0, &mut Vec::new())
+        .ok_or_else(|| "unable to parse report font".to_owned())?;
+    let mut document = PdfDocument::new(title);
+    let _page_height = PDF_PAGE_HEIGHT_PT;
+    document.metadata.info.author = "Ledgera".to_owned();
+    document.metadata.info.creator = "Ledgera Rust report exporter".to_owned();
+    document.metadata.info.subject = "Financial statement".to_owned();
+    document.metadata.info.keywords = vec!["Ledgera".to_owned(), "statement".to_owned()];
+    let font_id = document.add_font(&font);
+    let page_rows = paginate_pdf_layout_rows(rows);
+    let total_pages = page_rows.len().max(1);
+    let pages = page_rows
+        .iter()
+        .enumerate()
+        .map(|(index, page_rows)| {
+            let mut ops = Vec::new();
+            append_pdf_page_chrome(&mut ops, title, index + 1, total_pages, &font_id);
+            let mut y = PDF_CONTENT_TOP_PT;
+            for row in page_rows {
+                append_pdf_layout_row(&mut ops, row, PDF_MARGIN_PT, y, &font_id);
+                y -= pdf_layout_row_height(row);
+            }
+            PdfPage::new(Mm(297.0), Mm(210.0), ops)
+        })
+        .collect::<Vec<_>>();
+    Ok(document
+        .with_pages(pages)
+        .save(&PdfSaveOptions::default(), &mut Vec::new()))
+}
+
+fn paginate_pdf_layout_rows(rows: &[PdfLayoutRow]) -> Vec<Vec<&PdfLayoutRow>> {
+    let mut pages = Vec::new();
+    let mut current = Vec::new();
+    let mut y = PDF_CONTENT_TOP_PT;
+    let mut repeat_header: Option<&PdfLayoutRow> = None;
+    for row in rows {
+        let height = pdf_layout_row_height(row);
+        if y - height < PDF_CONTENT_BOTTOM_PT && !current.is_empty() {
+            pages.push(current);
+            current = Vec::new();
+            y = PDF_CONTENT_TOP_PT;
+            if !matches!(
+                row.style,
+                PdfRowStyle::Header | PdfRowStyle::Title | PdfRowStyle::Section
+            ) {
+                if let Some(header) = repeat_header {
+                    let header_height = pdf_layout_row_height(header);
+                    current.push(header);
+                    y -= header_height;
+                }
+            }
+        }
+        current.push(row);
+        y -= height;
+        if matches!(row.style, PdfRowStyle::Header) {
+            repeat_header = Some(row);
+        }
+    }
+    if !current.is_empty() {
+        pages.push(current);
+    }
+    pages
+}
+
+fn pdf_layout_row_height(row: &PdfLayoutRow) -> f32 {
+    let base = match row.style {
+        PdfRowStyle::Title => 28.0,
+        PdfRowStyle::Section => 22.0,
+        PdfRowStyle::Header | PdfRowStyle::Note => 20.0,
+        _ => 18.0,
+    };
+    if row.merged {
+        return base;
+    }
+    let lines = row
+        .cells
+        .iter()
+        .zip(row.widths.iter())
+        .map(|(cell, width)| wrap_pdf_lines(cell, ((*width / 4.4) as usize).max(8)).len())
+        .max()
+        .unwrap_or(1);
+    base.max(lines as f32 * 10.0 + 8.0)
+}
+
+fn append_pdf_page_chrome(
+    ops: &mut Vec<Op>,
+    title: &str,
+    page: usize,
+    total_pages: usize,
+    font_id: &printpdf::FontId,
+) {
+    ops.push(Op::SetFillColor {
+        col: Color::Rgb(Rgb::new(0.12, 0.28, 0.24, None)),
+    });
+    ops.push(Op::SetFont {
+        font: PdfFontHandle::External(font_id.clone()),
+        size: Pt(9.5),
+    });
+    ops.push(Op::StartTextSection);
+    ops.push(Op::SetTextCursor {
+        pos: Point::new(Pt(PDF_MARGIN_PT).into(), Pt(571.0).into()),
+    });
+    ops.push(Op::ShowText {
+        items: vec![TextItem::Text(title.to_owned())],
+    });
+    ops.push(Op::SetTextCursor {
+        pos: Point::new(
+            Pt(PDF_PAGE_WIDTH_PT - PDF_MARGIN_PT - 55.0).into(),
+            Pt(571.0).into(),
+        ),
+    });
+    ops.push(Op::ShowText {
+        items: vec![TextItem::Text(format!("{page} / {total_pages}"))],
+    });
+    ops.push(Op::SetTextCursor {
+        pos: Point::new(Pt(PDF_MARGIN_PT).into(), Pt(22.0).into()),
+    });
+    ops.push(Op::ShowText {
+        items: vec![TextItem::Text("Ledgera · Financial statement".to_owned())],
+    });
+    ops.push(Op::EndTextSection);
+}
+
+fn append_pdf_layout_row(
+    ops: &mut Vec<Op>,
+    row: &PdfLayoutRow,
+    left: f32,
+    top: f32,
+    font_id: &printpdf::FontId,
+) {
+    let height = pdf_layout_row_height(row);
+    let fill = match row.style {
+        PdfRowStyle::Title => (232.0, 225.0, 239.0),
+        PdfRowStyle::Header => (221.0, 217.0, 227.0),
+        PdfRowStyle::Note => (246.0, 244.0, 247.0),
+        PdfRowStyle::Balance => (239.0, 246.0, 243.0),
+        PdfRowStyle::Subtotal => (231.0, 242.0, 235.0),
+        PdfRowStyle::Final => (218.0, 239.0, 232.0),
+        PdfRowStyle::Section => (207.0, 226.0, 218.0),
+        PdfRowStyle::Data => (255.0, 255.0, 255.0),
+    };
+    let text_color = if matches!(row.style, PdfRowStyle::Header | PdfRowStyle::Section) {
+        (31.0, 31.0, 31.0)
+    } else {
+        (48.0, 48.0, 48.0)
+    };
+    let widths = if row.merged {
+        vec![row.widths.iter().sum()]
+    } else {
+        row.widths.clone()
+    };
+    let cell_count = if row.merged { 1 } else { row.cells.len() };
+    let mut x = left;
+    for cell_index in 0..cell_count {
+        let width = widths.get(cell_index).copied().unwrap_or(0.0);
+        ops.push(Op::SetFillColor {
+            col: Color::Rgb(Rgb::new(
+                fill.0 / 255.0,
+                fill.1 / 255.0,
+                fill.2 / 255.0,
+                None,
+            )),
+        });
+        ops.push(Op::SetOutlineColor {
+            col: Color::Rgb(Rgb::new(0.74, 0.72, 0.76, None)),
+        });
+        ops.push(Op::SetOutlineThickness { pt: Pt(0.35) });
+        ops.push(Op::DrawRectangle {
+            rectangle: Rect {
+                x: Pt(x),
+                y: Pt(top - height),
+                width: Pt(width),
+                height: Pt(height),
+                mode: Some(PaintMode::FillStroke),
+                winding_order: None,
+            },
+        });
+        let value = row.cells.get(cell_index).cloned().unwrap_or_default();
+        let lines = wrap_pdf_lines(&value, ((width / 4.4) as usize).max(8));
+        let font_size = match row.style {
+            PdfRowStyle::Title => 13.0,
+            PdfRowStyle::Header => 8.8,
+            PdfRowStyle::Section => 10.0,
+            PdfRowStyle::Note => 7.8,
+            _ => 8.0,
+        };
+        ops.push(Op::SetFillColor {
+            col: Color::Rgb(Rgb::new(
+                text_color.0 / 255.0,
+                text_color.1 / 255.0,
+                text_color.2 / 255.0,
+                None,
+            )),
+        });
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::External(font_id.clone()),
+            size: Pt(font_size),
+        });
+        ops.push(Op::StartTextSection);
+        for (line_index, line) in lines.iter().enumerate() {
+            let centered =
+                row.merged || matches!(row.style, PdfRowStyle::Header | PdfRowStyle::Section);
+            let right = !centered && cell_index + 1 == cell_count;
+            let text_width = line.chars().count() as f32 * font_size * 0.48;
+            let text_x = if row.merged {
+                left + (width - text_width).max(0.0) / 2.0
+            } else if centered {
+                x + (width - text_width).max(0.0) / 2.0
+            } else if right {
+                x + width - 4.0 - text_width
+            } else {
+                x + 5.0
+            };
+            let text_y = if centered {
+                top - height / 2.0 - font_size / 2.0 - line_index as f32 * 9.0
+            } else {
+                top - 11.0 - line_index as f32 * 9.0
+            };
+            ops.push(Op::SetTextCursor {
+                pos: Point::new(Pt(text_x).into(), Pt(text_y).into()),
+            });
+            ops.push(Op::ShowText {
+                items: vec![TextItem::Text(line.clone())],
+            });
+        }
+        ops.push(Op::EndTextSection);
+        x += width;
+    }
+}
+
+fn wrap_pdf_lines(value: &str, max_chars: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    for source_line in value.lines() {
+        let mut current = String::new();
+        for word in source_line.split_whitespace() {
+            let separator = usize::from(!current.is_empty());
+            if current.chars().count() + separator + word.chars().count() > max_chars
+                && !current.is_empty()
+            {
+                lines.push(std::mem::take(&mut current));
+            }
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(word);
+        }
+        if !current.is_empty() || source_line.is_empty() {
+            lines.push(std::mem::take(&mut current));
+        }
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    if lines.len() > 2 {
+        lines.truncate(2);
+        let last = lines.last_mut().expect("two lines exist");
+        let mut chars = last.chars().collect::<Vec<_>>();
+        if chars.len() >= max_chars.max(2) {
+            chars.truncate(max_chars.max(2) - 1);
+        }
+        *last = chars.into_iter().collect::<String>().trim_end().to_owned() + "…";
+    }
+    lines
+}
+
+#[allow(unreachable_code)]
 pub fn report_export_pdf(
     db_path: &str,
     filters: &ReportFilters,
@@ -1783,6 +2626,22 @@ pub fn report_export_pdf(
 ) -> StorageResult<ReportExportResult> {
     let report = report_generate(db_path, filters)?;
     let use_current = report.filters.totals_mode.eq_ignore_ascii_case("current");
+    let sections = if report.filters.group_by_category {
+        build_pdf_grouped_sections(&report, use_current)
+    } else {
+        build_pdf_statement_sections(&report, use_current)
+    };
+    let pdf = render_pdf_document(&report.title, &sections)?;
+    atomic_replace(Path::new(path), &pdf)?;
+    return Ok(ReportExportResult {
+        exported_rows: (report.operations.len()
+            + report.transfers.len()
+            + report.monthly.len()
+            + report.categories.len()
+            + report.tags.len()
+            + report.debts.len()) as i64,
+        path: path.to_owned(),
+    });
     if report.filters.group_by_category {
         return report_export_grouped_pdf(&report, path, use_current);
     }
@@ -1996,18 +2855,39 @@ pub fn report_export_pdf(
     })
 }
 
-fn append_pdf_transfer_section(rows: &mut Vec<PdfReportRow>, report: &ReportResult, use_current: bool) {
+fn append_pdf_transfer_section(
+    rows: &mut Vec<PdfReportRow>,
+    report: &ReportResult,
+    use_current: bool,
+) {
     if report.transfers.is_empty() {
         return;
     }
-    rows.push(PdfReportRow::merged("Transfers".to_owned(), PdfRowStyle::Section));
+    rows.push(PdfReportRow::merged(
+        "Transfers".to_owned(),
+        PdfRowStyle::Section,
+    ));
     rows.push(PdfReportRow::new(
-        ["Date", "Transfer", "Source -> Target", "Rate / Commission", "Status"],
+        [
+            "Date",
+            "Transfer",
+            "Source -> Target",
+            "Rate / Commission",
+            "Status",
+        ],
         PdfRowStyle::Header,
     ));
     for row in &report.transfers {
-        let source_base = if use_current { row.source_amount_current } else { row.source_amount_base };
-        let target_base = if use_current { row.target_amount_current } else { row.target_amount_base };
+        let source_base = if use_current {
+            row.source_amount_current
+        } else {
+            row.source_amount_base
+        };
+        let target_base = if use_current {
+            row.target_amount_current
+        } else {
+            row.target_amount_base
+        };
         let commission = if row.commission_amount > 0.0 {
             format!("{:.2} {}", row.commission_amount, row.commission_currency)
         } else {
@@ -2522,5 +3402,41 @@ mod tests {
         assert_eq!(report.summary.transfer_net_fixed, 0.0);
 
         std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn pdf_money_uses_grouping_and_explicit_signs() {
+        assert_eq!(
+            pdf_money(1234567.8, "KZT", true),
+            "+1\u{202f}234\u{202f}567.80 KZT"
+        );
+        assert_eq!(
+            pdf_money(-1234.5, "KZT", true),
+            "\u{2212}1\u{202f}234.50 KZT"
+        );
+        assert_eq!(pdf_money(0.0, "KZT", true), "0.00 KZT");
+    }
+
+    #[test]
+    fn pdf_wrap_is_bounded_and_marks_truncation() {
+        let lines = wrap_pdf_lines("one two three four five six seven", 10);
+        assert_eq!(lines.len(), 2);
+        assert!(lines.last().expect("last line").ends_with('…'));
+    }
+
+    #[test]
+    fn pdf_document_contains_landscape_metadata_and_selectable_text() {
+        let widths = [PDF_CONTENT_WIDTH_PT];
+        let rows = vec![pdf_layout_row(
+            vec!["Выписка · 1\u{202f}234,50 ₸".to_owned()],
+            &widths,
+            PdfRowStyle::Title,
+            true,
+        )];
+        let pdf = render_pdf_document("Transaction statement", &rows).expect("render pdf");
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.contains("/Author"));
+        assert!(text.contains("/Title"));
+        assert!(text.contains("/MediaBox"));
     }
 }

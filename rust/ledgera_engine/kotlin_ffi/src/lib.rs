@@ -3813,11 +3813,11 @@ mod tests {
                 amount_base: "10.005".to_owned(),
                 category: "Salary".to_owned(),
                 description: "Alpha".to_owned(),
-                tags: vec!["Work".to_owned(), "123".to_owned()],
+                tags: vec!["Work".to_owned(), "123tag".to_owned()],
             })
             .unwrap();
         assert_eq!(created.amount_base, "10.01");
-        assert_eq!(created.tags, vec!["work"]);
+        assert_eq!(created.tags, vec!["123tag", "work"]);
 
         let rows = engine
             .list_records(RecordFilterDto {

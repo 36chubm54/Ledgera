@@ -11,6 +11,7 @@ This project adheres to Semantic Versioning.
 
 ### Added
 
+- Added a Rust-owned landscape A4 PDF statement with an Overview, dedicated Operations and Transfers sections, fixed/current mode labeling, Unicode-safe money formatting, repeated headers, and selectable report metadata.
 - Added the first beta.1 Kotlin Desktop shell with navigation entries for the 9 roadmap sections: Operations, Reports, Analytics, Dashboard, Budget, Debts, Distribution, Mandatory, and Settings.
 - Added shared Kotlin shell state for section selection and Rust engine status/error reporting while preserving the existing Operations workflow.
 - Added Kotlin shell ViewModel coverage for section order, navigation state, engine status mapping, and engine failure mapping.

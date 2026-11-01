@@ -124,6 +124,7 @@ python packaging/linux/verify_system_packages.py --deb artifacts/Ledgera-<versio
 - Двухуровневая валютная модель: `base_currency` для хранения и `display_currency` для отображения
 - Теги операций: свободный ввод, нормализация, автоподсказки, цветовая индикация и sidecar-отображение в журнале
 - Отчёты с fixed-rate и current-rate итогами, grouped view, tag filters и экспортом в `CSV` / `XLSX` / `PDF`
+- PDF-выписка формируется Rust-движком в landscape A4: Overview, Operations, Transfers и агрегированные секции используют единый снимок отчёта; исторические суммы не пересчитываются
 - Выписка в `Reports` и экспортируемые statement-файлы показывают записи от новых к старым (`newest first`), а внутри одного дня порядок теперь детерминирован по `date + record.id`
 - Финансовая аналитика: `net worth`, cashflow, category breakdown, tag coverage, monthly summary
 - Бюджеты по категориям и тегам с live progress, pace tracking и forecast-status

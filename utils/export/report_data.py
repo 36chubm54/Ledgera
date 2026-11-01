@@ -27,6 +27,18 @@ def safe_export_str(value: object) -> str:
     return "" if value is None else str(value)
 
 
+def format_pdf_amount(value: float, currency: str = "", *, signed: bool = True) -> str:
+    absolute = f"{abs(float(value)):,.2f}".replace(",", "\u202f")
+    if float(value) < 0:
+        sign = "\u2212"
+    elif signed and float(value) > 0:
+        sign = "+"
+    else:
+        sign = ""
+    suffix = f" {currency}" if currency else ""
+    return f"{sign}{absolute}{suffix}"
+
+
 def report_record_type_label_for_export(record: object) -> str:
     if isinstance(record, IncomeRecord):
         return record_type_label_key("income")
@@ -44,7 +56,7 @@ def build_pdf_statement_data(report: Report, *, base_currency: str) -> list[list
                 localized_balance_label(report.balance_label).upper(),
                 "",
                 "",
-                f"{report.initial_balance:.2f}",
+                format_pdf_amount(report.initial_balance, base_currency, signed=False),
                 "",
             ]
         )
@@ -55,14 +67,14 @@ def build_pdf_statement_data(report: Report, *, base_currency: str) -> list[list
                 safe_export_str(record.date),
                 report_record_type_label_for_export(record),
                 safe_export_str(getattr(record, "category", "")),
-                f"{float(getattr(record, 'amount_base', 0.0) or 0.0):.2f}",
+                format_pdf_amount(float(getattr(record, "amount_base", 0.0) or 0.0), base_currency),
                 format_tags_inline(tuple(getattr(record, "tags", ()) or ())),
             ]
         )
 
     records_total = sum(r.signed_amount_base() for r in report.records())
-    data.append([subtotal_label(), "", "", f"{records_total:.2f}", ""])
-    data.append([final_balance_label(), "", "", f"{report.total_fixed():.2f}", ""])
+    data.append([subtotal_label(), "", "", format_pdf_amount(records_total, base_currency), ""])
+    data.append([final_balance_label(), "", "", format_pdf_amount(report.total_fixed(), base_currency, signed=False), ""])
     return data
 
 
@@ -85,10 +97,10 @@ def build_pdf_category_section_data(
                 [
                     safe_export_str(display_date),
                     report_record_type_label_for_export(record),
-                    f"{abs(amount):.2f}",
+                    format_pdf_amount(abs(amount), base_currency, signed=False),
                 ]
             )
-        cat_data.append([subtotal_label(), "", f"{abs(cat_total):.2f}"])
+        cat_data.append([subtotal_label(), "", format_pdf_amount(abs(cat_total), base_currency, signed=False)])
         sections.append((category, cat_data))
     return sections
 
@@ -101,7 +113,7 @@ def build_pdf_tag_section_data(report: Report, *, base_currency: str) -> list[li
     ]
     for row in build_tag_group_rows(report):
         tag_data.append(
-            [f"#{row.tag}", str(int(row.operations_count)), f"{float(row.total_base):.2f}"]
+            [f"#{row.tag}", str(int(row.operations_count)), format_pdf_amount(float(row.total_base), base_currency)]
         )
     return tag_data
 
@@ -118,6 +130,14 @@ def build_pdf_monthly_summary_data(
     for month_label, income, expense in monthly_rows:
         total_income += income
         total_expense += expense
-        summary_data.append([month_label, f"{income:.2f}", f"{expense:.2f}"])
-    summary_data.append([total_label(), f"{total_income:.2f}", f"{total_expense:.2f}"])
+        summary_data.append([
+            month_label,
+            format_pdf_amount(income, base_currency),
+            format_pdf_amount(expense, base_currency),
+        ])
+    summary_data.append([
+        total_label(),
+        format_pdf_amount(total_income, base_currency),
+        format_pdf_amount(total_expense, base_currency),
+    ])
     return summary_data

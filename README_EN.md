@@ -124,6 +124,7 @@ python packaging/linux/verify_system_packages.py --deb artifacts/Ledgera-<versio
 - Two-layer multicurrency model with persisted `base_currency` and runtime-only `display_currency`
 - Operation tags with free-form entry, normalization, suggestions, color coding, and sidecar display in the journal
 - Reports with fixed-rate and current-rate totals, grouped view, tag filters, and `CSV` / `XLSX` / `PDF` export
+- Rust PDF statements use landscape A4 with Overview, Operations, Transfers, and aggregate sections from one report snapshot; historical amounts are never recalculated
 - Statement views in `Reports` and exported statement files now list records newest first, with deterministic same-day ordering by `date + record.id`
 - Financial analytics: `net worth`, cashflow, category breakdown, tag coverage, and monthly summary
 - Category and tag budgets with live progress, pace tracking, and forecast status

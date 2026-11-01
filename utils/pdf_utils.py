@@ -2,10 +2,10 @@ import logging
 import os
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFError, TTFont
-from reportlab.platypus import SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from domain.debt import Debt
 from domain.reports import Report
@@ -42,6 +42,91 @@ from utils.export.report_data import (
 from utils.finance.debt_report import debt_progress_percent, debts_for_report_period
 
 logger = logging.getLogger(__name__)
+
+
+def _pdf_amount(value: float, currency: str = "", *, signed: bool = True) -> str:
+    """Format a report amount without changing the report's numeric value."""
+    absolute = f"{abs(float(value)):,.2f}".replace(",", "\u202f")
+    if float(value) < 0:
+        sign = "\u2212"
+    elif signed and float(value) > 0:
+        sign = "+"
+    else:
+        sign = ""
+    suffix = f" {currency}" if currency else ""
+    return f"{sign}{absolute}{suffix}"
+
+
+def _append_transfer_summary(elems: list, report: Report, *, available_width: float, font_name: str) -> None:
+    rows = list(getattr(report, "transfer_rows", lambda: [])())
+    if not rows:
+        return
+    elems.append(Spacer(1, 10))  # type: ignore
+    title = Table([["Transfers"]], colWidths=[available_width])
+    title.setStyle(build_pdf_title_style(font_name, align="LEFT"))
+    elems.append(title)
+    headers = ["#", "Date", "From", "Debited", "To", "Credited", "Rate", "Commission", "Status / Note"]
+    data = [headers]
+    for row in rows:
+        status = row.integrity_status.upper()
+        if row.integrity_message:
+            status = f"{status}: {row.integrity_message}"
+        source = f"{_pdf_amount(row.source_amount, row.source_currency, signed=False)}\n≈ {_pdf_amount(row.source_amount_base, '', signed=False)} base"
+        target = f"{_pdf_amount(row.target_amount, row.target_currency, signed=False)}\n≈ {_pdf_amount(row.target_amount_base, '', signed=False)} base"
+        commission = (
+            _pdf_amount(row.commission_amount, row.commission_currency, signed=False)
+            if row.commission_amount
+            else "—"
+        )
+        data.append(
+            [
+                f"#{row.transfer_id}",
+                safe_export_str(row.date),
+                f"Wallet #{row.from_wallet_id}",
+                Paragraph(source.replace("\n", "<br/>"), f"{font_name}", 8),
+                f"Wallet #{row.to_wallet_id}",
+                Paragraph(target.replace("\n", "<br/>"), f"{font_name}", 8),
+                safe_export_str(row.historical_rate),
+                commission,
+                Paragraph(
+                    f"{status}<br/>{safe_export_str(row.description)}" if row.description else status,
+                    f"{font_name}",
+                    8,
+                ),
+            ]
+        )
+    table = Table(
+        data,
+        colWidths=[
+            available_width * 0.05,
+            available_width * 0.09,
+            available_width * 0.14,
+            available_width * 0.15,
+            available_width * 0.14,
+            available_width * 0.15,
+            available_width * 0.08,
+            available_width * 0.10,
+            available_width * 0.10,
+        ],
+        repeatRows=1,
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("FONT", (0, 0), (-1, -1), font_name),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ECE6F0")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (3, 1), (7, -1), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    elems.append(table)
 
 
 def _try_register_font(name: str, source: str) -> bool:
@@ -241,15 +326,16 @@ def report_to_pdf(
     data = build_pdf_statement_data(report, base_currency=base_currency)
 
     # Build PDF with a Table for nicer tabular layout and word-wrap
+    page_size = landscape(A4)
     doc = SimpleDocTemplate(
         filepath,
-        pagesize=A4,
+        pagesize=page_size,
         leftMargin=30,
         rightMargin=30,
         topMargin=30,
         bottomMargin=30,
     )
-    available_width = A4[0] - 60
+    available_width = page_size[0] - 60
     col_widths = [
         available_width * 0.16,
         available_width * 0.18,
@@ -275,7 +361,45 @@ def report_to_pdf(
     )
     title_table.setStyle(build_pdf_title_style(font_name))
 
-    elems: list[Table] = [title_table, table]
+    records = list(getattr(report, "display_records", report.records)())
+    income_total = sum(float(getattr(record, "amount_base", 0.0) or 0.0) for record in records if getattr(record, "type", "") == "income")
+    expense_total = sum(float(getattr(record, "amount_base", 0.0) or 0.0) for record in records if getattr(record, "type", "") != "income")
+    overview = Table(
+        [
+            ["Opening balance", "Income", "Expenses", "Closing balance"],
+            [
+                _pdf_amount(report.initial_balance, base_currency, signed=False),
+                _pdf_amount(income_total, base_currency),
+                _pdf_amount(-expense_total, base_currency),
+                _pdf_amount(report.total_fixed(), base_currency, signed=False),
+            ],
+        ],
+        colWidths=[available_width / 4.0] * 4,
+    )
+    overview.setStyle(
+        TableStyle(
+            [
+                ("FONT", (0, 0), (-1, -1), font_name),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ECE6F0")),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#F7F2FA")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CAC4D0")),
+                ("ALIGN", (0, 1), (-1, 1), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+
+    elems: list[Table] = [title_table, overview, Spacer(1, 10), table]
+    _append_transfer_summary(
+        elems,
+        report,
+        available_width=available_width,
+        font_name=font_name,
+    )
     # After the detailed listing, add grouped tables by category
     grouped_warning: str | None = None
     try:
@@ -392,15 +516,16 @@ def grouped_report_to_pdf(
     *,
     base_currency: str = "KZT",
 ) -> None:
+    page_size = landscape(A4)
     doc = SimpleDocTemplate(
         filepath,
-        pagesize=A4,
+        pagesize=page_size,
         leftMargin=30,
         rightMargin=30,
         topMargin=30,
         bottomMargin=30,
     )
-    available_width = A4[0] - 60
+    available_width = page_size[0] - 60
     font_name = _register_cyrillic_font()
 
     title_table = Table([[statement_title]], colWidths=[available_width])
