@@ -129,6 +129,7 @@ fun AppShell(
             budgetViewModel.refresh()
             analyticsViewModel.generate()
             distributionViewModel.refresh()
+            dashboardViewModel.refresh()
         }
     }
 

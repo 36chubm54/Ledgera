@@ -32,6 +32,8 @@ class DashboardViewModel(
 ) {
     private val ownsScope = scope == null
     private val workScope = scope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val mutationSupervisor = SupervisorJob(workScope.coroutineContext[Job])
+    private val mutationScope = CoroutineScope(workScope.coroutineContext + mutationSupervisor)
     private val mutableState = MutableStateFlow(DashboardUiState(loading = true))
     private var refreshJob: Job? = null
     private var generation = 0L
@@ -44,21 +46,22 @@ class DashboardViewModel(
         val requestGeneration = ++generation
         mutableState.update { it.copy(loading = true, error = null, notice = null) }
         refreshJob = workScope.launch {
-            runCatching { engine.dashboardSnapshot() }
-                .onSuccess { snapshot ->
-                    if (requestGeneration == generation) mutableState.update { current ->
-                        current.copy(
-                            snapshot = snapshot,
-                            selectedAssetId = current.selectedAssetId?.takeIf { id -> snapshot.assets.any { it.id == id } },
-                            selectedGoalId = current.selectedGoalId?.takeIf { id -> snapshot.goals.any { it.id == id } },
-                            loading = false,
-                            error = null,
-                        )
-                    }
+            try {
+                val snapshot = engine.dashboardSnapshot()
+                if (requestGeneration == generation) mutableState.update { current ->
+                    current.copy(
+                        snapshot = snapshot,
+                        selectedAssetId = current.selectedAssetId?.takeIf { id -> snapshot.assets.any { it.id == id } },
+                        selectedGoalId = current.selectedGoalId?.takeIf { id -> snapshot.goals.any { it.id == id } },
+                        loading = false,
+                        error = null,
+                    )
                 }
-                .onFailure { error ->
-                    if (requestGeneration == generation && error !is CancellationException) mutableState.update { it.copy(loading = false, error = error.message ?: "Dashboard loading failed") }
-                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (requestGeneration == generation) mutableState.update { it.copy(loading = false, error = error.message ?: "Dashboard loading failed") }
+            }
         }
     }
 
@@ -86,15 +89,22 @@ class DashboardViewModel(
     fun deleteGoal(goalId: Long) = mutate { engine.deleteDashboardGoal(goalId) }
 
     private fun mutate(action: suspend () -> Any) {
-        workScope.launch {
-            runCatching { action() }
-                .onSuccess { mutableState.update { it.copy(notice = "Dashboard updated") }; refresh() }
-                .onFailure { error -> mutableState.update { it.copy(error = error.message ?: "Dashboard update failed") } }
+        mutationScope.launch {
+            try {
+                action()
+                mutableState.update { it.copy(notice = "Dashboard updated") }
+                refresh()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                mutableState.update { it.copy(error = error.message ?: "Dashboard update failed") }
+            }
         }
     }
 
     fun close() {
         refreshJob?.cancel()
+        mutationSupervisor.cancel()
         if (ownsScope) workScope.cancel()
     }
 }

@@ -245,8 +245,11 @@ private fun ResultsPane(state: DistributionUiState, viewModel: DistributionViewM
                         columns.forEach { Text(it.label, Modifier.width(cellWidth)) }
                     }
                 }
-                Column(Modifier.weight(1f).fillMaxWidth().horizontalScroll(tableScrollState).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    months.forEach { month ->
+                LazyColumn(
+                    Modifier.weight(1f).fillMaxWidth().horizontalScroll(tableScrollState),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    items(months, key = { it }) { month ->
                         val frozenRow = frozen[month]
                         val result = live[month]
                         val negative = frozenRow?.isNegative ?: result?.isNegative ?: false

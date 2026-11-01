@@ -128,6 +128,9 @@ private fun runApplication(args: Array<String>) = application {
                         settingsViewModel.startCurrencyRefresh(autoUpdate = true, intervalMinutes = 60)
                         onDispose { settingsViewModel.stopCurrencyRefresh() }
                     }
+                    DisposableEffect(dashboardViewModel) {
+                        onDispose { dashboardViewModel.close() }
+                    }
                     var showInitialBalanceDialog by remember { mutableStateOf(newDatabase) }
                     var startupNotice by remember { mutableStateOf<String?>(null) }
                     ToastHost(
