@@ -1397,12 +1397,26 @@ impl LedgeraEngine {
         let mut result: Vec<CurrencyProviderStatusDto> = SUPPORTED_CURRENCY_PROVIDER_NAMES
             .iter()
             .map(|name| *name)
-            .map(|name| CurrencyProviderStatusDto {
-                name: name.to_owned(),
-                configured: true,
-                selected: selected == name,
-                last_status: last_status.clone(),
-                diagnostic: diagnostic.clone(),
+            .map(|name| {
+                let configured_setting = provider_settings
+                    .iter()
+                    .find(|setting| setting.provider_id == name);
+                CurrencyProviderStatusDto {
+                    name: name.to_owned(),
+                    configured: true,
+                    selected: configured_setting
+                        .map(|setting| setting.primary_enabled || setting.mode == "primary")
+                        .unwrap_or(selected == name),
+                    last_status: if configured_setting
+                        .map(|setting| setting.mode == "manual-only")
+                        .unwrap_or(false)
+                    {
+                        "manual-only".to_owned()
+                    } else {
+                        last_status.clone()
+                    },
+                    diagnostic: diagnostic.clone(),
+                }
             })
             .collect();
         for definition in currency_provider_definition_rows(&self.db_path).map_err(storage_error)? {

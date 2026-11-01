@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -186,7 +187,7 @@ fun SettingsScreen(
             settings = state.currencyProviderSettings,
             credentialStatuses = state.currencyProviderCredentialStatuses,
             exchangeRateCredentialStatus = state.exchangeRateCredentialStatus,
-            loading = state.loading,
+            loading = state.loading || state.currencyProviderUpdating,
             onAdd = { viewModel.clearFeedback(); editingProvider = null; showProviderDialog = true },
             onEdit = { provider -> viewModel.clearFeedback(); editingProvider = provider; showProviderDialog = true },
             onDelete = viewModel::deleteCurrencyProvider,
@@ -203,6 +204,18 @@ fun SettingsScreen(
                         primaryEnabled = mode == "primary",
                         fallbackEnabled = mode == "fallback",
                         credentialStatus = state.currencyProviderCredentialStatuses[provider.providerId]
+                            .toProviderCredentialStatus(),
+                    )
+                )
+            },
+            onSetBuiltinMode = { providerId, mode ->
+                viewModel.setCurrencyProviderMode(
+                    CurrencyProviderSettingRequest(
+                        providerId = providerId,
+                        mode = mode,
+                        primaryEnabled = mode == "primary",
+                        fallbackEnabled = mode == "fallback",
+                        credentialStatus = state.currencyProviderCredentialStatuses[providerId]
                             .toProviderCredentialStatus(),
                     )
                 )
@@ -493,6 +506,7 @@ private fun OnlineProvidersSection(
     onConfigureExchangeRate: () -> Unit,
     onConfigureCredential: (CurrencyProviderDefinition) -> Unit,
     onSetMode: (CurrencyProviderDefinition, String) -> Unit,
+    onSetBuiltinMode: (String, String) -> Unit,
     onTest: (CurrencyProviderDefinition) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
@@ -502,6 +516,36 @@ private fun OnlineProvidersSection(
                 Button(onClick = onAdd, enabled = !loading) { Text("Add custom") }
             }
             Text("Built-in: ${statuses.filter { !it.name.startsWith("custom:") }.joinToString { it.name }}", style = MaterialTheme.typography.bodySmall)
+            statuses.filter { !it.name.startsWith("custom:") }.forEach { provider ->
+                val setting = settings.firstOrNull { it.providerId == provider.name }
+                val enabled = setting?.mode?.let { it != "manual-only" }
+                    ?: provider.selected
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(provider.name, fontWeight = FontWeight.Medium)
+                        Text(
+                            if (setting?.mode == "fallback") "Fallback provider"
+                            else if (enabled) "Primary provider"
+                            else "Manual-only",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (provider.lastStatus != "never") {
+                            Text("Status: ${provider.lastStatus}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = { checked ->
+                            onSetBuiltinMode(provider.name, if (checked) "primary" else "manual-only")
+                        },
+                        enabled = !loading,
+                    )
+                }
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("exchange_rate credential: $exchangeRateCredentialStatus", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = onConfigureExchangeRate, enabled = !loading) { Text("Configure key") }

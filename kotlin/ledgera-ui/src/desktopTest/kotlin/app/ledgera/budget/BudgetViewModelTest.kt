@@ -11,6 +11,13 @@ import kotlinx.coroutines.Dispatchers
 
 class BudgetViewModelTest {
     @Test
+    fun nonActiveBudgetUsesLifecycleStateForVisualStatus() {
+        assertEquals("future", budgetVisualState("future", "on_track"))
+        assertEquals("expired", budgetVisualState("expired", "on_track"))
+        assertEquals("overpace", budgetVisualState("active", "overpace"))
+    }
+
+    @Test
     fun futureBudgetDateIsAcceptedAndConvertedAtEngineBoundary() {
         val engine = FakeBudgetEngine()
         val viewModel = BudgetViewModel(engine, CoroutineScope(Dispatchers.Unconfined))

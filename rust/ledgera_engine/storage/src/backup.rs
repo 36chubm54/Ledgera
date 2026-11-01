@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 const BACKUP_FORMAT: &str = "ledgera.full_backup";
-const BACKUP_VERSION: i64 = 6;
+const BACKUP_VERSION: i64 = 7;
 const MAX_BACKUP_BYTES: u64 = 50 * 1024 * 1024;
 
 const BACKUP_TABLES: &[&str] = &[
@@ -33,6 +33,7 @@ const BACKUP_TABLES: &[&str] = &[
     "currency_rates",
     "currency_provider_definitions",
     "currency_provider_settings",
+    "currency_builtin_provider_settings",
     "currency_rate_snapshots",
     "currency_refresh_runs",
 ];
@@ -170,7 +171,13 @@ fn sections(payload: &JsonValue) -> StorageResult<&Map<String, JsonValue>> {
     let version = object.get("version").and_then(JsonValue::as_i64);
     if !matches!(
         version,
-        Some(1) | Some(2) | Some(3) | Some(4) | Some(5) | Some(BACKUP_VERSION)
+        Some(1)
+            | Some(2)
+            | Some(3)
+            | Some(4)
+            | Some(5)
+            | Some(6)
+            | Some(BACKUP_VERSION)
     ) {
         return Err("Unsupported backup version".to_owned());
     }
@@ -729,6 +736,7 @@ fn validate_payload(conn: &Connection, payload: &JsonValue) -> StorageResult<Vec
             || *table == "currency_rates"
             || *table == "currency_provider_definitions"
             || *table == "currency_provider_settings"
+            || *table == "currency_builtin_provider_settings"
             || *table == "currency_rate_snapshots"
             || *table == "currency_refresh_runs")
             && !object.contains_key(*table)
@@ -997,6 +1005,7 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "distribution_subitems",
         "distribution_items",
         "currency_provider_settings",
+        "currency_builtin_provider_settings",
         "currency_provider_definitions",
         "currency_rate_snapshots",
         "currency_refresh_runs",
@@ -1026,6 +1035,7 @@ pub fn import_full_backup_json(db_path: &str, path: &str) -> StorageResult<FullB
         "currency_rates",
         "currency_provider_definitions",
         "currency_provider_settings",
+        "currency_builtin_provider_settings",
         "currency_rate_snapshots",
         "currency_refresh_runs",
     ] {

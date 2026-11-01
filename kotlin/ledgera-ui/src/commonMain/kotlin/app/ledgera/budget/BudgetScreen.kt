@@ -102,9 +102,11 @@ private fun BudgetList(state: BudgetUiState, viewModel: BudgetViewModel) {
 
 @Composable
 private fun BudgetRow(result: BudgetResultItem, selected: Boolean, onClick: () -> Unit) {
-    val tone = when (result.paceStatus) {
+    val visualState = budgetVisualState(result.status, result.paceStatus)
+    val tone = when (visualState) {
         "overspent" -> MaterialTheme.colorScheme.error
         "overpace" -> MaterialTheme.colorScheme.secondary
+        "future", "expired" -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> MaterialTheme.colorScheme.primary
     }
     Card(
@@ -119,10 +121,16 @@ private fun BudgetRow(result: BudgetResultItem, selected: Boolean, onClick: () -
             Text("${result.budget.startDate} -> ${result.budget.endDate} · ${result.status}")
             Text("Spent ${result.spentBase} · Remaining ${result.remainingBase}")
             LinearProgressIndicator({ (result.usagePct / 100.0).coerceIn(0.0, 1.0).toFloat() }, Modifier.fillMaxWidth(), color = tone)
-            Text("${result.usagePct.formatOne()}% used · ${result.paceStatus}", color = tone)
+            Text("${result.usagePct.formatOne()}% used · $visualState", color = tone)
             result.forecastStatusKey?.let { key -> Text(forecastText(key, result), style = MaterialTheme.typography.bodySmall) }
         }
     }
+}
+
+internal fun budgetVisualState(status: String, paceStatus: String): String = when (status.lowercase()) {
+    "future" -> "future"
+    "expired" -> "expired"
+    else -> paceStatus
 }
 
 private fun forecastText(key: String, result: BudgetResultItem): String = when (key) {

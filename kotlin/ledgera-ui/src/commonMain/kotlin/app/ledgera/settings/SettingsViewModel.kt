@@ -44,6 +44,7 @@ data class SettingsUiState(
     val currencyProviderSettings: List<CurrencyProviderSetting> = emptyList(),
     val currencyProviderCredentialStatuses: Map<String, String> = emptyMap(),
     val exchangeRateCredentialStatus: String = "Missing",
+    val currencyProviderUpdating: Boolean = false,
     val auditRunning: Boolean = false,
     val auditFindings: List<AuditFinding> = emptyList(),
     val auditSummary: AuditSummary? = null,
@@ -98,6 +99,7 @@ class SettingsViewModel(
                     .apply { put("exchange_rate", exchangeRateCredentialStatus) }
                 mutableState.value = mutableState.value.copy(
                     loading = false,
+                    currencyProviderUpdating = false,
                     wallets = wallets,
                     walletColorPalette = walletColorPalette,
                     walletIconCatalog = walletIconCatalog.ifEmpty {
@@ -186,10 +188,21 @@ class SettingsViewModel(
     }
 
     fun setCurrencyProviderMode(request: CurrencyProviderSettingRequest) {
-        mutableState.value = mutableState.value.copy(loading = true, error = null, notice = null)
+        mutableState.value = mutableState.value.copy(currencyProviderUpdating = true, error = null, notice = null)
         launchSafely {
-            runCatching { engine.upsertCurrencyProviderSetting(request) }
-                .onSuccess { refresh("Provider mode updated") }
+            runCatching {
+                engine.upsertCurrencyProviderSetting(request)
+                engine.currencyProviderSettings() to engine.currencyProviderStatuses()
+            }
+                .onSuccess { (settings, statuses) ->
+                    mutableState.value = mutableState.value.copy(
+                        currencyProviderUpdating = false,
+                        currencyProviderSettings = settings,
+                        currencyProviderStatuses = statuses,
+                        error = null,
+                        notice = "Provider mode updated",
+                    )
+                }
                 .onFailure(::showError)
         }
     }
@@ -352,6 +365,7 @@ class SettingsViewModel(
     private fun showError(error: Throwable) {
         mutableState.value = mutableState.value.copy(
             loading = false,
+            currencyProviderUpdating = false,
             auditRunning = false,
             error = error.message ?: error::class.simpleName ?: "Unknown error",
             notice = null,
@@ -362,14 +376,16 @@ class SettingsViewModel(
         val date = DateValidation.formatYmd(currentLedgerDate())
         val providers = runCatching { engine.currencyProviderStatuses() }.getOrDefault(emptyList())
         val settings = runCatching { engine.currencyProviderSettings() }.getOrDefault(emptyList())
+        val builtinProviderIds = setOf("nbk", "exchange_rate", "cbr", "static", "cache")
+        val explicitBuiltinChoice = settings.any { it.providerId in builtinProviderIds }
         val primary = settings.firstOrNull { it.primaryEnabled || it.mode == "primary" }?.providerId
-            ?: providers.firstOrNull { it.selected }?.name
-            ?: "nbk"
+            ?: if (explicitBuiltinChoice) "" else providers.firstOrNull { it.selected }?.name ?: "nbk"
         val fallback = settings.firstOrNull {
             it.providerId != primary && (it.fallbackEnabled || it.mode == "fallback")
         }?.providerId
-            ?: providers.firstOrNull { it.name == "exchange_rate" && it.name != primary }?.name
-            ?: "static"
+            ?: if (explicitBuiltinChoice) "" else providers.firstOrNull {
+                it.name == "exchange_rate" && it.name != primary
+            }?.name ?: "static"
         val credentialProvider = listOf(primary, fallback).firstOrNull { provider ->
             provider == "exchange_rate" || provider.startsWith("custom:")
         }

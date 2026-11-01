@@ -460,7 +460,12 @@ pub fn currency_provider_setting_rows(
         .prepare(
             "SELECT provider_id, mode, primary_enabled, fallback_enabled, credential_status,
                 last_status, last_diagnostic, last_checked_at
-         FROM currency_provider_settings ORDER BY provider_id",
+         FROM currency_provider_settings
+         UNION ALL
+         SELECT provider_id, mode, primary_enabled, fallback_enabled, credential_status,
+                last_status, last_diagnostic, last_checked_at
+         FROM currency_builtin_provider_settings
+         ORDER BY provider_id",
         )
         .map_err(sqlite_err)?;
     let rows = stmt
@@ -485,8 +490,10 @@ pub fn upsert_currency_provider_setting(
     payload: &CurrencyProviderSettingPayload,
 ) -> StorageResult<CurrencyProviderSettingRow> {
     let provider_id = payload.provider_id.trim().to_lowercase();
-    if !is_custom_provider_id(&provider_id) {
-        return Err("Only custom providers have editable settings".to_owned());
+    if !is_custom_provider_id(&provider_id)
+        && !SUPPORTED_CURRENCY_PROVIDER_NAMES.contains(&provider_id.as_str())
+    {
+        return Err("Unsupported currency provider setting".to_owned());
     }
     let mode = payload.mode.trim().to_lowercase();
     if !["primary", "fallback", "manual-only"].contains(&mode.as_str()) {
@@ -498,16 +505,65 @@ pub fn upsert_currency_provider_setting(
     }
     let conn = Connection::open(db_path).map_err(sqlite_err)?;
     ensure_currency_refresh_schema(&conn)?;
+    let is_builtin = SUPPORTED_CURRENCY_PROVIDER_NAMES.contains(&provider_id.as_str());
+    let settings_table = if is_builtin {
+        "currency_builtin_provider_settings"
+    } else {
+        "currency_provider_settings"
+    };
+    conn.execute(
+        &format!(
+            "INSERT INTO {settings_table} (provider_id) VALUES (?1)
+             ON CONFLICT(provider_id) DO NOTHING"
+        ),
+        [provider_id.as_str()],
+    )
+    .map_err(sqlite_err)?;
+    if mode == "primary" {
+        for table in [
+            "currency_provider_settings",
+            "currency_builtin_provider_settings",
+        ] {
+            conn.execute(
+                &format!(
+                    "UPDATE {table}
+                     SET mode = CASE WHEN mode = 'primary' THEN 'manual-only' ELSE mode END,
+                         primary_enabled = 0
+                     WHERE provider_id <> ?1"
+                ),
+                [provider_id.as_str()],
+            )
+            .map_err(sqlite_err)?;
+        }
+    } else if mode == "fallback" {
+        for table in [
+            "currency_provider_settings",
+            "currency_builtin_provider_settings",
+        ] {
+            conn.execute(
+                &format!(
+                    "UPDATE {table}
+                     SET mode = CASE WHEN mode = 'fallback' THEN 'manual-only' ELSE mode END,
+                         fallback_enabled = 0
+                     WHERE provider_id <> ?1"
+                ),
+                [provider_id.as_str()],
+            )
+            .map_err(sqlite_err)?;
+        }
+    }
     let changed = conn
         .execute(
-            "UPDATE currency_provider_settings
-         SET mode = ?2, primary_enabled = ?3, fallback_enabled = ?4, credential_status = ?5
-         WHERE provider_id = ?1",
+            &format!(
+                "UPDATE {settings_table}
+                 SET mode = ?2, primary_enabled = ?3, fallback_enabled = ?4, credential_status = ?5
+                 WHERE provider_id = ?1"
+            ),
             params![
                 provider_id,
                 mode,
-                payload.primary_enabled as i64,
-                payload.fallback_enabled as i64,
+                (mode == "primary" && payload.primary_enabled) as i64,
+                (mode == "fallback" && payload.fallback_enabled) as i64,
                 credential_status
             ],
         )
@@ -1584,6 +1640,16 @@ pub fn ensure_currency_refresh_schema(conn: &Connection) -> StorageResult<()> {
             last_status TEXT NOT NULL DEFAULT 'never',
             last_diagnostic TEXT NOT NULL DEFAULT '',
             last_checked_at TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS currency_builtin_provider_settings (
+            provider_id TEXT PRIMARY KEY,
+            mode TEXT NOT NULL DEFAULT 'manual-only',
+            primary_enabled INTEGER NOT NULL DEFAULT 0,
+            fallback_enabled INTEGER NOT NULL DEFAULT 0,
+            credential_status TEXT NOT NULL DEFAULT 'missing',
+            last_status TEXT NOT NULL DEFAULT 'never',
+            last_diagnostic TEXT NOT NULL DEFAULT '',
+            last_checked_at TEXT NOT NULL DEFAULT ''
         );",
     ).map_err(sqlite_err)
 }
@@ -1924,6 +1990,47 @@ mod tests {
             provider_order("nbk", "nbk", true),
             vec!["nbk", "cbr", "static", "cache"]
         );
+    }
+
+    #[test]
+    fn built_in_provider_setting_can_be_enabled_and_disabled() {
+        let path = std::env::temp_dir().join(format!(
+            "ledgera-built-in-provider-setting-{}.db",
+            std::process::id()
+        ));
+        let path_text = path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&path);
+        crate::initialize_database(&path_text).unwrap();
+
+        let primary = upsert_currency_provider_setting(
+            &path_text,
+            &CurrencyProviderSettingPayload {
+                provider_id: "nbk".to_owned(),
+                mode: "primary".to_owned(),
+                primary_enabled: true,
+                fallback_enabled: false,
+                credential_status: "missing".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(primary.provider_id, "nbk");
+        assert_eq!(primary.mode, "primary");
+        assert!(primary.primary_enabled);
+
+        let disabled = upsert_currency_provider_setting(
+            &path_text,
+            &CurrencyProviderSettingPayload {
+                provider_id: "nbk".to_owned(),
+                mode: "manual-only".to_owned(),
+                primary_enabled: false,
+                fallback_enabled: false,
+                credential_status: "missing".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(disabled.mode, "manual-only");
+        assert!(!disabled.primary_enabled);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
