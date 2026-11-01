@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -76,6 +77,7 @@ fun OperationsScreen(
     fileActions: OperationsFileActions = NoOperationsFileActions,
 ) {
     val state by viewModel.state.collectAsState()
+    val journalListState = rememberLazyListState()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -145,10 +147,12 @@ fun OperationsScreen(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (state.loading) {
-                    CircularProgressIndicator()
-                } else if (state.records.isEmpty()) {
-                    Text("No operations for the selected filter.")
+                if (state.records.isEmpty()) {
+                    if (state.loading) {
+                        CircularProgressIndicator()
+                    } else {
+                        Text("No operations for the selected filter.")
+                    }
                 } else {
                     val journalItems = operationJournalItems(
                         records = state.records,
@@ -158,27 +162,37 @@ fun OperationsScreen(
                         selectedBulkTransferIds = state.selectedBulkTransferIds,
                         tagColors = state.tagColors,
                     )
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(journalItems, key = { it.key }) { item ->
-                            OperationRow(
-                                item = item,
-                                selectiveDeleteMode = state.selectiveDeleteMode,
-                                onClick = {
-                                    if (state.selectiveDeleteMode) {
-                                        if (item.transferId != null) {
-                                            viewModel.toggleBulkTransfer(item.transferId)
+                    Box(Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            state = journalListState,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(journalItems, key = { it.key }) { item ->
+                                OperationRow(
+                                    item = item,
+                                    selectiveDeleteMode = state.selectiveDeleteMode,
+                                    onClick = {
+                                        if (state.selectiveDeleteMode) {
+                                            if (item.transferId != null) {
+                                                viewModel.toggleBulkTransfer(item.transferId)
+                                            } else {
+                                                item.selectableRecordId?.let(viewModel::toggleBulkRecord)
+                                            }
+                                        } else if (item.transferId != null) {
+                                            viewModel.selectTransfer(item.transferId)
                                         } else {
-                                            item.selectableRecordId?.let(viewModel::toggleBulkRecord)
+                                            item.selectableRecordId?.let(viewModel::select)
                                         }
-                                    } else if (item.transferId != null) {
-                                        viewModel.selectTransfer(item.transferId)
-                                    } else {
-                                        item.selectableRecordId?.let(viewModel::select)
-                                    }
-                                },
+                                    },
+                                )
+                            }
+                        }
+                        if (state.loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .align(androidx.compose.ui.Alignment.TopEnd)
+                                    .padding(8.dp),
                             )
                         }
                     }
@@ -1392,7 +1406,16 @@ private fun OperationRow(
                         Text(item.title, fontWeight = FontWeight.SemiBold)
                         item.targetWallet?.let { WalletBadge(it, 26.dp) }
                     }
-                    Text(item.amount)
+                    Text(
+                        journalAmountText(item),
+                        color = when (item.amountKind) {
+                            "income" -> MaterialTheme.colorScheme.primary
+                            "expense", "mandatory_expense" -> MaterialTheme.colorScheme.error
+                            "transfer" -> MaterialTheme.colorScheme.secondary
+                            else -> MaterialTheme.colorScheme.onSurface
+                        },
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(item.meta)

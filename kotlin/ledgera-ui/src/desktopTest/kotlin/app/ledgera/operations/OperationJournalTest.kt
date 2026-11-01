@@ -69,6 +69,29 @@ class OperationJournalTest {
         assertEquals("#fc5c66", items.single().tagColors["food"])
         assertEquals(null, items.single().tagColors["new"])
     }
+
+    @Test
+    fun journalAmountsUseTypeSpecificSignsAndNeutralTransferMarker() {
+        val income = operationJournalItems(
+            listOf(operationRecord(id = 6, type = "income")),
+            selectedRecordId = null,
+        ).single()
+        val expense = operationJournalItems(
+            listOf(operationRecord(id = 7, type = "expense", amount = "-10.00")),
+            selectedRecordId = null,
+        ).single()
+        val transfer = operationJournalItems(
+            listOf(
+                operationRecord(id = 8, type = "expense", transferId = 11),
+                operationRecord(id = 9, type = "income", transferId = 11),
+            ),
+            selectedRecordId = null,
+        ).single()
+
+        assertEquals("+10.00 KZT", journalAmountText(income))
+        assertEquals("-10.00 KZT", journalAmountText(expense))
+        assertEquals("↔ 10.00 KZT", journalAmountText(transfer))
+    }
 }
 
 private fun operationRecord(
@@ -79,6 +102,7 @@ private fun operationRecord(
     transferId: Long? = null,
     relatedDebtId: Long? = null,
     tags: List<String> = emptyList(),
+    amount: String = "10.00",
 ) = OperationRecord(
     id = id,
     type = type,
@@ -86,7 +110,7 @@ private fun operationRecord(
     walletId = walletId,
     transferId = transferId,
     relatedDebtId = relatedDebtId,
-    amountOriginal = "10.00",
+    amountOriginal = amount,
     currency = "KZT",
     rateAtOperation = "1.000000",
     amountBase = "10.00",

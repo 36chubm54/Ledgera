@@ -16,6 +16,7 @@ internal data class OperationJournalItem(
     val linkedLabel: String?,
     val selected: Boolean,
     val bulkSelectable: Boolean,
+    val amountKind: String = "expense",
     val wallet: WalletOption? = null,
     val targetWallet: WalletOption? = null,
 )
@@ -73,6 +74,7 @@ private fun standaloneJournalItem(
         linkedLabel = if (record.relatedDebtId != null) "Debt-linked" else null,
         selected = selectedRecordId == record.id || selected,
         bulkSelectable = bulkSelectable,
+        amountKind = record.type,
         wallet = wallets.firstOrNull { it.id == record.walletId },
     )
 }
@@ -103,6 +105,7 @@ private fun transferJournalItem(
         linkedLabel = "Transfer-linked",
         selected = selectedBulkTransferIds.contains(transferId),
         bulkSelectable = true,
+        amountKind = "transfer",
         wallet = wallets.firstOrNull { it.id == primary.walletId },
         targetWallet = if (expense != null && income != null) {
             wallets.firstOrNull { it.id == income.walletId }
@@ -118,3 +121,18 @@ private fun isTransferCommissionMarker(description: String): Boolean =
 private fun walletLabel(walletId: Long, wallets: List<WalletOption>): String =
     wallets.firstOrNull { it.id == walletId }?.name?.takeIf(String::isNotBlank)
         ?: "wallet #$walletId"
+
+internal fun journalAmountText(item: OperationJournalItem): String {
+    val unsignedAmount = item.amount
+        .trim()
+        .removePrefix("+")
+        .removePrefix("-")
+        .removePrefix("−")
+        .trimStart()
+    return when (item.amountKind) {
+        "income" -> "+$unsignedAmount"
+        "expense", "mandatory_expense" -> "-$unsignedAmount"
+        "transfer" -> "↔ $unsignedAmount"
+        else -> item.amount
+    }
+}
