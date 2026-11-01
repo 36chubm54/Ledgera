@@ -45,6 +45,14 @@ def test_parse_ymd_rejects_pre_unix_epoch_date():
         parse_ymd("1969-12-31")
 
 
+@pytest.mark.parametrize("period", ["1969", "1969-12"])
+def test_report_period_rejects_pre_unix_epoch_period(period):
+    with pytest.raises(ValueError, match="1970-01-01"):
+        parse_report_period_start(period)
+    with pytest.raises(ValueError, match="1970-01-01"):
+        parse_report_period_end(period)
+
+
 def test_ensure_not_before_unix_epoch_raises():
     with pytest.raises(ValueError, match="1970-01-01"):
         ensure_not_before_unix_epoch(date(1960, 1, 1))

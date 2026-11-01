@@ -13,6 +13,7 @@ import app.ledgera.model.UpdateMandatoryTemplateRequest
 import app.ledgera.model.WalletOption
 import app.ledgera.operations.ImportFileSnapshotProvider
 import app.ledgera.validation.DateValidation
+import app.ledgera.validation.MoneyValidation
 import app.ledgera.validation.currentLedgerDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -587,7 +588,7 @@ class MandatoryViewModel(
     ): MandatoryTemplateDraft {
         if (draft.id != null) return draft
         val amount = draft.amountOriginal.trim().toDoubleOrNull()
-        if (amount == null || amount <= 0.0) {
+        if (MoneyValidation.validatePositiveAmount(draft.amountOriginal) != null || amount == null) {
             return draft.copy(amountBase = "", rateAtOperation = "")
         }
         val currency = draft.currency.trim().uppercase()

@@ -10,6 +10,8 @@ RATE_SCALE: Final[int] = 6
 MONEY_QUANT: Final[Decimal] = Decimal("0.01")
 RATE_QUANT: Final[Decimal] = Decimal("0.000001")
 MINOR_FACTOR: Final[int] = 100
+MINOR_MIN: Final[int] = -(2**63)
+MINOR_MAX: Final[int] = 2**63 - 1
 
 
 _RUST_MONEY_CORE = get_money_core()
@@ -57,7 +59,10 @@ def _py_rate_to_text(value: object) -> str:
 
 def _py_to_minor_units(value: object) -> int:
     quantized = _py_quantize_money(value)
-    return int((quantized * MINOR_FACTOR).to_integral_value(rounding=ROUND_HALF_UP))
+    minor = int((quantized * MINOR_FACTOR).to_integral_value(rounding=ROUND_HALF_UP))
+    if not MINOR_MIN <= minor <= MINOR_MAX:
+        raise OverflowError("minor units overflow")
+    return minor
 
 
 def _py_minor_to_money(value: object) -> float:
@@ -105,8 +110,13 @@ def rate_to_text(value: object) -> str:
 
 
 def to_minor_units(value: object) -> int:
+    if _RUST_MONEY_CORE is None:
+        return _py_to_minor_units(value)
     quantized = quantize_money(value)
-    return int((quantized * MINOR_FACTOR).to_integral_value(rounding=ROUND_HALF_UP))
+    minor = int((quantized * MINOR_FACTOR).to_integral_value(rounding=ROUND_HALF_UP))
+    if not MINOR_MIN <= minor <= MINOR_MAX:
+        raise OverflowError("minor units overflow")
+    return minor
 
 
 def minor_to_money(value: object) -> float:

@@ -13,7 +13,7 @@ object MoneyValidation {
             return false
         }
         val unsigned = normalized.removePrefix("+")
-        return roundedCents(unsigned) > 0
+        return roundedCents(unsigned)?.let { it > 0L } == true
     }
 
     fun isNonNegativeMoneyAmount(value: String): Boolean {
@@ -21,19 +21,39 @@ object MoneyValidation {
         if (!isUnsignedMoneyText(normalized)) {
             return false
         }
-        return roundedCents(normalized.removePrefix("+")) >= 0
+        return roundedCents(normalized.removePrefix("+")) != null
     }
 
     private fun isUnsignedMoneyText(value: String): Boolean =
         Regex("\\+?(\\d+(\\.\\d*)?|\\.\\d+)").matches(value)
 
-    private fun roundedCents(unsigned: String): Int {
+    private fun roundedCents(unsigned: String): Long? {
         val integerPart = unsigned.substringBefore(".")
-        if (integerPart.any { it != '0' }) {
-            return 1
+        var minorUnits = 0L
+        for (digit in integerPart) {
+            val value = digit - '0'
+            if (minorUnits > (Long.MAX_VALUE - value) / 10L) {
+                return null
+            }
+            minorUnits = minorUnits * 10L + value
         }
+        if (minorUnits > Long.MAX_VALUE / 100L) {
+            return null
+        }
+        minorUnits *= 100L
         val fractionalPart = unsigned.substringAfter(".", "")
         val centDigits = fractionalPart.take(2).padEnd(2, '0')
-        return centDigits.toInt() + if ((fractionalPart.getOrNull(2) ?: '0') >= '5') 1 else 0
+        val cents = centDigits.toInt()
+        if (minorUnits > Long.MAX_VALUE - cents) {
+            return null
+        }
+        minorUnits += cents
+        if ((fractionalPart.getOrNull(2) ?: '0') >= '5') {
+            if (minorUnits == Long.MAX_VALUE) {
+                return null
+            }
+            minorUnits++
+        }
+        return minorUnits
     }
 }

@@ -17,6 +17,7 @@ import app.ledgera.model.UpdateTransferRequest
 import app.ledgera.model.WalletOption
 import app.ledgera.validation.DateValidation
 import app.ledgera.validation.CurrencyValidation
+import app.ledgera.validation.MoneyValidation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -523,13 +524,16 @@ class OperationsViewModel(
     }
 
     fun createCurrencyTransfer(request: CurrencyTransferRequest, onSuccess: () -> Unit = {}) {
-        val amount = request.amount.toDoubleOrNull()
         val dateError = DateValidation.validateDmyNotFuture(request.date)
+        val selectedWalletCurrencies = walletCurrencies(request.fromWalletId, request.toWalletId)
         val error = when {
             request.fromWalletId <= 0 || request.toWalletId <= 0 || request.fromWalletId == request.toWalletId -> "Select different source and target wallets"
             dateError != null -> dateError
-            amount == null || amount <= 0.0 -> "Transfer amount must be positive"
+            MoneyValidation.validatePositiveAmount(request.amount) != null -> "Transfer amount must be positive"
             !CurrencyValidation.isSupportedCurrency(request.amountCurrency) -> "Select a valid amount currency"
+            selectedWalletCurrencies.isNotEmpty() &&
+                request.amountCurrency.trim().uppercase() !in selectedWalletCurrencies ->
+                "Amount currency must match the source or target wallet"
             else -> null
         }
         if (error != null) {
@@ -551,6 +555,12 @@ class OperationsViewModel(
             }
         }
     }
+
+    private fun walletCurrencies(fromWalletId: Long, toWalletId: Long): Set<String> =
+        mutableState.value.wallets
+            .filter { it.id == fromWalletId || it.id == toWalletId }
+            .map { it.currency.trim().uppercase() }
+            .toSet()
 
     fun quoteCurrencyTransfer(request: CurrencyTransferRequest) {
         quoteJob?.cancel()

@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import InitVar, dataclass, field, replace
 from datetime import date as dt_date
 from itertools import count
+import math
 from typing import Literal
 
 from utils.finance.money import quantize_money, to_money_float, to_rate_float
@@ -69,7 +70,10 @@ class Record(ABC):
             object.__setattr__(self, "amount_original", to_money_float(self.amount_original))
         if self.amount_base is not None:
             object.__setattr__(self, "amount_base", to_money_float(self.amount_base))
-        object.__setattr__(self, "rate_at_operation", to_rate_float(self.rate_at_operation))
+        normalized_rate = to_rate_float(self.rate_at_operation)
+        if not math.isfinite(normalized_rate) or normalized_rate <= 0:
+            raise ValueError("rate_at_operation must be positive")
+        object.__setattr__(self, "rate_at_operation", normalized_rate)
 
         if not self.currency:
             object.__setattr__(self, "currency", "KZT")

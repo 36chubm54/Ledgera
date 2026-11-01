@@ -7,6 +7,8 @@ from datetime import date as dt_date
 from enum import Enum
 from typing import Any
 
+from .validation import parse_ymd
+
 
 class BudgetStatus(Enum):
     FUTURE = "future"
@@ -55,13 +57,17 @@ class Budget:
         normalized_scope_value = str(self.scope_value or self.category or "").strip()
         if not normalized_scope_value:
             raise ValueError("scope_value is required")
+        start = parse_ymd(self.start_date)
+        end = parse_ymd(self.end_date)
+        if start > end:
+            raise ValueError("Budget start date must not be after end date")
         object.__setattr__(self, "scope_type", normalized_scope_type)
         object.__setattr__(self, "scope_value", normalized_scope_value)
         object.__setattr__(self, "category", str(self.category or normalized_scope_value).strip())
 
     def status(self, today: dt_date) -> BudgetStatus:
-        start = dt_date.fromisoformat(self.start_date)
-        end = dt_date.fromisoformat(self.end_date)
+        start = parse_ymd(self.start_date)
+        end = parse_ymd(self.end_date)
         if today < start:
             return BudgetStatus.FUTURE
         if today > end:
@@ -69,13 +75,13 @@ class Budget:
         return BudgetStatus.ACTIVE
 
     def total_days(self) -> int:
-        start = dt_date.fromisoformat(self.start_date)
-        end = dt_date.fromisoformat(self.end_date)
+        start = parse_ymd(self.start_date)
+        end = parse_ymd(self.end_date)
         return max(1, (end - start).days + 1)
 
     def elapsed_days(self, today: dt_date) -> int:
-        start = dt_date.fromisoformat(self.start_date)
-        end = dt_date.fromisoformat(self.end_date)
+        start = parse_ymd(self.start_date)
+        end = parse_ymd(self.end_date)
         if today < start:
             return 0
         if today > end:

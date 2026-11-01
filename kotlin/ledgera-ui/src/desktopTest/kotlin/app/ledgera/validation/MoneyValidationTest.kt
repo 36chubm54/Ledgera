@@ -32,4 +32,16 @@ class MoneyValidationTest {
         assertEquals("Amount must be zero or a positive number", MoneyValidation.validateNonNegativeAmount("ten"))
         assertEquals("Amount must be zero or a positive number", MoneyValidation.validateNonNegativeAmount("-0.01"))
     }
+
+    @Test
+    fun amountValidatorRejectsValuesThatDoNotFitMinorUnits() {
+        assertEquals(
+            "Amount must be a positive number",
+            MoneyValidation.validatePositiveAmount("92233720368547758.08"),
+        )
+        assertEquals(
+            "Amount must be zero or a positive number",
+            MoneyValidation.validateNonNegativeAmount("92233720368547758.08"),
+        )
+    }
 }

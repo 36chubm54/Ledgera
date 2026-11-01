@@ -25,6 +25,12 @@ class DateValidationTest {
     }
 
     @Test
+    fun dateParsersRejectDatesBeforeUnixEpoch() {
+        assertEquals(null, DateValidation.parseYmd("1969-12-31"))
+        assertEquals(null, DateValidation.parseDmyStrict("31.12.1969"))
+    }
+
+    @Test
     fun validateYmdNotFutureAcceptsTodayAndPastDates() {
         val today = LedgerDate(year = 2026, month = 6, day = 6)
 

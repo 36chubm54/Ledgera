@@ -5,6 +5,7 @@ import app.ledgera.model.BudgetItem
 import app.ledgera.model.BudgetResultItem
 import app.ledgera.model.CreateBudgetRequest
 import app.ledgera.validation.DateValidation
+import app.ledgera.validation.MoneyValidation
 import app.ledgera.validation.currentLedgerDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -164,7 +165,7 @@ class BudgetViewModel(
     fun saveEditLimit() {
         val state = mutableState.value
         val id = state.editLimitBudgetId ?: return
-        if (state.editLimit.toDoubleOrNull()?.let { it > 0.0 } != true) return fail("Budget limit must be positive")
+        if (MoneyValidation.validatePositiveAmount(state.editLimit) != null) return fail("Budget limit must be positive")
         mutableState.value = state.copy(loading = true, error = null)
         scope.launch {
             runCatching { engine.updateBudgetLimit(id, state.editLimit.trim()) }
@@ -194,7 +195,7 @@ class BudgetViewModel(
         val end = DateValidation.parseDmyStrict(draft.endDate)
         if (start == null || end == null) return "Dates must use valid DD.MM.YYYY values"
         if (start > end) return "Start date must be before end date"
-        if (draft.limitBase.toDoubleOrNull()?.let { it > 0.0 } != true) return "Budget limit must be positive"
+        if (MoneyValidation.validatePositiveAmount(draft.limitBase) != null) return "Budget limit must be positive"
         return null
     }
 

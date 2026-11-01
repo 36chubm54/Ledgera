@@ -59,6 +59,7 @@ import app.ledgera.ui.WalletBadge
 import app.ledgera.ui.toComposeTagColor
 import app.ledgera.validation.currentLedgerDate
 import app.ledgera.validation.DateValidation
+import app.ledgera.validation.MoneyValidation
 
 interface OperationsFileActions {
     fun openImportPath(): String?
@@ -533,24 +534,34 @@ private fun CreateTransferDialog(
 
     val sourceWallet = wallets.firstOrNull { it.id == fromWalletId }
     val targetWallet = wallets.firstOrNull { it.id == toWalletId }
-    val crossCurrency = sourceWallet != null && targetWallet != null && sourceWallet.currency != targetWallet.currency
-    val amountCurrencies = listOfNotNull(sourceWallet?.currency, targetWallet?.currency).distinct()
+    val sourceCurrency = sourceWallet?.currency?.trim()?.uppercase()
+    val targetCurrency = targetWallet?.currency?.trim()?.uppercase()
+    val crossCurrency = sourceCurrency != null && targetCurrency != null && sourceCurrency != targetCurrency
+    val amountCurrencies = listOfNotNull(sourceCurrency, targetCurrency).distinct()
+    val normalizedCurrency = currency.trim().uppercase()
+    val commissionValue = commissionAmount.ifBlank { "0" }
+    val commissionError = MoneyValidation.validateNonNegativeAmount(commissionValue)
+    val commissionCurrencyMatchesSource = sourceCurrency == null || commissionCurrency.trim().uppercase() == sourceCurrency
     LaunchedEffect(sourceWallet?.id, targetWallet?.id) {
         if (currency !in amountCurrencies) currency = amountCurrencies.firstOrNull() ?: baseCurrency
     }
     val validationError = when {
         fromWalletId == toWalletId -> "Select different source and target wallets"
         DateValidation.validateDmyNotFuture(date) != null -> DateValidation.validateDmyNotFuture(date)
-        amount.toDoubleOrNull()?.let { it > 0 } != true -> "Transfer amount must be positive"
-        currency !in amountCurrencies -> "Amount currency must match one of the selected wallets"
+        MoneyValidation.validatePositiveAmount(amount) != null -> "Transfer amount must be positive"
+        normalizedCurrency !in amountCurrencies -> "Amount currency must match one of the selected wallets"
+        commissionError != null -> "Commission must be zero or a positive number"
+        !commissionCurrencyMatchesSource -> "Commission currency must match the source wallet"
         quote == null -> "Calculating transfer"
         else -> null
     }
 
     LaunchedEffect(fromWalletId, toWalletId, date, amount, currency, commissionAmount, commissionCurrency, crossCurrency) {
-        if (amount.toDoubleOrNull()?.let { it > 0 } == true &&
+        if (MoneyValidation.validatePositiveAmount(amount) == null &&
             DateValidation.validateDmyNotFuture(date) == null &&
-            currency in amountCurrencies &&
+            normalizedCurrency in amountCurrencies &&
+            commissionError == null &&
+            commissionCurrencyMatchesSource &&
             fromWalletId > 0 &&
             toWalletId > 0 &&
             fromWalletId != toWalletId
@@ -561,9 +572,9 @@ private fun CreateTransferDialog(
                     toWalletId = toWalletId,
                     date = date,
                     amount = amount,
-                    amountCurrency = currency,
+                    amountCurrency = normalizedCurrency,
                     description = description,
-                    commissionAmount = commissionAmount.ifBlank { "0" },
+                    commissionAmount = commissionValue,
                     commissionCurrency = commissionCurrency.ifBlank { sourceWallet?.currency ?: baseCurrency },
                 )
             )

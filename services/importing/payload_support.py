@@ -11,6 +11,7 @@ from domain.debt import Debt, DebtKind, DebtOperationType, DebtPayment, DebtStat
 from domain.distribution import DistributionItem, DistributionSubitem, FrozenDistributionRow
 from domain.goal import Goal
 from domain.records import ExpenseRecord, IncomeRecord, Record
+from domain.validation import parse_ymd
 from domain.wallets import Wallet
 from services.importing.parser import ParsedImportData
 from utils.finance.money import to_money_float
@@ -38,6 +39,7 @@ def frozen_rows_from_payload(
             continue
         try:
             datetime.strptime(month, "%Y-%m")
+            parse_ymd(f"{month}-01")
         except ValueError as exc:
             if strict:
                 raise ValueError(f"Distribution snapshot has invalid month: {month}") from exc

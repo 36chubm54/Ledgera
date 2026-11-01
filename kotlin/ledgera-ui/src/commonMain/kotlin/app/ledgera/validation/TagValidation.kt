@@ -12,6 +12,9 @@ object TagValidation {
         return null
     }
 
+    fun normalizeTagName(value: String): String? =
+        stripTagNoise(value).lowercase().takeIf { it.isNotEmpty() && !it.all(Char::isDigit) }
+
     fun parseTagText(value: String): List<String> =
         splitTagText(value)
             .mapNotNull(::normalizeTagName)
@@ -30,11 +33,6 @@ object TagValidation {
             return emptyList()
         }
         return trimmed.split(splitRegex)
-    }
-
-    private fun normalizeTagName(value: String): String? {
-        val cleaned = stripTagNoise(value).lowercase()
-        return cleaned.takeIf { it.isNotEmpty() && !it.all(Char::isDigit) }
     }
 
     private fun stripTagNoise(value: String): String =

@@ -393,6 +393,9 @@ fn budget_date_parts(value: &str) -> StorageResult<(i32, i32, i32)> {
     if !(1..=days[(month - 1) as usize]).contains(&day) {
         return Err(format!("Invalid budget date: {value}"));
     }
+    if (year, month, day) < (1970, 1, 1) {
+        return Err(format!("Budget date cannot be earlier than 1970-01-01: {value}"));
+    }
     Ok((year, month, day))
 }
 
@@ -665,10 +668,7 @@ fn validate_debt_date(value: &str) -> StorageResult<()> {
     if day < 1 || day > max_day {
         return Err(format!("Date day must be between 01 and {max_day:02}"));
     }
-    if (year, month, day) > crate::current_local_date() {
-        return Err("Date cannot be in the future".to_owned());
-    }
-    Ok(())
+    crate::validate_ymd_date(value)
 }
 
 fn parse_debt_date_part(value: &str, start: usize, end: usize, name: &str) -> StorageResult<i32> {

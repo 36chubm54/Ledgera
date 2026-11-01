@@ -65,6 +65,7 @@ import app.ledgera.ui.WalletIconKeys
 import app.ledgera.ui.toComposeTagColor
 import app.ledgera.validation.CurrencyValidation
 import app.ledgera.validation.DateValidation
+import app.ledgera.validation.RateValidation
 import app.ledgera.validation.currentLedgerDate
 
 interface SettingsFileActions {
@@ -881,7 +882,7 @@ private fun CurrencyRateDialog(
     val currencyError = CurrencyValidation.validateSupportedCurrency(currency)
         ?.takeIf { currency != baseCurrency }
     val dateError = DateValidation.validateGuiNotFuture(date)
-    val rateError = if (rate.toDoubleOrNull()?.let { it > 0.0 } == true) null else "Rate must be greater than zero"
+    val rateError = RateValidation.validatePositiveRate(rate)
     val sourceError = when {
         source.trim().isEmpty() -> "Manual source label is required"
         source.trim().length > 64 -> "Manual source label must be 64 characters or fewer"
@@ -894,7 +895,7 @@ private fun CurrencyRateDialog(
             it.currency.equals(currency.trim(), ignoreCase = true) &&
             it.effectiveDate == (DateValidation.formatGuiDateToYmd(date) ?: date.trim())
     }
-    val valid = currencyError == null && currency != baseCurrency && dateError == null && rateError == null && sourceError == null
+    val valid = currencyError == null && !currency.equals(baseCurrency, ignoreCase = true) && dateError == null && rateError == null && sourceError == null
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(if (existingRate == null) "Add currency rate" else "Update currency rate") },

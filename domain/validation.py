@@ -48,6 +48,7 @@ def parse_report_period_start(value: str) -> str:
 
     if re.fullmatch(r"\d{4}", period):
         start_date = date(int(period), 1, 1)
+        ensure_not_before_unix_epoch(start_date)
         ensure_not_future(start_date)
         return start_date.isoformat()
 
@@ -56,6 +57,7 @@ def parse_report_period_start(value: str) -> str:
         if not (1 <= month <= 12):
             raise ValueError("Invalid month in period filter")
         start_date = date(year, month, 1)
+        ensure_not_before_unix_epoch(start_date)
         ensure_not_future(start_date)
         return start_date.isoformat()
 
@@ -75,6 +77,7 @@ def parse_report_period_end(value: str) -> str:
     if re.fullmatch(r"\d{4}", period):
         year = int(period)
         end_date = date(year, 12, 31)
+        ensure_not_before_unix_epoch(end_date)
         ensure_not_future(end_date)
         return end_date.isoformat()
 
@@ -84,6 +87,7 @@ def parse_report_period_end(value: str) -> str:
             raise ValueError("Invalid month in period end filter")
         last_day = calendar.monthrange(year, month)[1]
         end_date = date(year, month, last_day)
+        ensure_not_before_unix_epoch(end_date)
         ensure_not_future(end_date)
         return end_date.isoformat()
 

@@ -4,6 +4,11 @@ from domain.currency import CurrencyService
 
 
 class TestCurrencyService:
+    @pytest.mark.parametrize("rate", [0.0, -1.0, float("nan"), float("inf")])
+    def test_invalid_rates_are_rejected(self, rate):
+        with pytest.raises(ValueError, match="positive number"):
+            CurrencyService(rates={"USD": rate}, base="KZT")
+
     def test_convert_same_currency(self):
         service = CurrencyService(rates={"USD": 500.0}, base="KZT")
         result = service.convert(100.0, "KZT")

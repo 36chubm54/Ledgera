@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date as dt_date
+import math
 
 from utils.finance.money import to_money_float, to_rate_float
 
@@ -33,7 +34,10 @@ class Transfer:
             raise ValueError("Transfer source and destination wallets must be different")
         object.__setattr__(self, "amount_original", to_money_float(self.amount_original))
         object.__setattr__(self, "amount_base", to_money_float(self.amount_base))
-        object.__setattr__(self, "rate_at_operation", to_rate_float(self.rate_at_operation))
+        normalized_rate = to_rate_float(self.rate_at_operation)
+        if not math.isfinite(normalized_rate) or normalized_rate <= 0:
+            raise ValueError("Transfer rate_at_operation must be positive")
+        object.__setattr__(self, "rate_at_operation", normalized_rate)
         if float(self.amount_original) <= 0:
             raise ValueError("Transfer amount must be positive")
         if float(self.amount_base) <= 0:

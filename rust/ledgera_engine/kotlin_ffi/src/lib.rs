@@ -2647,6 +2647,9 @@ fn validate_ymd_date(value: &str) -> Result<(), LedgeraEngineError> {
             "Date day must be between 01 and {max_day:02}"
         )));
     }
+    if (year, month, day) < (1970, 1, 1) {
+        return Err(validation_error("Date cannot be earlier than 1970-01-01"));
+    }
     if (year, month, day) > current_local_date() {
         return Err(validation_error("Date cannot be in the future"));
     }

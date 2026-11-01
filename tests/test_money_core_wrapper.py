@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from decimal import Decimal
 
+import pytest
+
 os.environ.setdefault("LEDGERA_ENABLE_RUST_CORE", "1")
 
 from utils.finance import money
@@ -38,3 +40,11 @@ def test_decimal_parity_helpers_match_python_fallback_semantics() -> None:
     )
     assert money.money_diff("1.00", "1.00") == Decimal("0.00")
     assert money.rate_diff("1.000001", "1.000002") == Decimal("-0.000001")
+
+
+def test_minor_units_reject_i64_overflow_in_both_backends() -> None:
+    oversized = "92233720368547758.08"
+    with pytest.raises((OverflowError, ValueError)):
+        money.to_minor_units(oversized)
+    with pytest.raises((OverflowError, ValueError)):
+        money._py_to_minor_units(oversized)

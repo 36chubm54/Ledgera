@@ -6822,15 +6822,15 @@ pub fn current_currency_rates(db_path: &str) -> StorageResult<HashMap<String, f6
 }
 
 fn normalize_currency_rate_text(value: &str) -> StorageResult<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed.starts_with('-') || trimmed.starts_with('+') {
+    let trimmed = value.trim().strip_prefix('+').unwrap_or(value.trim());
+    if trimmed.is_empty() || trimmed.starts_with('-') {
         return Err("Currency rate must be a positive decimal".to_owned());
     }
     let mut parts = trimmed.split('.');
     let whole = parts.next().unwrap_or_default();
     let fraction = parts.next().unwrap_or_default();
     if parts.next().is_some()
-        || whole.is_empty()
+        || (whole.is_empty() && fraction.is_empty())
         || !whole.chars().all(|value| value.is_ascii_digit())
         || !fraction.chars().all(|value| value.is_ascii_digit())
     {
@@ -6870,7 +6870,7 @@ fn validate_transfer_base_currency_only(currency: &str, base_currency: &str) -> 
     }
 }
 
-fn validate_ymd_date(value: &str) -> StorageResult<()> {
+pub(crate) fn validate_ymd_date(value: &str) -> StorageResult<()> {
     let (year, month, day) = parse_ymd_parts(value)?;
     if (year, month, day) > current_local_date() {
         return Err("Date cannot be in the future".to_owned());
@@ -6878,7 +6878,7 @@ fn validate_ymd_date(value: &str) -> StorageResult<()> {
     Ok(())
 }
 
-fn validate_ymd_syntax(value: &str) -> StorageResult<()> {
+pub(crate) fn validate_ymd_syntax(value: &str) -> StorageResult<()> {
     parse_ymd_parts(value).map(|_| ())
 }
 
@@ -6896,6 +6896,9 @@ fn parse_ymd_parts(value: &str) -> StorageResult<(i32, i32, i32)> {
     let max_day = days_in_month(year, month);
     if day < 1 || day > max_day {
         return Err(format!("Date day must be between 01 and {max_day:02}"));
+    }
+    if (year, month, day) < (1970, 1, 1) {
+        return Err("Date cannot be earlier than 1970-01-01".to_owned());
     }
     Ok((year, month, day))
 }
@@ -7080,6 +7083,11 @@ fn replace_record_tags_in_tx(
     tags: &[String],
     tag_colors: &[TagColorAssignment],
 ) -> StorageResult<()> {
+    if let Some(invalid) = numeric_only_tag_names(tags).first() {
+        return Err(format!(
+            "Invalid tag: tags must not contain numbers only (\"{invalid}\")"
+        ));
+    }
     tx.execute("DELETE FROM record_tags WHERE record_id = ?1", [record_id])
         .map_err(sqlite_err)?;
     for tag_name in normalize_tag_names(tags) {
@@ -7327,6 +7335,26 @@ pub(crate) fn normalize_tag_name(value: &str) -> String {
     } else {
         cleaned
     }
+}
+
+fn numeric_only_tag_names(values: &[String]) -> Vec<String> {
+    let mut invalid = Vec::new();
+    for value in values {
+        let stripped = value.trim().replace('#', "");
+        let cleaned: String = stripped
+            .chars()
+            .filter(|ch| {
+                ch.is_ascii_alphanumeric() || ('А'..='Я').contains(ch) || ('а'..='я').contains(ch)
+            })
+            .collect();
+        if !cleaned.is_empty()
+            && cleaned.chars().all(|ch| ch.is_ascii_digit())
+            && !invalid.contains(&cleaned)
+        {
+            invalid.push(cleaned);
+        }
+    }
+    invalid
 }
 
 #[cfg(test)]
@@ -12345,6 +12373,14 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             parse_csv_tags("#one, #two; #three"),
             vec!["#one".to_owned(), "#two".to_owned(), "#three".to_owned()]
         );
+    }
+
+    #[test]
+    fn validators_reject_pre_epoch_dates_and_numeric_only_tags() {
+        assert!(parse_ymd_parts("1969-12-31").is_err());
+        assert_eq!(normalize_tag_name("#123"), "");
+        assert_eq!(numeric_only_tag_names(&vec!["#123".to_owned()]), vec!["123"]);
+        assert!(numeric_only_tag_names(&vec!["123abc".to_owned()]).is_empty());
     }
 
     #[test]

@@ -9,6 +9,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import cast
 
 from domain.distribution import DistributionItem, DistributionSubitem
+from domain.validation import ensure_not_before_unix_epoch, parse_ymd
 from utils.finance.money import to_minor_units, to_money_float
 
 MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
@@ -21,7 +22,8 @@ def cutoff_month(as_of: str | dt_date | None) -> str:
     elif isinstance(as_of, dt_date):
         reference = as_of
     else:
-        reference = dt_date.fromisoformat(str(as_of))
+        reference = parse_ymd(str(as_of))
+    ensure_not_before_unix_epoch(reference)
     return reference.strftime("%Y-%m")
 
 
@@ -55,6 +57,7 @@ def month_bounds(month: str) -> tuple[str, str]:
         raise ValueError("Invalid month value")
     start = dt_date(year, month_num, 1)
     end = dt_date(year, month_num, monthrange(year, month_num)[1])
+    ensure_not_before_unix_epoch(start)
     return start.isoformat(), end.isoformat()
 
 

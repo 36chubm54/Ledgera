@@ -199,8 +199,12 @@ def parse_import_row(
     rate_value = to_rate_float(rate_at_operation)
     amount_base_value = to_money_float(amount_base)
 
-    if amount_original_value < 0:
-        return None, None, f"{row_label}: amount_original must be >= 0"
+    if amount_original_value <= 0:
+        return None, None, f"{row_label}: amount_original must be positive"
+    if amount_base_value <= 0:
+        return None, None, f"{row_label}: amount_base must be positive"
+    if not math.isfinite(rate_value) or rate_value <= 0:
+        return None, None, f"{row_label}: rate_at_operation must be positive"
 
     wallet_value = row_lc.get("wallet_id")
     if mandatory_only or policy == ImportPolicy.LEGACY:

@@ -76,6 +76,10 @@ class ReportsViewModel(
         val current = mutableState.value
         val start = current.periodStart.trim()
         val end = current.periodEnd.trim()
+        val startDateError = if (start.isBlank()) null else DateValidation.validateDmyNotFuture(start)
+        val endDateError = if (end.isBlank()) null else DateValidation.validateDmyNotFuture(end)
+        if (startDateError != null) return setPeriodError(start = startDateError)
+        if (endDateError != null) return setPeriodError(end = endDateError)
         val startYmd = if (start.isBlank()) null else DateValidation.parseDmyStrict(start)?.let(DateValidation::formatYmd)
         val endYmd = if (end.isBlank()) null else DateValidation.parseDmyStrict(end)?.let(DateValidation::formatYmd)
         if (start.isNotBlank() && startYmd == null) return setPeriodError(start = "Start date must use DD.MM.YYYY")

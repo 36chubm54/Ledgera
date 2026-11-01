@@ -59,6 +59,8 @@ import app.ledgera.model.DashboardGoal
 import app.ledgera.model.DashboardAssetSnapshotUpdate
 import app.ledgera.ui.LedgerDateField
 import app.ledgera.validation.DateValidation
+import app.ledgera.validation.CurrencyValidation
+import app.ledgera.validation.MoneyValidation
 import app.ledgera.validation.currentLedgerDate
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -424,14 +426,16 @@ private fun AssetDialog(asset: DashboardAsset?, viewModel: DashboardViewModel, c
     var value by remember(asset) { mutableStateOf(asset?.currentValue ?: "0") }
     var date by remember(asset) { mutableStateOf(asset?.currentSnapshotDate ?: "") }
     var description by remember(asset) { mutableStateOf(asset?.description ?: "") }
-    val validValue = value.toDoubleOrNull()?.let { it.isFinite() && it >= 0 } == true
-    val validDate = DateValidation.formatGuiDateToYmd(date) != null
-    val invalid = name.isBlank() || currency.trim().length != 3 || !validValue || !validDate
+    val validValue = MoneyValidation.isNonNegativeMoneyAmount(value)
+    val validCurrency = CurrencyValidation.isValidCurrencyCode(currency)
+    val dateError = DateValidation.validateGuiNotFuture(date)
+    val validDate = dateError == null
+    val invalid = name.isBlank() || !validCurrency || !validValue || !validDate
     val validationMessages = buildList {
         if (name.isBlank()) add("Name is required")
-        if (currency.trim().length != 3) add("Currency must contain 3 letters")
+        if (!validCurrency) add("Currency must contain 3 letters")
         if (!validValue) add("Value must be zero or greater")
-        if (!validDate) add("Date must be a valid DD.MM.YYYY value")
+        if (dateError != null) add(dateError)
     }
     AlertDialog(
         onDismissRequest = close,
@@ -449,7 +453,7 @@ private fun AssetDialog(asset: DashboardAsset?, viewModel: DashboardViewModel, c
                     modifier = Modifier.fillMaxWidth(.55f),
                     required = true,
                     allowFuture = false,
-                    externalError = if (!validDate) "Date must be a valid DD.MM.YYYY value" else null,
+                    externalError = dateError,
                     showErrorOutline = false,
                     showErrorText = false,
                 )
@@ -541,9 +545,10 @@ private fun AssetRefreshDialog(viewModel: DashboardViewModel, close: () -> Unit)
     var rows by remember(assets) {
         mutableStateOf(assets.map { asset -> AssetRefreshRow(asset, asset.currentValue, "") })
     }
-    val validDate = DateValidation.formatGuiDateToYmd(date) != null
+    val dateError = DateValidation.validateGuiNotFuture(date)
+    val validDate = dateError == null
     val hasInvalidValue = rows.any { row ->
-        row.value.isNotBlank() && (row.value.toDoubleOrNull()?.let { it.isFinite() && it >= 0 } != true)
+        row.value.isNotBlank() && !MoneyValidation.isNonNegativeMoneyAmount(row.value)
     }
     val canSave = validDate && !hasInvalidValue
     AlertDialog(
@@ -561,7 +566,7 @@ private fun AssetRefreshDialog(viewModel: DashboardViewModel, close: () -> Unit)
                     label = "Snapshot date",
                     required = true,
                     allowFuture = false,
-                    externalError = if (!validDate) "Date must be a valid DD.MM.YYYY value" else null,
+                    externalError = dateError,
                     showErrorOutline = false,
                     showErrorText = false,
                 )
@@ -592,7 +597,7 @@ private fun AssetRefreshDialog(viewModel: DashboardViewModel, close: () -> Unit)
                     }
                 }
                 if (!validDate) {
-                    Text("Date must be a valid DD.MM.YYYY value", color = MaterialTheme.colorScheme.error)
+                    Text(dateError ?: "Date is invalid", color = MaterialTheme.colorScheme.error)
                 }
                 if (hasInvalidValue) {
                     Text("Every new value must be zero or greater", color = MaterialTheme.colorScheme.error)
@@ -624,9 +629,9 @@ private fun <T> List<T>.updated(index: Int, value: T): List<T> =
 @Composable
 private fun GoalDialog(viewModel: DashboardViewModel, close: () -> Unit) {
     var title by remember { mutableStateOf("") }; var target by remember { mutableStateOf("") }; var currency by remember { mutableStateOf("KZT") }; var date by remember { mutableStateOf("") }
-    val validTarget = target.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true
+    val validTarget = MoneyValidation.isPositiveMoneyAmount(target)
     val validDate = date.isBlank() || DateValidation.formatGuiDateToYmd(date) != null
-    val invalid = title.isBlank() || !validTarget || currency.length != 3 || !validDate
+    val invalid = title.isBlank() || !validTarget || !CurrencyValidation.isValidCurrencyCode(currency) || !validDate
     AlertDialog(onDismissRequest = close, title = { Text("Create goal") }, text = { Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true)
         OutlinedTextField(target, { target = it }, label = { Text("Target amount") }, singleLine = true)

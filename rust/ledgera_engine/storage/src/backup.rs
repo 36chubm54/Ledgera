@@ -722,6 +722,9 @@ fn validate_backup_date(value: &str, field: &str) -> StorageResult<()> {
     if !(1..=12).contains(&month) || day == 0 || day > days[month - 1] {
         return Err(format!("{field} must use a valid date"));
     }
+    if (year, month, day) < (1970, 1, 1) {
+        return Err(format!("{field} cannot be earlier than 1970-01-01"));
+    }
     Ok(())
 }
 

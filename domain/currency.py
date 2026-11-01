@@ -1,10 +1,21 @@
+from __future__ import annotations
+
+import math
+
+
 class CurrencyService:
     def __init__(self, rates: dict[str, float], base: str = "KZT"):
         self._base = (base or "KZT").strip().upper()
-        self._rates = {
-            str(currency).strip().upper(): rate
-            for currency, rate in rates.items()
-        }
+        self._rates: dict[str, float] = {}
+        for currency, rate in rates.items():
+            code = str(currency).strip().upper()
+            try:
+                normalized_rate = float(rate)
+            except (TypeError, ValueError) as err:
+                raise ValueError(f"Currency rate for {code} must be a positive number") from err
+            if not math.isfinite(normalized_rate) or normalized_rate <= 0:
+                raise ValueError(f"Currency rate for {code} must be a positive number")
+            self._rates[code] = normalized_rate
 
     @property
     def base_currency(self) -> str:

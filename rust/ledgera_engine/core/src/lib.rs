@@ -447,8 +447,10 @@ mod tests {
     #[test]
     fn text_helpers_preserve_scale_and_sign() {
         assert_eq!(quantize_money_text("1.005").unwrap(), "1.01");
+        assert_eq!(quantize_money_text(".5").unwrap(), "0.50");
         assert_eq!(quantize_money_text("-1.005").unwrap(), "-1.01");
         assert_eq!(quantize_rate_text("1.2345675").unwrap(), "1.234568");
+        assert_eq!(quantize_rate_text("+.5").unwrap(), "0.500000");
         assert_eq!(rate_to_text("1.2").unwrap(), "1.200000");
         assert_eq!(money_diff_text("10.005", "1.00").unwrap(), "9.01");
         assert_eq!(

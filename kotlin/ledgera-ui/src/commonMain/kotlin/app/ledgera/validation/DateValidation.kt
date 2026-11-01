@@ -58,6 +58,9 @@ object DateValidation {
         if (day !in 1..daysInMonth(year, month)) {
             return null
         }
+        if (year < UnixEpochYear) {
+            return null
+        }
         return LedgerDate(year = year, month = month, day = day)
     }
 
@@ -72,6 +75,9 @@ object DateValidation {
             return null
         }
         if (day !in 1..daysInMonth(year, month)) {
+            return null
+        }
+        if (year < UnixEpochYear) {
             return null
         }
         return LedgerDate(year = year, month = month, day = day)
@@ -155,4 +161,5 @@ object DateValidation {
 
     private const val MillisPerDay = 86_400_000L
     private const val DaysToUnixEpoch = 719_468L
+    private const val UnixEpochYear = 1970
 }

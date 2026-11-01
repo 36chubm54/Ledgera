@@ -72,6 +72,12 @@ class AnalyticsViewModel(
         refreshJob?.cancel()
         val generation = ++refreshGeneration
         val current = mutableState.value
+        val startError = DateValidation.validateGuiNotFuture(current.periodStart)
+        val endError = DateValidation.validateGuiNotFuture(current.periodEnd)
+        if (startError != null || endError != null) {
+            mutableState.value = current.copy(error = startError ?: endError)
+            return
+        }
         val start = DateValidation.formatGuiDateToYmd(current.periodStart)
         val end = DateValidation.formatGuiDateToYmd(current.periodEnd)
         if (start == null || end == null) {
