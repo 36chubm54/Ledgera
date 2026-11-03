@@ -90,6 +90,8 @@ val buildRustKotlinFfi by tasks.registering(Exec::class) {
         rustManifest.asFile.absolutePath,
         "-p",
         "ledgera_engine_kotlin_ffi",
+        "--features",
+        "typst-pdf",
     )
 }
 

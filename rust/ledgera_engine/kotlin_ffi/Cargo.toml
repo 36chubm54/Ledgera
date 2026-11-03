@@ -3,6 +3,10 @@ name = "ledgera_engine_kotlin_ffi"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+typst-pdf = ["ledgera_engine_storage/typst-pdf"]
+
 [lib]
 name = "ledgera_engine"
 crate-type = ["cdylib", "staticlib", "rlib"]

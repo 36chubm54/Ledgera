@@ -3,6 +3,10 @@ name = "ledgera_engine_storage"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+typst-pdf = ["dep:typst", "dep:typst-layout", "dep:typst-pdf"]
+
 [dependencies]
 ledgera_engine_core.workspace = true
 libc.workspace = true
@@ -11,7 +15,11 @@ csv.workspace = true
 calamine.workspace = true
 rust_xlsxwriter.workspace = true
 printpdf.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+typst = { workspace = true, optional = true }
+typst-layout = { workspace = true, optional = true }
+typst-pdf = { workspace = true, optional = true }
 quick-xml.workspace = true
 sha2.workspace = true
 

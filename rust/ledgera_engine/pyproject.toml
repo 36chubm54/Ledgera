@@ -18,3 +18,4 @@ tests = [
 [tool.maturin]
 python-source = "python"
 manifest-path = "ffi/Cargo.toml"
+features = ["typst-pdf"]

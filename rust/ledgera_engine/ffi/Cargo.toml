@@ -3,6 +3,10 @@ name = "ledgera_core"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+typst-pdf = ["ledgera_engine_storage/typst-pdf"]
+
 [lib]
 name = "ledgera_core"
 crate-type = ["cdylib"]

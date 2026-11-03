@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "typst-pdf", allow(dead_code))]
+
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
@@ -9,6 +11,11 @@ use printpdf::{
 };
 use rusqlite::Connection;
 use rust_xlsxwriter::{Format, FormatAlign, FormatBorder, FormatPattern, Workbook, Worksheet};
+use serde::Serialize;
+
+#[cfg(feature = "typst-pdf")]
+#[path = "typst_renderer.rs"]
+mod typst_renderer;
 
 use crate::{
     base_currency_code, current_local_date, record_list_rows, round_money, sqlite_err,
@@ -115,6 +122,95 @@ pub struct ReportResult {
 pub struct ReportExportResult {
     pub exported_rows: i64,
     pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PdfPresentationData {
+    pub title: String,
+    pub period: String,
+    pub period_start: Option<String>,
+    pub period_end: Option<String>,
+    pub base_currency: String,
+    pub mode: String,
+    pub grouped: bool,
+    pub kpis: PdfPresentationKpis,
+    pub operations: Vec<PdfPresentationOperation>,
+    pub transfers: Vec<PdfPresentationTransfer>,
+    pub monthly: Vec<PdfPresentationMonthly>,
+    pub categories: Vec<PdfPresentationCategory>,
+    pub tags: Vec<PdfPresentationTag>,
+    pub debts: Vec<PdfPresentationDebt>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PdfPresentationKpis {
+    pub opening_balance: String,
+    pub income: String,
+    pub expenses: String,
+    pub final_balance: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PdfPresentationOperation {
+    pub date: String,
+    pub type_label: String,
+    pub kind: String,
+    pub category: String,
+    pub tags: String,
+    pub description: String,
+    pub amount: String,
+    pub amount_current: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PdfPresentationTransfer {
+    pub transfer_id: i64,
+    pub date: String,
+    pub from_wallet: String,
+    pub to_wallet: String,
+    pub source_amount: String,
+    pub target_amount: String,
+    pub source_base_amount: String,
+    pub target_base_amount: String,
+    pub historical_rate: String,
+    pub commission: String,
+    pub status: String,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PdfPresentationMonthly {
+    pub month: String,
+    pub income: String,
+    pub expenses: String,
+    pub net: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PdfPresentationCategory {
+    pub category: String,
+    pub operations_count: i64,
+    pub amount: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PdfPresentationTag {
+    pub tag: String,
+    pub operations_count: i64,
+    pub amount: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PdfPresentationDebt {
+    pub contact: String,
+    pub kind: String,
+    pub status: String,
+    pub currency: String,
+    pub total: String,
+    pub remaining: String,
+    pub settled: String,
+    pub progress_percent: f64,
+    pub progress_label: String,
 }
 
 fn normalized_optional(value: &Option<String>) -> Option<String> {
@@ -1921,6 +2017,194 @@ fn pdf_amount(value: f64, currency: &str) -> String {
     pdf_money(value, currency, true)
 }
 
+fn build_pdf_presentation_data(report: &ReportResult, use_current: bool) -> PdfPresentationData {
+    let amount = |fixed: f64, current: f64| if use_current { current } else { fixed };
+    let income = report
+        .operations
+        .iter()
+        .filter(|operation| operation.kind == "income")
+        .map(|operation| amount(operation.amount_base, operation.amount_current).abs())
+        .sum::<f64>();
+    let expenses = report
+        .operations
+        .iter()
+        .filter(|operation| operation.kind != "income")
+        .map(|operation| amount(operation.amount_base, operation.amount_current).abs())
+        .sum::<f64>();
+
+    PdfPresentationData {
+        title: report.title.clone(),
+        period: match (&report.filters.period_start, &report.filters.period_end) {
+            (Some(start), Some(end)) if start == end => pdf_date(start),
+            (Some(start), Some(end)) => format!("{} - {}", pdf_date(start), pdf_date(end)),
+            (Some(start), None) => pdf_date(start),
+            (None, Some(end)) => pdf_date(end),
+            (None, None) => "All dates".to_owned(),
+        },
+        period_start: report.filters.period_start.clone(),
+        period_end: report.filters.period_end.clone(),
+        base_currency: report.base_currency.clone(),
+        mode: if use_current { "Current" } else { "Fixed" }.to_owned(),
+        grouped: report.filters.group_by_category,
+        kpis: PdfPresentationKpis {
+            opening_balance: pdf_money(
+                amount(report.summary.initial_balance, report.summary.initial_balance),
+                &report.base_currency,
+                true,
+            ),
+            income: pdf_money(income, &report.base_currency, true),
+            expenses: pdf_money(-expenses, &report.base_currency, true),
+            final_balance: pdf_money(
+                amount(
+                    report.summary.final_balance_fixed,
+                    report.summary.final_balance_current,
+                ),
+                &report.base_currency,
+                true,
+            ),
+        },
+        operations: report
+            .operations
+            .iter()
+            .map(|operation| PdfPresentationOperation {
+                date: pdf_date(&operation.date),
+                type_label: operation.type_label.clone(),
+                kind: operation.kind.clone(),
+                category: operation.category.clone(),
+                tags: operation.tags_text.clone(),
+                description: operation.description.clone(),
+                amount: pdf_layout_row_value(operation, use_current, &report.base_currency),
+                amount_current: pdf_amount(
+                    operation.amount_current,
+                    &report.base_currency,
+                ),
+            })
+            .collect(),
+        transfers: report
+            .transfers
+            .iter()
+            .map(|transfer| {
+                let source_base = amount(
+                    transfer.source_amount_base,
+                    transfer.source_amount_current,
+                );
+                let target_base = amount(
+                    transfer.target_amount_base,
+                    transfer.target_amount_current,
+                );
+                let status = if transfer.integrity_status == "ok" {
+                    "OK".to_owned()
+                } else {
+                    format!("{}: {}", transfer.integrity_status, transfer.integrity_message)
+                };
+                PdfPresentationTransfer {
+                    transfer_id: transfer.transfer_id,
+                    date: pdf_date(&transfer.date),
+                    from_wallet: format!(
+                        "{} (#{})",
+                        transfer.from_wallet_name, transfer.from_wallet_id
+                    ),
+                    to_wallet: format!(
+                        "{} (#{})",
+                        transfer.to_wallet_name, transfer.to_wallet_id
+                    ),
+                    source_amount: pdf_money(
+                        transfer.source_amount,
+                        &transfer.source_currency,
+                        false,
+                    ),
+                    target_amount: pdf_money(
+                        transfer.target_amount,
+                        &transfer.target_currency,
+                        false,
+                    ),
+                    source_base_amount: pdf_money(
+                        source_base,
+                        &report.base_currency,
+                        false,
+                    ),
+                    target_base_amount: pdf_money(
+                        target_base,
+                        &report.base_currency,
+                        false,
+                    ),
+                    historical_rate: transfer.historical_rate.clone(),
+                    commission: if transfer.commission_amount > 0.0 {
+                        pdf_money(
+                            transfer.commission_amount,
+                            &transfer.commission_currency,
+                            false,
+                        )
+                    } else {
+                        "—".to_owned()
+                    },
+                    status,
+                    note: [transfer.description.as_str(), transfer.tags_text.as_str()]
+                        .into_iter()
+                        .filter(|value| !value.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(" · "),
+                }
+            })
+            .collect(),
+        monthly: report
+            .monthly
+            .iter()
+            .map(|month| {
+                let income = amount(month.income, month.income_current);
+                let expenses = amount(month.expenses, month.expenses_current);
+                PdfPresentationMonthly {
+                    month: month.month.clone(),
+                    income: pdf_money(income, &report.base_currency, true),
+                    expenses: pdf_money(-expenses, &report.base_currency, true),
+                    net: pdf_money(income - expenses, &report.base_currency, true),
+                }
+            })
+            .collect(),
+        categories: report
+            .categories
+            .iter()
+            .map(|category| PdfPresentationCategory {
+                category: category.category.clone(),
+                operations_count: category.operations_count,
+                amount: pdf_money(
+                    amount(category.total_base, category.total_current),
+                    &report.base_currency,
+                    true,
+                ),
+            })
+            .collect(),
+        tags: report
+            .tags
+            .iter()
+            .map(|tag| PdfPresentationTag {
+                tag: tag.tag.clone(),
+                operations_count: tag.operations_count,
+                amount: pdf_money(
+                    amount(tag.total_base, tag.total_current),
+                    &report.base_currency,
+                    true,
+                ),
+            })
+            .collect(),
+        debts: report
+            .debts
+            .iter()
+            .map(|debt| PdfPresentationDebt {
+                contact: debt.contact_name.clone(),
+                kind: debt.kind.clone(),
+                status: debt.status.clone(),
+                currency: debt.currency.clone(),
+                total: pdf_money(debt.total_amount, &debt.currency, false),
+                remaining: pdf_money(debt.remaining_amount, &debt.currency, false),
+                settled: pdf_money(debt.settled_amount, &debt.currency, false),
+                progress_percent: debt.progress_percent,
+                progress_label: format!("{:.0}% paid", debt.progress_percent),
+            })
+            .collect(),
+    }
+}
+
 fn pdf_layout_row_value(row: &ReportOperationRow, use_current: bool, base: &str) -> String {
     let amount = if use_current {
         row.amount_current
@@ -1940,6 +2224,7 @@ fn pdf_layout_section(rows: &mut Vec<PdfLayoutRow>, title: &str, widths: &[f32])
 }
 
 fn build_pdf_statement_sections(report: &ReportResult, use_current: bool) -> Vec<PdfLayoutRow> {
+    let presentation = build_pdf_presentation_data(report, use_current);
     let overview_widths = [PDF_CONTENT_WIDTH_PT / 4.0; 4];
     let table_widths = [85.0, 92.0, 226.0, 190.0, 181.0];
     let transfer_widths = [52.0, 70.0, 130.0, 130.0, 145.0, 78.0, 78.0, 91.0];
@@ -1963,20 +2248,6 @@ fn build_pdf_statement_sections(report: &ReportResult, use_current: bool) -> Vec
         true,
     ));
 
-    let mut income = 0.0;
-    let mut expenses = 0.0;
-    for operation in &report.operations {
-        let amount = if use_current {
-            operation.amount_current
-        } else {
-            operation.amount_base
-        };
-        if operation.kind == "income" {
-            income += amount.abs();
-        } else {
-            expenses += amount.abs();
-        }
-    }
     let final_balance = if use_current {
         report.summary.final_balance_current
     } else {
@@ -1995,10 +2266,10 @@ fn build_pdf_statement_sections(report: &ReportResult, use_current: bool) -> Vec
     ));
     rows.push(pdf_layout_row(
         vec![
-            pdf_money(report.summary.initial_balance, &report.base_currency, true),
-            pdf_money(income, &report.base_currency, true),
-            pdf_money(-expenses, &report.base_currency, true),
-            pdf_money(final_balance, &report.base_currency, true),
+            presentation.kpis.opening_balance.clone(),
+            presentation.kpis.income.clone(),
+            presentation.kpis.expenses.clone(),
+            presentation.kpis.final_balance.clone(),
         ],
         &overview_widths,
         PdfRowStyle::Balance,
@@ -2031,14 +2302,14 @@ fn build_pdf_statement_sections(report: &ReportResult, use_current: bool) -> Vec
             true,
         ));
     } else {
-        for operation in &report.operations {
+        for operation in &presentation.operations {
             rows.push(pdf_layout_row(
                 vec![
-                    pdf_date(&operation.date),
+                    operation.date.clone(),
                     operation.type_label.clone(),
                     operation.category.clone(),
-                    operation.tags_text.clone(),
-                    pdf_layout_row_value(operation, use_current, &report.base_currency),
+                    operation.tags.clone(),
+                    operation.amount.clone(),
                 ],
                 &table_widths,
                 PdfRowStyle::Data,
@@ -2626,11 +2897,15 @@ pub fn report_export_pdf(
 ) -> StorageResult<ReportExportResult> {
     let report = report_generate(db_path, filters)?;
     let use_current = report.filters.totals_mode.eq_ignore_ascii_case("current");
+    #[cfg(not(feature = "typst-pdf"))]
     let sections = if report.filters.group_by_category {
         build_pdf_grouped_sections(&report, use_current)
     } else {
         build_pdf_statement_sections(&report, use_current)
     };
+    #[cfg(feature = "typst-pdf")]
+    let pdf = typst_renderer::render(&report, use_current)?;
+    #[cfg(not(feature = "typst-pdf"))]
     let pdf = render_pdf_document(&report.title, &sections)?;
     atomic_replace(Path::new(path), &pdf)?;
     return Ok(ReportExportResult {
@@ -3390,6 +3665,8 @@ mod tests {
 
         let report = report_generate(&db_path, &ReportFilters::default()).expect("report");
         let row = report.transfers.first().expect("transfer row");
+        let presentation = build_pdf_presentation_data(&report, false);
+        let presentation_json = serde_json::to_string(&presentation).expect("presentation json");
         assert_eq!(report.transfers.len(), 1);
         assert_eq!(row.source_currency, "KZT");
         assert_eq!(row.target_currency, "USD");
@@ -3400,6 +3677,9 @@ mod tests {
         assert_eq!(row.integrity_status, "ok");
         assert_eq!(report.summary.records_total_fixed, 0.0);
         assert_eq!(report.summary.transfer_net_fixed, 0.0);
+        assert!(presentation_json.contains("\"mode\":\"Fixed\""));
+        assert!(presentation_json.contains("\"source_amount\":\"1\u{202f}000.00 KZT\""));
+        assert!(presentation_json.contains("\"target_amount\":\"2.00 USD\""));
 
         std::fs::remove_file(path).ok();
     }
