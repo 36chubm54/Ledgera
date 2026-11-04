@@ -12,7 +12,7 @@ data class OperationRecord(
     val rateAtOperation: String,
     val amountBase: String,
     val category: String,
-    val description: String,
+    val note: String,
     val tags: List<String>,
 )
 
@@ -26,7 +26,7 @@ data class OperationDraft(
     val rateAtOperation: String = "1",
     val amountBase: String = "",
     val category: String = "",
-    val description: String = "",
+    val note: String = "",
     val tagsText: String = "",
     val tagColors: Map<String, String> = emptyMap(),
 )
@@ -47,7 +47,7 @@ data class CreateOperationRequest(
     val rateAtOperation: String,
     val amountBase: String,
     val category: String,
-    val description: String,
+    val note: String,
     val tags: List<String> = emptyList(),
     val tagColors: Map<String, String> = emptyMap(),
 )
@@ -63,7 +63,7 @@ data class UpdateOperationRequest(
     val rateAtOperation: String,
     val amountBase: String,
     val category: String,
-    val description: String,
+    val note: String,
     val tags: List<String> = emptyList(),
     val tagColors: Map<String, String> = emptyMap(),
 )
@@ -74,7 +74,7 @@ data class CreateTransferRequest(
     val date: String,
     val amount: String,
     val currency: String,
-    val description: String,
+    val note: String,
     val commissionAmount: String = "0",
     val commissionCurrency: String = "",
 )
@@ -89,7 +89,7 @@ data class CurrencyTransferRequest(
     val date: String,
     val amount: String,
     val amountCurrency: String,
-    val description: String,
+    val note: String,
     val commissionAmount: String = "",
     val commissionCurrency: String = "",
 )
@@ -104,7 +104,7 @@ data class CurrencyTransferResult(
     val targetAmount: String,
     val targetCurrency: String,
     val conversionRate: String,
-    val description: String,
+    val note: String,
 )
 
 data class CurrencyTransferQuote(
@@ -126,7 +126,7 @@ data class TransferDetails(
     val currency: String,
     val rateAtOperation: String,
     val amountBase: String,
-    val description: String,
+    val note: String,
 )
 
 data class TransferDraft(
@@ -136,7 +136,7 @@ data class TransferDraft(
     val date: String = "",
     val amount: String = "",
     val currency: String = "KZT",
-    val description: String = "",
+    val note: String = "",
 )
 
 data class UpdateTransferRequest(
@@ -145,7 +145,7 @@ data class UpdateTransferRequest(
     val date: String,
     val amount: String,
     val currency: String,
-    val description: String,
+    val note: String,
 )
 
 data class UpdateTransferResult(
@@ -176,9 +176,9 @@ data class OperationSuggestions(
     val tags: List<String> = emptyList(),
     val incomeCategories: List<String> = emptyList(),
     val expenseCategories: List<String> = emptyList(),
-    val descriptions: List<String> = emptyList(),
-    val incomeDescriptions: List<String> = emptyList(),
-    val expenseDescriptions: List<String> = emptyList(),
+    val notes: List<String> = emptyList(),
+    val incomeNotes: List<String> = emptyList(),
+    val expenseNotes: List<String> = emptyList(),
 )
 
 data class TagColor(
@@ -504,7 +504,7 @@ data class DebtDraft(
     val amount: String = "",
     val currency: String = "KZT",
     val createdAt: String = "",
-    val description: String = "",
+    val note: String = "",
 )
 
 data class DebtActionDraft(
@@ -513,7 +513,7 @@ data class DebtActionDraft(
     val walletId: Long = 0,
     val amount: String = "",
     val paymentDate: String = "",
-    val description: String = "",
+    val note: String = "",
 )
 
 data class CreateDebtRequest(
@@ -523,7 +523,7 @@ data class CreateDebtRequest(
     val amount: String,
     val currency: String,
     val createdAt: String,
-    val description: String,
+    val note: String,
 )
 
 data class RegisterDebtPaymentRequest(
@@ -531,7 +531,7 @@ data class RegisterDebtPaymentRequest(
     val walletId: Long?,
     val amount: String,
     val paymentDate: String,
-    val description: String,
+    val note: String,
 )
 
 data class MandatoryTemplateItem(
@@ -542,7 +542,7 @@ data class MandatoryTemplateItem(
     val rateAtOperation: String,
     val amountBase: String,
     val category: String,
-    val description: String,
+    val note: String,
     val period: String,
     val date: String,
     val autoPay: Boolean,
@@ -556,7 +556,7 @@ data class MandatoryTemplateDraft(
     val rateAtOperation: String = "1",
     val amountBase: String = "",
     val category: String = "Mandatory",
-    val description: String = "",
+    val note: String = "",
     val period: String = "monthly",
     val date: String = "",
 )
@@ -574,7 +574,7 @@ data class CreateMandatoryTemplateRequest(
     val rateAtOperation: String,
     val amountBase: String,
     val category: String,
-    val description: String,
+    val note: String,
     val period: String,
     val date: String,
 )
@@ -695,7 +695,7 @@ data class ReportOperationRow(
     val tagsText: String,
     val amountBase: Double,
     val amountCurrent: Double,
-    val description: String,
+    val note: String,
 )
 
 data class ReportTransferRow(
@@ -719,7 +719,7 @@ data class ReportTransferRow(
     val commissionAmountBase: Double,
     val commissionAmountCurrent: Double,
     val tagsText: String,
-    val description: String,
+    val note: String,
     val integrityStatus: String,
     val integrityMessage: String,
 )
@@ -836,7 +836,7 @@ data class DashboardAsset(
     val currency: String,
     val isActive: Boolean,
     val createdAt: String,
-    val description: String,
+    val note: String,
     val currentValue: String,
     val currentValueMinor: Long,
     val currentSnapshotDate: String?,
@@ -855,7 +855,7 @@ data class DashboardGoal(
     val targetDate: String?,
     val isCompleted: Boolean,
     val createdAt: String,
-    val description: String,
+    val note: String,
     val currentAmount: String,
     val currentAmountMinor: Long,
 )

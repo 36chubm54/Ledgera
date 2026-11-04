@@ -202,8 +202,8 @@ fun OperationsScreen(
             baseCurrency = state.baseCurrency,
             incomeCategorySuggestions = state.incomeCategories,
             expenseCategorySuggestions = state.expenseCategories,
-            incomeDescriptionSuggestions = state.incomeDescriptionSuggestions,
-            expenseDescriptionSuggestions = state.expenseDescriptionSuggestions,
+            incomeNoteSuggestions = state.incomeNoteSuggestions,
+            expenseNoteSuggestions = state.expenseNoteSuggestions,
             tagSuggestions = state.tags,
             tagColors = state.tagColors,
             tagPalette = state.tagPalette,
@@ -219,7 +219,7 @@ fun OperationsScreen(
         CreateTransferDialog(
             wallets = state.wallets,
             baseCurrency = state.baseCurrency,
-            descriptionSuggestions = state.descriptionSuggestions,
+            noteSuggestions = state.noteSuggestions,
             engineError = state.error,
             submitting = state.loading,
             onCurrencySubmit = { request ->
@@ -237,8 +237,8 @@ fun OperationsScreen(
             baseCurrency = state.baseCurrency,
             incomeCategorySuggestions = state.incomeCategories,
             expenseCategorySuggestions = state.expenseCategories,
-            incomeDescriptionSuggestions = state.incomeDescriptionSuggestions,
-            expenseDescriptionSuggestions = state.expenseDescriptionSuggestions,
+            incomeNoteSuggestions = state.incomeNoteSuggestions,
+            expenseNoteSuggestions = state.expenseNoteSuggestions,
             tagSuggestions = state.tags,
             tagColors = state.tagColors,
             tagPalette = state.tagPalette,
@@ -256,7 +256,7 @@ fun OperationsScreen(
             draft = draft,
             wallets = state.wallets,
             baseCurrency = state.baseCurrency,
-            descriptionSuggestions = state.descriptionSuggestions,
+            noteSuggestions = state.noteSuggestions,
             engineError = state.error,
             submitting = state.loading,
             onDraftChanged = viewModel::updateTransferDraft,
@@ -500,7 +500,7 @@ private fun OperationFilters(
 private fun CreateTransferDialog(
     wallets: List<WalletOption>,
     baseCurrency: String,
-    descriptionSuggestions: List<String>,
+    noteSuggestions: List<String>,
     engineError: String?,
     submitting: Boolean,
     onCurrencySubmit: (CurrencyTransferRequest) -> Unit,
@@ -515,7 +515,7 @@ private fun CreateTransferDialog(
     var currency by remember { mutableStateOf(baseCurrency) }
     var commissionAmount by remember { mutableStateOf("0") }
     var commissionCurrency by remember { mutableStateOf(baseCurrency) }
-    var description by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
 
     LaunchedEffect(wallets, baseCurrency) {
         if (wallets.none { it.id == fromWalletId }) {
@@ -573,7 +573,7 @@ private fun CreateTransferDialog(
                     date = date,
                     amount = amount,
                     amountCurrency = normalizedCurrency,
-                    description = description,
+                    note = note,
                     commissionAmount = commissionValue,
                     commissionCurrency = commissionCurrency.ifBlank { sourceWallet?.currency ?: baseCurrency },
                 )
@@ -669,10 +669,10 @@ private fun CreateTransferDialog(
                 )
                 AutocompleteTextField(
                     modifier = dialogFieldModifier(),
-                    value = description,
-                    onValueChange = { description = it },
-                    label = "Description",
-                    suggestions = descriptionSuggestions,
+                    value = note,
+                    onValueChange = { note = it },
+                    label = "Note",
+                    suggestions = noteSuggestions,
                     menuWidth = DialogContentWidth,
                     showSuggestionsOnBlank = false,
                 )
@@ -691,7 +691,7 @@ private fun CreateTransferDialog(
                             date = date,
                             amount = amount,
                             amountCurrency = currency,
-                            description = description,
+                            note = note,
                             commissionAmount = commissionAmount.ifBlank { "0" },
                             commissionCurrency = commissionCurrency.ifBlank { sourceWallet?.currency ?: baseCurrency },
                         )
@@ -739,8 +739,8 @@ private fun CreateOperationDialog(
     baseCurrency: String,
     incomeCategorySuggestions: List<String>,
     expenseCategorySuggestions: List<String>,
-    incomeDescriptionSuggestions: List<String>,
-    expenseDescriptionSuggestions: List<String>,
+    incomeNoteSuggestions: List<String>,
+    expenseNoteSuggestions: List<String>,
     tagSuggestions: List<String>,
     tagColors: Map<String, String>,
     tagPalette: List<String>,
@@ -753,7 +753,7 @@ private fun CreateOperationDialog(
     var date by remember { mutableStateOf(todayText()) }
     var amount by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
     var selectedTagColors by remember { mutableStateOf(tagColors) }
     var walletId by remember { mutableStateOf(wallets.firstOrNull()?.id ?: 0L) }
@@ -789,15 +789,15 @@ private fun CreateOperationDialog(
                 date = date,
                 amount = amount,
                 category = category,
-                description = description,
+                note = note,
                 tags = tags,
                 walletId = walletId,
                 currency = currency,
                 categorySuggestions = if (type == "income") incomeCategorySuggestions else expenseCategorySuggestions,
-                descriptionSuggestions = if (type == "income") {
-                    incomeDescriptionSuggestions
+                noteSuggestions = if (type == "income") {
+                    incomeNoteSuggestions
                 } else {
-                    expenseDescriptionSuggestions
+                    expenseNoteSuggestions
                 },
                 tagSuggestions = tagSuggestions,
                 tagColors = selectedTagColors,
@@ -808,7 +808,7 @@ private fun CreateOperationDialog(
                 onDateChanged = { date = it },
                 onAmountChanged = { amount = it },
                 onCategoryChanged = { category = it },
-                onDescriptionChanged = { description = it },
+                onNoteChanged = { note = it },
                 onTagsChanged = { tags = it },
                 onTagColorChanged = { name, color ->
                     selectedTagColors = selectedTagColors + (name.lowercase() to color)
@@ -835,7 +835,7 @@ private fun CreateOperationDialog(
                             rateAtOperation = "1",
                             amountBase = amount,
                             category = category,
-                            description = description,
+                            note = note,
                             tags = OperationValidation.parseTags(tags),
                             tagColors = selectedTagColors,
                         )
@@ -864,12 +864,12 @@ private fun CreateOperationForm(
     date: String,
     amount: String,
     category: String,
-    description: String,
+    note: String,
     tags: String,
     walletId: Long,
     currency: String,
     categorySuggestions: List<String>,
-    descriptionSuggestions: List<String>,
+    noteSuggestions: List<String>,
     tagSuggestions: List<String>,
     tagColors: Map<String, String>,
     tagPalette: List<String>,
@@ -879,7 +879,7 @@ private fun CreateOperationForm(
     onDateChanged: (String) -> Unit,
     onAmountChanged: (String) -> Unit,
     onCategoryChanged: (String) -> Unit,
-    onDescriptionChanged: (String) -> Unit,
+    onNoteChanged: (String) -> Unit,
     onTagsChanged: (String) -> Unit,
     onTagColorChanged: (String, String) -> Unit,
     onWalletChanged: (WalletOption) -> Unit,
@@ -951,10 +951,10 @@ private fun CreateOperationForm(
         )
         AutocompleteTextField(
             modifier = dialogFieldModifier(),
-            value = description,
-            onValueChange = onDescriptionChanged,
-            label = "Description",
-            suggestions = descriptionSuggestions,
+            value = note,
+            onValueChange = onNoteChanged,
+            label = "Note",
+            suggestions = noteSuggestions,
             menuWidth = DialogContentWidth,
             showSuggestionsOnBlank = false,
         )
@@ -981,8 +981,8 @@ private fun EditOperationDialog(
     baseCurrency: String,
     incomeCategorySuggestions: List<String>,
     expenseCategorySuggestions: List<String>,
-    incomeDescriptionSuggestions: List<String>,
-    expenseDescriptionSuggestions: List<String>,
+    incomeNoteSuggestions: List<String>,
+    expenseNoteSuggestions: List<String>,
     tagSuggestions: List<String>,
     tagColors: Map<String, String>,
     tagPalette: List<String>,
@@ -1018,10 +1018,10 @@ private fun EditOperationDialog(
                     } else {
                         expenseCategorySuggestions
                     },
-                    descriptionSuggestions = if (draft.type == "income") {
-                        incomeDescriptionSuggestions
+                    noteSuggestions = if (draft.type == "income") {
+                        incomeNoteSuggestions
                     } else {
-                        expenseDescriptionSuggestions
+                        expenseNoteSuggestions
                     },
                     tagSuggestions = tagSuggestions,
                     tagColors = draft.tagColors.ifEmpty { tagColors },
@@ -1050,7 +1050,7 @@ private fun EditOperationFields(
     draft: OperationDraft,
     wallets: List<WalletOption>,
     categorySuggestions: List<String>,
-    descriptionSuggestions: List<String>,
+    noteSuggestions: List<String>,
     tagSuggestions: List<String>,
     tagColors: Map<String, String>,
     tagPalette: List<String>,
@@ -1113,10 +1113,10 @@ private fun EditOperationFields(
         )
         AutocompleteTextField(
             modifier = dialogFieldModifier(),
-            value = draft.description,
-            onValueChange = { onDraftChanged(draft.copy(description = it)) },
-            label = "Description",
-            suggestions = descriptionSuggestions,
+            value = draft.note,
+            onValueChange = { onDraftChanged(draft.copy(note = it)) },
+            label = "Note",
+            suggestions = noteSuggestions,
             menuWidth = DialogContentWidth,
             showSuggestionsOnBlank = false,
         )
@@ -1140,7 +1140,7 @@ private fun EditTransferDialog(
     draft: TransferDraft,
     wallets: List<WalletOption>,
     baseCurrency: String,
-    descriptionSuggestions: List<String>,
+    noteSuggestions: List<String>,
     engineError: String?,
     submitting: Boolean,
     onDraftChanged: (TransferDraft) -> Unit,
@@ -1207,10 +1207,10 @@ private fun EditTransferDialog(
                 )
                 AutocompleteTextField(
                     modifier = dialogFieldModifier(),
-                    value = draft.description,
-                    onValueChange = { onDraftChanged(draft.copy(description = it)) },
-                    label = "Description",
-                    suggestions = descriptionSuggestions,
+                    value = draft.note,
+                    onValueChange = { onDraftChanged(draft.copy(note = it)) },
+                    label = "Note",
+                    suggestions = noteSuggestions,
                     menuWidth = DialogContentWidth,
                     showSuggestionsOnBlank = false,
                 )
@@ -1440,8 +1440,8 @@ private fun OperationRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (item.description.isNotBlank()) {
-                    Text(item.description)
+                if (item.note.isNotBlank()) {
+                    Text(item.note)
                 }
                 if (item.tags.isNotEmpty()) {
                     Row(

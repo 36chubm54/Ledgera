@@ -114,7 +114,7 @@ pub struct TransferRow {
     pub currency: String,
     pub rate_at_operation: f64,
     pub amount_base: f64,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -126,7 +126,7 @@ pub struct MandatoryExpenseRow {
     pub rate_at_operation: f64,
     pub amount_base: f64,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub period: String,
     pub date: String,
     pub auto_pay: bool,
@@ -140,7 +140,7 @@ pub struct MandatoryTemplateCreatePayload {
     pub rate_at_operation: String,
     pub amount_base: String,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub period: String,
     pub date: String,
 }
@@ -178,7 +178,7 @@ pub struct RecordRow {
     pub rate_at_operation: f64,
     pub amount_base: f64,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub period: Option<String>,
     pub tags: Vec<String>,
 }
@@ -213,7 +213,7 @@ pub struct StandaloneRecordCreatePayload {
     pub rate_at_operation: String,
     pub amount_base: String,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub tags: Vec<String>,
 }
 
@@ -227,7 +227,7 @@ pub struct StandaloneRecordUpdatePayload {
     pub rate_at_operation: String,
     pub amount_base: String,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub tags: Vec<String>,
 }
 
@@ -238,7 +238,7 @@ pub struct TransferCreatePayload {
     pub date: String,
     pub amount: String,
     pub currency: String,
-    pub description: String,
+    pub note: String,
     pub commission_amount: String,
     pub commission_currency: String,
 }
@@ -250,7 +250,7 @@ pub struct TransferUpdatePayload {
     pub date: String,
     pub amount: String,
     pub currency: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -276,7 +276,7 @@ pub struct CurrencyTransferCreatePayload {
     pub date: String,
     pub amount: String,
     pub amount_currency: String,
-    pub description: String,
+    pub note: String,
     pub commission_amount: String,
     pub commission_currency: String,
 }
@@ -292,7 +292,7 @@ pub struct CurrencyTransferRow {
     pub target_amount: f64,
     pub target_currency: String,
     pub conversion_rate: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1295,7 +1295,7 @@ pub fn transfer_list_rows(db_path: &str) -> StorageResult<Vec<TransferRow>> {
                 rate_at_operation_text,
                 amount_base,
                 amount_base_minor,
-                description
+                note
              FROM transfers
              ORDER BY id",
         )
@@ -1311,7 +1311,7 @@ pub fn transfer_list_rows(db_path: &str) -> StorageResult<Vec<TransferRow>> {
                 currency: row.get(6)?,
                 rate_at_operation: rate_value_from_sql_row(row, 7, 8)?,
                 amount_base: money_value_from_sql_row(row, 9, 10)?,
-                description: row.get(11)?,
+                note: row.get(11)?,
             })
         })
         .map_err(sqlite_err)?;
@@ -1428,7 +1428,7 @@ pub fn create_transfer(
     let rate_value = rate_text
         .parse::<f64>()
         .map_err(|_| "invalid transfer rate".to_owned())?;
-    let description = payload.description.trim();
+    let note = payload.note.trim();
 
     tx.execute(
         "INSERT INTO transfers (
@@ -1442,7 +1442,7 @@ pub fn create_transfer(
             rate_at_operation_text,
             amount_base,
             amount_base_minor,
-            description
+            note
         )
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         (
@@ -1456,7 +1456,7 @@ pub fn create_transfer(
             rate_text.as_str(),
             amount_value,
             amount_minor,
-            description,
+            note,
         ),
     )
     .map_err(sqlite_err)?;
@@ -1474,7 +1474,7 @@ pub fn create_transfer(
         rate_value,
         rate_text.as_str(),
         "Transfer",
-        description,
+        note,
     )?;
     insert_transfer_record_in_tx(
         &tx,
@@ -1488,7 +1488,7 @@ pub fn create_transfer(
         rate_value,
         rate_text.as_str(),
         "Transfer",
-        description,
+        note,
     )?;
     if commission_minor > 0 {
         insert_transfer_record_in_tx(
@@ -1566,7 +1566,7 @@ pub fn update_transfer(
     let rate_value = rate_text
         .parse::<f64>()
         .map_err(|_| "invalid transfer rate".to_owned())?;
-    let description = payload.description.trim();
+    let note = payload.note.trim();
 
     let existing = tx
         .query_row(
@@ -1587,7 +1587,7 @@ pub fn update_transfer(
             "SELECT COALESCE(SUM(COALESCE(amount_base_minor, CAST(ROUND(amount_base * 100.0) AS INTEGER))), 0)
              FROM records
              WHERE transfer_id IS NULL
-               AND description = ?1",
+               AND note = ?1",
             [commission_marker.as_str()],
             |row| row.get::<_, i64>(0),
         )
@@ -1616,7 +1616,7 @@ pub fn update_transfer(
              rate_at_operation_text = ?8,
              amount_base = ?9,
              amount_base_minor = ?10,
-             description = ?11
+             note = ?11
          WHERE id = ?12",
         (
             payload.from_wallet_id,
@@ -1629,7 +1629,7 @@ pub fn update_transfer(
             rate_text.as_str(),
             amount_value,
             amount_minor,
-            description,
+            note,
             transfer_id,
         ),
     )
@@ -1647,7 +1647,7 @@ pub fn update_transfer(
              amount_base = ?8,
              amount_base_minor = ?9,
              category = 'Transfer',
-             description = ?10
+             note = ?10
          WHERE id = ?11",
         (
             payload.date.trim(),
@@ -1659,7 +1659,7 @@ pub fn update_transfer(
             rate_text.as_str(),
             amount_value,
             amount_minor,
-            description,
+            note,
             linked.expense_record_id,
         ),
     )
@@ -1677,7 +1677,7 @@ pub fn update_transfer(
              amount_base = ?8,
              amount_base_minor = ?9,
              category = 'Transfer',
-             description = ?10
+             note = ?10
          WHERE id = ?11",
         (
             payload.date.trim(),
@@ -1689,7 +1689,7 @@ pub fn update_transfer(
             rate_text.as_str(),
             amount_value,
             amount_minor,
-            description,
+            note,
             linked.income_record_id,
         ),
     )
@@ -1700,7 +1700,7 @@ pub fn update_transfer(
          SET date = ?1,
              wallet_id = ?2
          WHERE transfer_id IS NULL
-           AND description = ?3",
+           AND note = ?3",
         (
             payload.date.trim(),
             payload.from_wallet_id,
@@ -1819,7 +1819,7 @@ const OPERATION_TABULAR_HEADERS: [&str; 16] = [
     "currency",
     "rate_at_operation",
     "amount_base",
-    "description",
+    "note",
     "tags",
     "period",
     "record_id",
@@ -1841,7 +1841,7 @@ const MANDATORY_TABULAR_HEADERS: [&str; 10] = [
     "currency",
     "rate_at_operation",
     "amount_base",
-    "description",
+    "note",
     "period",
 ];
 const MANDATORY_XLSX_AMOUNT_COLUMNS: [usize; 3] = [4, 6, 7];
@@ -1865,7 +1865,7 @@ struct ParsedOperationCsvRecord {
     amount_base: f64,
     amount_base_minor: i64,
     category: String,
-    description: String,
+    note: String,
     period: Option<String>,
     tags: Vec<String>,
 }
@@ -1881,7 +1881,7 @@ struct ParsedOperationCsvTransfer {
     currency: String,
     rate_text: String,
     rate: f64,
-    description: String,
+    note: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1904,7 +1904,7 @@ struct ParsedMandatoryTemplate {
     amount_base: f64,
     amount_base_minor: i64,
     category: String,
-    description: String,
+    note: String,
     period: String,
     date: String,
 }
@@ -2030,7 +2030,7 @@ fn import_operation_plan(
                         rate_at_operation_text,
                         amount_base,
                         amount_base_minor,
-                        description
+                        note
                     )
                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                     (
@@ -2044,7 +2044,7 @@ fn import_operation_plan(
                         transfer.rate_text.as_str(),
                         transfer.amount,
                         transfer.amount_minor,
-                        transfer.description.as_str(),
+                        transfer.note.as_str(),
                     ),
                 )
                 .map_err(sqlite_err)?;
@@ -2062,7 +2062,7 @@ fn import_operation_plan(
                     transfer.rate,
                     &transfer.rate_text,
                     "Transfer",
-                    &transfer.description,
+                    &transfer.note,
                 )?;
                 insert_transfer_record_in_tx(
                     &tx,
@@ -2076,13 +2076,13 @@ fn import_operation_plan(
                     transfer.rate,
                     &transfer.rate_text,
                     "Transfer",
-                    &transfer.description,
+                    &transfer.note,
                 )?;
             }
             ParsedOperationCsvRow::Record(record) => {
-                let record_id = insert_import_record_in_tx(&tx, record, &record.description)?;
+                let record_id = insert_import_record_in_tx(&tx, record, &record.note)?;
                 replace_record_tags_in_tx(&tx, record_id, &record.tags, &preserved_tag_colors)?;
-                imported_records.push((record_id, record.description.clone()));
+                imported_records.push((record_id, record.note.clone()));
                 if let Some(debt_id) = record.related_debt_id
                     && let Some(source_record_id) = record.source_record_id
                     && record.debt_link_kind.is_some()
@@ -2112,13 +2112,13 @@ fn import_operation_plan(
                 *mapped_transfer_id = *normalized_transfer_id;
             }
         }
-        for (record_id, original_description) in &imported_records {
-            let description =
-                remap_transfer_marker_description(original_description, &transfer_id_map);
-            if description != *original_description {
+        for (record_id, original_note) in &imported_records {
+            let note =
+                remap_transfer_marker_note(original_note, &transfer_id_map);
+            if note != *original_note {
                 tx.execute(
-                    "UPDATE records SET description = ?1 WHERE id = ?2",
-                    (description.as_str(), record_id),
+                    "UPDATE records SET note = ?1 WHERE id = ?2",
+                    (note.as_str(), record_id),
                 )
                 .map_err(sqlite_err)?;
             }
@@ -2359,7 +2359,7 @@ fn mandatory_export_rows(conn: &Connection) -> StorageResult<Vec<Vec<String>>> {
                 amount_base,
                 amount_base_minor,
                 category,
-                description,
+                note,
                 period,
                 COALESCE(date, '')
              FROM mandatory_expenses
@@ -2376,7 +2376,7 @@ fn mandatory_export_rows(conn: &Connection) -> StorageResult<Vec<Vec<String>>> {
                 rate_at_operation: rate_value_from_sql_row(row, 4, 5)?,
                 amount_base: money_value_from_sql_row(row, 6, 7)?,
                 category: row.get(8)?,
-                description: row.get(9)?,
+                note: row.get(9)?,
                 period: row.get(10)?,
                 date: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
                 auto_pay: false,
@@ -2397,7 +2397,7 @@ fn mandatory_export_rows(conn: &Connection) -> StorageResult<Vec<Vec<String>>> {
                 row.currency,
                 format_rate_export(row.rate_at_operation),
                 format_money_export(row.amount_base),
-                row.description,
+                row.note,
                 row.period,
             ]
         })
@@ -2611,7 +2611,7 @@ fn parse_mandatory_template_row(
         return Err(format!("{row_label}: wallet not found ({wallet_id})"));
     }
     let category = required_csv_value(values, "category", row_label)?;
-    let description = csv_value(values, "description");
+    let note = csv_value(values, "note");
     let period = csv_value(values, "period").trim().to_lowercase();
     validate_mandatory_period(&period)?;
     let currency = required_csv_value(values, "currency", row_label)?.to_uppercase();
@@ -2630,7 +2630,7 @@ fn parse_mandatory_template_row(
         rate,
         amount_base,
         amount_base_minor,
-        description: normalize_mandatory_description(&description, &category),
+        note: normalize_mandatory_note(&note, &category),
         category,
         period,
         date,
@@ -2838,8 +2838,8 @@ fn parse_operation_csv_row(
         return Err(format!("{row_label}: wallet not found ({wallet_id})"));
     }
     let category = required_csv_value(values, "category", row_label)?;
-    let description = csv_value(values, "description");
-    if let Some(marker_transfer_id) = transfer_marker_id(&description)
+    let note = csv_value(values, "note");
+    if let Some(marker_transfer_id) = transfer_marker_id(&note)
         && !aggregate_transfer_ids.contains(&marker_transfer_id)
     {
         return Err(format!(
@@ -2880,7 +2880,7 @@ fn parse_operation_csv_row(
         amount_base,
         amount_base_minor,
         category,
-        description,
+        note,
         period,
         tags: parse_csv_tags(&csv_value(values, "tags")),
     }))
@@ -3266,7 +3266,7 @@ fn parse_operation_csv_transfer(
         currency,
         rate_text,
         rate,
-        description: csv_value(values, "description"),
+        note: csv_value(values, "note"),
     })
 }
 
@@ -3463,16 +3463,16 @@ fn debt_ids_in_conn(conn: &Connection) -> StorageResult<HashSet<i64>> {
     rows.collect::<Result<HashSet<_>, _>>().map_err(sqlite_err)
 }
 
-fn remap_transfer_marker_description(
-    description: &str,
+fn remap_transfer_marker_note(
+    note: &str,
     transfer_id_map: &HashMap<i64, i64>,
 ) -> String {
-    let Some(old_transfer_id) = transfer_marker_id(description) else {
-        return description.to_owned();
+    let Some(old_transfer_id) = transfer_marker_id(note) else {
+        return note.to_owned();
     };
     match transfer_id_map.get(&old_transfer_id) {
         Some(new_transfer_id) => format!("[transfer:{new_transfer_id}]"),
-        None => description.to_owned(),
+        None => note.to_owned(),
     }
 }
 
@@ -3629,7 +3629,7 @@ fn recreate_debt_payment_for_import_in_tx(
 fn insert_import_record_in_tx(
     tx: &rusqlite::Transaction<'_>,
     record: &ParsedOperationCsvRecord,
-    description: &str,
+    note: &str,
 ) -> StorageResult<i64> {
     tx.execute(
         "INSERT INTO records (
@@ -3646,7 +3646,7 @@ fn insert_import_record_in_tx(
             amount_base,
             amount_base_minor,
             category,
-            description,
+            note,
             period
         )
         VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
@@ -3663,7 +3663,7 @@ fn insert_import_record_in_tx(
             record.amount_base,
             record.amount_base_minor,
             record.category.as_str(),
-            description,
+            note,
             record.period.as_deref(),
         ),
     )
@@ -3677,7 +3677,7 @@ fn transfer_list_rows_from_conn(conn: &Connection) -> StorageResult<Vec<Transfer
             "SELECT id, from_wallet_id, to_wallet_id, date,
                     amount_original, amount_original_minor, currency,
                     rate_at_operation, rate_at_operation_text,
-                    amount_base, amount_base_minor, description
+                    amount_base, amount_base_minor, note
              FROM transfers
              ORDER BY id",
         )
@@ -3693,7 +3693,7 @@ fn transfer_list_rows_from_conn(conn: &Connection) -> StorageResult<Vec<Transfer
                 currency: row.get(6)?,
                 rate_at_operation: rate_value_from_sql_row(row, 7, 8)?,
                 amount_base: money_value_from_sql_row(row, 9, 10)?,
-                description: row.get(11)?,
+                note: row.get(11)?,
             })
         })
         .map_err(sqlite_err)?;
@@ -3710,7 +3710,7 @@ fn operation_record_csv_row(record: &RecordRow) -> Vec<String> {
         record.currency.clone(),
         rate_csv_text(record.rate_at_operation),
         money_csv_text(record.amount_base),
-        record.description.clone(),
+        record.note.clone(),
         record.tags.join(", "),
         if record.record_type == "mandatory_expense" {
             record
@@ -3742,7 +3742,7 @@ fn operation_transfer_csv_row(transfer: &TransferRow) -> Vec<String> {
         transfer.currency.clone(),
         rate_csv_text(transfer.rate_at_operation),
         money_csv_text(transfer.amount_base),
-        transfer.description.clone(),
+        transfer.note.clone(),
         String::new(),
         String::new(),
         String::new(),
@@ -3791,7 +3791,7 @@ fn mandatory_expense_select_sql(conn: &Connection, filter_by_id: bool) -> Storag
             amount_base,
             amount_base_minor,
             category,
-            description,
+            note,
             period",
     );
     if has_date {
@@ -3828,7 +3828,7 @@ fn mandatory_expense_row_dicts(
                 rate_at_operation: rate_value_from_sql_row(row, 5, 6)?,
                 amount_base: money_value_from_sql_row(row, 7, 8)?,
                 category: row.get(9)?,
-                description: row.get(10)?,
+                note: row.get(10)?,
                 period: row.get(11)?,
                 date: row.get::<_, Option<String>>(12)?.unwrap_or_default(),
                 auto_pay: row.get::<_, i64>(13)? != 0,
@@ -3885,7 +3885,7 @@ pub fn mandatory_template_create(
     let normalized_date = payload.date.trim();
     let auto_pay = !normalized_date.is_empty();
     let category = payload.category.trim();
-    let description = payload.description.trim();
+    let note = payload.note.trim();
     let period = payload.period.trim().to_lowercase();
 
     tx.execute(
@@ -3899,7 +3899,7 @@ pub fn mandatory_template_create(
             amount_base,
             amount_base_minor,
             category,
-            description,
+            note,
             period,
             date,
             auto_pay
@@ -3915,7 +3915,7 @@ pub fn mandatory_template_create(
             amount_base,
             amount_base_minor,
             category,
-            description,
+            note,
             period.as_str(),
             normalized_date,
             i64::from(auto_pay),
@@ -4184,7 +4184,7 @@ fn record_row_dicts(
                 rate_at_operation: rate_value_from_sql_row(row, 9, 10)?,
                 amount_base: money_value_from_sql_row(row, 11, 12)?,
                 category: row.get(13)?,
-                description: row.get(14)?,
+                note: row.get(14)?,
                 period: row.get(15)?,
                 tags: tags_by_record.remove(&record_id).unwrap_or_default(),
             })
@@ -4213,7 +4213,7 @@ const RECORD_SELECT: &str = "SELECT
     amount_base,
     amount_base_minor,
     category,
-    description,
+    note,
     period
  FROM records";
 
@@ -4409,7 +4409,7 @@ pub fn create_standalone_record_with_tag_colors(
                 amount_base,
                 amount_base_minor,
                 category,
-                description,
+                note,
                 period
             )
             VALUES (?1, ?2, ?3, NULL, NULL, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, NULL)",
@@ -4425,7 +4425,7 @@ pub fn create_standalone_record_with_tag_colors(
                 amount_base,
                 amount_base_minor,
                 category,
-                payload.description.as_str(),
+                payload.note.as_str(),
             ),
         )
         .map_err(sqlite_err)?;
@@ -4541,7 +4541,7 @@ pub fn update_standalone_record_with_tag_colors(
                  amount_base = ?9,
                  amount_base_minor = ?10,
                  category = ?11,
-                 description = ?12
+                 note = ?12
              WHERE id = ?13
                AND transfer_id IS NULL
                AND related_debt_id IS NULL",
@@ -4557,7 +4557,7 @@ pub fn update_standalone_record_with_tag_colors(
                 amount_base,
                 amount_base_minor,
                 category,
-                payload.description.as_str(),
+                payload.note.as_str(),
                 record_id,
             ),
         )
@@ -4755,9 +4755,9 @@ pub fn create_currency_transfer(
     let source_value = source_minor as f64 / 100.0;
     let target_value = target_minor as f64 / 100.0;
     tx.execute(
-        "INSERT INTO transfers (from_wallet_id, to_wallet_id, date, amount_original, amount_original_minor, currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, source_amount_original, source_amount_original_minor, source_currency, target_amount_original, target_amount_original_minor, target_currency, conversion_rate, conversion_rate_text, description)
+        "INSERT INTO transfers (from_wallet_id, to_wallet_id, date, amount_original, amount_original_minor, currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, source_amount_original, source_amount_original_minor, source_currency, target_amount_original, target_amount_original_minor, target_currency, conversion_rate, conversion_rate_text, note)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?4, ?5, ?6, ?11, ?12, ?13, ?14, ?15, ?16)",
-        rusqlite::params![payload.from_wallet_id, payload.to_wallet_id, payload.date.trim(), source_value, source_minor, source_currency, source_rate_text.parse::<f64>().unwrap(), source_rate_text, source_base_minor as f64 / 100.0, source_base_minor, target_value, target_minor, target_currency, conversion_rate, conversion_rate_text, payload.description.trim()],
+        rusqlite::params![payload.from_wallet_id, payload.to_wallet_id, payload.date.trim(), source_value, source_minor, source_currency, source_rate_text.parse::<f64>().unwrap(), source_rate_text, source_base_minor as f64 / 100.0, source_base_minor, target_value, target_minor, target_currency, conversion_rate, conversion_rate_text, payload.note.trim()],
     ).map_err(sqlite_err)?;
     let transfer_id = tx.last_insert_rowid();
     insert_transfer_record_in_tx(
@@ -4772,7 +4772,7 @@ pub fn create_currency_transfer(
         source_rate_text.parse::<f64>().unwrap(),
         &source_rate_text,
         "Transfer",
-        payload.description.trim(),
+        payload.note.trim(),
     )?;
     insert_transfer_record_in_tx(
         &tx,
@@ -4786,7 +4786,7 @@ pub fn create_currency_transfer(
         target_rate_text.parse::<f64>().unwrap(),
         &target_rate_text,
         "Transfer",
-        payload.description.trim(),
+        payload.note.trim(),
     )?;
     tx.execute("UPDATE records SET amount_base = ?1, amount_base_minor = ?2 WHERE transfer_id = ?3 AND type = 'expense'", (source_base_minor as f64 / 100.0, source_base_minor, transfer_id)).map_err(sqlite_err)?;
     tx.execute("UPDATE records SET amount_base = ?1, amount_base_minor = ?2 WHERE transfer_id = ?3 AND type = 'income'", (target_base_minor as f64 / 100.0, target_base_minor, transfer_id)).map_err(sqlite_err)?;
@@ -4811,13 +4811,13 @@ pub fn create_currency_transfer(
             "Commission",
             &format!("[transfer:{transfer_id}]"),
         )?;
-        tx.execute("UPDATE records SET amount_base = ?1, amount_base_minor = ?2 WHERE transfer_id IS NULL AND description = ?3", (commission_base_minor as f64 / 100.0, commission_base_minor, format!("[transfer:{transfer_id}]"))).map_err(sqlite_err)?;
+        tx.execute("UPDATE records SET amount_base = ?1, amount_base_minor = ?2 WHERE transfer_id IS NULL AND note = ?3", (commission_base_minor as f64 / 100.0, commission_base_minor, format!("[transfer:{transfer_id}]"))).map_err(sqlite_err)?;
     }
     normalize_record_ids_in_tx(&tx)?;
     tx.commit().map_err(sqlite_err)?;
     storage_clear_read_connection_cache();
     let conn = open_sqlite_connection(db_path)?;
-    conn.query_row("SELECT id, from_wallet_id, to_wallet_id, date, source_amount_original, source_currency, target_amount_original, target_currency, conversion_rate_text, description FROM transfers WHERE id = ?1", [transfer_id], |row| Ok(CurrencyTransferRow { id: row.get(0)?, from_wallet_id: row.get(1)?, to_wallet_id: row.get(2)?, date: row.get(3)?, source_amount: row.get(4)?, source_currency: row.get(5)?, target_amount: row.get(6)?, target_currency: row.get(7)?, conversion_rate: row.get(8)?, description: row.get(9)? })).map_err(sqlite_err)
+    conn.query_row("SELECT id, from_wallet_id, to_wallet_id, date, source_amount_original, source_currency, target_amount_original, target_currency, conversion_rate_text, note FROM transfers WHERE id = ?1", [transfer_id], |row| Ok(CurrencyTransferRow { id: row.get(0)?, from_wallet_id: row.get(1)?, to_wallet_id: row.get(2)?, date: row.get(3)?, source_amount: row.get(4)?, source_currency: row.get(5)?, target_amount: row.get(6)?, target_currency: row.get(7)?, conversion_rate: row.get(8)?, note: row.get(9)? })).map_err(sqlite_err)
 }
 
 struct ResolvedCurrencyTransfer {
@@ -5225,9 +5225,9 @@ pub struct OperationSuggestions {
     pub tags: Vec<String>,
     pub income_categories: Vec<String>,
     pub expense_categories: Vec<String>,
-    pub descriptions: Vec<String>,
-    pub income_descriptions: Vec<String>,
-    pub expense_descriptions: Vec<String>,
+    pub notes: Vec<String>,
+    pub income_notes: Vec<String>,
+    pub expense_notes: Vec<String>,
 }
 
 pub fn operation_suggestions(db_path: &str) -> StorageResult<OperationSuggestions> {
@@ -5235,13 +5235,13 @@ pub fn operation_suggestions(db_path: &str) -> StorageResult<OperationSuggestion
         tags: tag_names(db_path)?,
         income_categories: distinct_record_categories(db_path, "income")?,
         expense_categories: distinct_record_categories(db_path, "expense")?,
-        descriptions: distinct_record_descriptions(db_path, None)?,
-        income_descriptions: distinct_record_descriptions(db_path, Some("income"))?,
-        expense_descriptions: distinct_record_descriptions(db_path, Some("expense"))?,
+        notes: distinct_record_notes(db_path, None)?,
+        income_notes: distinct_record_notes(db_path, Some("income"))?,
+        expense_notes: distinct_record_notes(db_path, Some("expense"))?,
     })
 }
 
-pub fn distinct_record_descriptions(
+pub fn distinct_record_notes(
     db_path: &str,
     record_type: Option<&str>,
 ) -> StorageResult<Vec<String>> {
@@ -5257,30 +5257,30 @@ pub fn distinct_record_descriptions(
     }
 
     let sql = if normalized_type.is_some() {
-        "SELECT DISTINCT TRIM(description) AS description
+        "SELECT DISTINCT TRIM(note) AS note
          FROM records
          WHERE (type = ?1 OR (?1 = 'expense' AND type = 'mandatory_expense'))
            AND transfer_id IS NULL
            AND related_debt_id IS NULL
-           AND TRIM(description) <> ''
-           AND TRIM(description) NOT GLOB '[[]transfer:[0-9]*]'
-         ORDER BY description COLLATE NOCASE, description"
+           AND TRIM(note) <> ''
+           AND TRIM(note) NOT GLOB '[[]transfer:[0-9]*]'
+         ORDER BY note COLLATE NOCASE, note"
     } else {
-        "SELECT description
+        "SELECT note
          FROM (
-             SELECT DISTINCT TRIM(description) AS description
+             SELECT DISTINCT TRIM(note) AS note
              FROM records
              WHERE type IN ('income', 'expense', 'mandatory_expense')
                AND transfer_id IS NULL
                AND related_debt_id IS NULL
-               AND TRIM(description) <> ''
-               AND TRIM(description) NOT GLOB '[[]transfer:[0-9]*]'
+               AND TRIM(note) <> ''
+               AND TRIM(note) NOT GLOB '[[]transfer:[0-9]*]'
              UNION
-             SELECT DISTINCT TRIM(description) AS description
+             SELECT DISTINCT TRIM(note) AS note
              FROM transfers
-             WHERE TRIM(description) <> ''
+             WHERE TRIM(note) <> ''
          )
-         ORDER BY description COLLATE NOCASE, description"
+         ORDER BY note COLLATE NOCASE, note"
     };
 
     let mut stmt = conn.prepare(sql).map_err(sqlite_err)?;
@@ -5449,10 +5449,10 @@ fn normalize_transfer_ids_in_tx(
         .map_err(sqlite_err)?;
         tx.execute(
             "UPDATE records
-             SET description = ?1
+             SET note = ?1
              WHERE transfer_id IS NULL
                AND related_debt_id IS NULL
-               AND description = ?2",
+               AND note = ?2",
             (
                 format!("[transfer:{temp_id}]"),
                 format!("[transfer:{old_id}]"),
@@ -5475,10 +5475,10 @@ fn normalize_transfer_ids_in_tx(
         .map_err(sqlite_err)?;
         tx.execute(
             "UPDATE records
-             SET description = ?1
+             SET note = ?1
              WHERE transfer_id IS NULL
                AND related_debt_id IS NULL
-               AND description = ?2",
+               AND note = ?2",
             (
                 format!("[transfer:{new_id}]"),
                 format!("[transfer:{temp_id}]"),
@@ -5578,7 +5578,7 @@ fn deletable_standalone_record_ids_in_tx(
     let selected_transfers: HashSet<i64> = transfer_ids.iter().copied().collect();
     let mut stmt = tx
         .prepare(
-            "SELECT id, description
+            "SELECT id, note
              FROM records
              WHERE transfer_id IS NULL
                AND related_debt_id IS NULL
@@ -5593,13 +5593,13 @@ fn deletable_standalone_record_ids_in_tx(
         .map_err(sqlite_err)?;
     let mut ids = Vec::new();
     for row in rows {
-        let (record_id, description) = row.map_err(sqlite_err)?;
-        if transfer_marker_id(&description)
+        let (record_id, note) = row.map_err(sqlite_err)?;
+        if transfer_marker_id(&note)
             .is_some_and(|transfer_id| selected_transfers.contains(&transfer_id))
         {
             continue;
         }
-        if transfer_marker_id(&description).is_some() {
+        if transfer_marker_id(&note).is_some() {
             continue;
         }
         ids.push(record_id);
@@ -5614,7 +5614,7 @@ fn import_replace_record_ids_in_tx(
     let selected_transfers: HashSet<i64> = transfer_ids.iter().copied().collect();
     let mut stmt = tx
         .prepare(
-            "SELECT id, description
+            "SELECT id, note
              FROM records
              WHERE transfer_id IS NULL
                AND related_debt_id IS NULL
@@ -5629,13 +5629,13 @@ fn import_replace_record_ids_in_tx(
         .map_err(sqlite_err)?;
     let mut ids = Vec::new();
     for row in rows {
-        let (record_id, description) = row.map_err(sqlite_err)?;
-        if transfer_marker_id(&description)
+        let (record_id, note) = row.map_err(sqlite_err)?;
+        if transfer_marker_id(&note)
             .is_some_and(|transfer_id| selected_transfers.contains(&transfer_id))
         {
             continue;
         }
-        if transfer_marker_id(&description).is_some() {
+        if transfer_marker_id(&note).is_some() {
             continue;
         }
         ids.push(record_id);
@@ -5668,7 +5668,7 @@ fn skipped_operation_record_count_in_tx(
 ) -> StorageResult<i64> {
     let selected_transfers: HashSet<i64> = transfer_ids.iter().copied().collect();
     let mut stmt = tx
-        .prepare("SELECT type, transfer_id, description FROM records")
+        .prepare("SELECT type, transfer_id, note FROM records")
         .map_err(sqlite_err)?;
     let rows = stmt
         .query_map([], |row| {
@@ -5681,14 +5681,14 @@ fn skipped_operation_record_count_in_tx(
         .map_err(sqlite_err)?;
     let mut skipped = 0_i64;
     for row in rows {
-        let (record_type, transfer_id, description) = row.map_err(sqlite_err)?;
+        let (record_type, transfer_id, note) = row.map_err(sqlite_err)?;
         if let Some(transfer_id) = transfer_id {
             if !selected_transfers.contains(&transfer_id) {
                 skipped += 1;
             }
             continue;
         }
-        if transfer_marker_id(&description)
+        if transfer_marker_id(&note)
             .is_some_and(|marker_transfer_id| !selected_transfers.contains(&marker_transfer_id))
         {
             skipped += 1;
@@ -5713,7 +5713,7 @@ fn validate_selected_operation_record_ids_in_tx(
     for record_id in normalized {
         let row = tx
             .query_row(
-                "SELECT type, transfer_id, related_debt_id, description
+                "SELECT type, transfer_id, related_debt_id, note
                  FROM records
                  WHERE id = ?1",
                 [record_id],
@@ -5728,7 +5728,7 @@ fn validate_selected_operation_record_ids_in_tx(
             )
             .optional()
             .map_err(sqlite_err)?;
-        let Some((record_type, transfer_id, related_debt_id, description)) = row else {
+        let Some((record_type, transfer_id, related_debt_id, note)) = row else {
             return Err(format!("Record not found: {record_id}"));
         };
         if let Some(transfer_id) = transfer_id {
@@ -5745,7 +5745,7 @@ fn validate_selected_operation_record_ids_in_tx(
         if let Some(debt_id) = related_debt_id {
             debt_payment_for_record_in_tx(tx, debt_id, record_id)?;
         }
-        if let Some(marker_transfer_id) = transfer_marker_id(&description) {
+        if let Some(marker_transfer_id) = transfer_marker_id(&note) {
             if selected_transfers.contains(&marker_transfer_id) {
                 continue;
             }
@@ -5815,7 +5815,7 @@ fn delete_operations_in_tx(
                         transfer_id IS NULL
                         AND related_debt_id IS NULL
                         AND category = 'Commission'
-                        AND description = ?2
+                        AND note = ?2
                     )
              )",
             (transfer_id, commission_marker.as_str()),
@@ -5828,7 +5828,7 @@ fn delete_operations_in_tx(
              WHERE transfer_id IS NULL
                AND related_debt_id IS NULL
                AND category = 'Commission'
-               AND description = ?1",
+               AND note = ?1",
             [commission_marker.as_str()],
         )
         .map_err(sqlite_err)?;
@@ -5853,7 +5853,7 @@ fn delete_operation_record_in_tx(
 ) -> StorageResult<usize> {
     let row = tx
         .query_row(
-            "SELECT type, transfer_id, related_debt_id, description
+            "SELECT type, transfer_id, related_debt_id, note
              FROM records
              WHERE id = ?1",
             [record_id],
@@ -5868,7 +5868,7 @@ fn delete_operation_record_in_tx(
         )
         .optional()
         .map_err(sqlite_err)?;
-    let Some((record_type, transfer_id, related_debt_id, description)) = row else {
+    let Some((record_type, transfer_id, related_debt_id, note)) = row else {
         return Err(format!("Record not found: {record_id}"));
     };
     if let Some(transfer_id) = transfer_id {
@@ -5882,7 +5882,7 @@ fn delete_operation_record_in_tx(
                 .to_owned(),
         );
     }
-    if related_debt_id.is_none() && transfer_marker_id(&description).is_some() {
+    if related_debt_id.is_none() && transfer_marker_id(&note).is_some() {
         return Err("Transfer commission must be deleted with its transfer".to_owned());
     }
 
@@ -6010,7 +6010,7 @@ struct TransferCommissionMarker {
     date: String,
     wallet_id: i64,
     category: String,
-    description: String,
+    note: String,
 }
 
 fn transfer_commission_marker_in_tx(
@@ -6019,7 +6019,7 @@ fn transfer_commission_marker_in_tx(
 ) -> StorageResult<Option<TransferCommissionMarker>> {
     let row = tx
         .query_row(
-            "SELECT type, date, wallet_id, category, description
+            "SELECT type, date, wallet_id, category, note
              FROM records
              WHERE id = ?1
                AND transfer_id IS NULL
@@ -6031,17 +6031,17 @@ fn transfer_commission_marker_in_tx(
                     date: row.get(1)?,
                     wallet_id: row.get(2)?,
                     category: row.get(3)?,
-                    description: row.get(4)?,
+                    note: row.get(4)?,
                 })
             },
         )
         .optional()
         .map_err(sqlite_err)?;
-    Ok(row.filter(|row| transfer_marker_id(&row.description).is_some()))
+    Ok(row.filter(|row| transfer_marker_id(&row.note).is_some()))
 }
 
-fn transfer_marker_id(description: &str) -> Option<i64> {
-    let marker = description.trim();
+fn transfer_marker_id(note: &str) -> Option<i64> {
+    let marker = note.trim();
     let id_text = marker
         .strip_prefix("[transfer:")
         .and_then(|value| value.strip_suffix(']'))?;
@@ -6057,10 +6057,10 @@ fn validate_transfer_commission_update(
         || payload.date.trim() != marker.date
         || payload.wallet_id != marker.wallet_id
         || payload.category.trim() != marker.category
-        || payload.description.trim() != marker.description
+        || payload.note.trim() != marker.note
     {
         return Err(
-            "Transfer commission date, wallet, type, category, and marker description are controlled by the transfer"
+            "Transfer commission date, wallet, type, category, and marker note are controlled by the transfer"
                 .to_owned(),
         );
     }
@@ -6076,9 +6076,9 @@ fn validate_mandatory_template_create_payload_in_tx(
     if category.is_empty() {
         return Err("Mandatory category is required".to_owned());
     }
-    let description = payload.description.trim();
-    if description.is_empty() {
-        return Err("Mandatory description is required".to_owned());
+    let note = payload.note.trim();
+    if note.is_empty() {
+        return Err("Mandatory note is required".to_owned());
     }
     validate_mandatory_period(&payload.period)?;
     let date = payload.date.trim();
@@ -6134,7 +6134,7 @@ fn insert_import_mandatory_template_in_tx(
             amount_base,
             amount_base_minor,
             category,
-            description,
+            note,
             period,
             date,
             auto_pay
@@ -6150,7 +6150,7 @@ fn insert_import_mandatory_template_in_tx(
             template.amount_base,
             template.amount_base_minor,
             template.category.as_str(),
-            template.description.as_str(),
+            template.note.as_str(),
             template.period.as_str(),
             template.date.as_str(),
             i64::from(!template.date.trim().is_empty()),
@@ -6160,8 +6160,8 @@ fn insert_import_mandatory_template_in_tx(
     Ok(())
 }
 
-fn normalize_mandatory_description(description: &str, category: &str) -> String {
-    let trimmed = description.trim();
+fn normalize_mandatory_note(note: &str, category: &str) -> String {
+    let trimmed = note.trim();
     if trimmed.is_empty() {
         category.to_owned()
     } else {
@@ -6222,7 +6222,7 @@ fn mandatory_template_in_tx(
             amount_base,
             amount_base_minor,
             category,
-            description,
+            note,
             period,
             COALESCE(date, ''),
             auto_pay
@@ -6238,7 +6238,7 @@ fn mandatory_template_in_tx(
                 rate_at_operation: rate_value_from_sql_row(row, 5, 6)?,
                 amount_base: money_value_from_sql_row(row, 7, 8)?,
                 category: row.get(9)?,
-                description: row.get(10)?,
+                note: row.get(10)?,
                 period: row.get(11)?,
                 date: row.get::<_, Option<String>>(12)?.unwrap_or_default(),
                 auto_pay: row.get::<_, i64>(13)? != 0,
@@ -6266,7 +6266,7 @@ fn mandatory_templates_in_tx(
                 amount_base,
                 amount_base_minor,
                 category,
-                description,
+                note,
                 period,
                 COALESCE(date, ''),
                 auto_pay
@@ -6284,7 +6284,7 @@ fn mandatory_templates_in_tx(
                 rate_at_operation: rate_value_from_sql_row(row, 5, 6)?,
                 amount_base: money_value_from_sql_row(row, 7, 8)?,
                 category: row.get(9)?,
-                description: row.get(10)?,
+                note: row.get(10)?,
                 period: row.get(11)?,
                 date: row.get::<_, Option<String>>(12)?.unwrap_or_default(),
                 auto_pay: row.get::<_, i64>(13)? != 0,
@@ -6344,7 +6344,7 @@ fn insert_mandatory_record_from_template_in_tx(
             amount_base,
             amount_base_minor,
             category,
-            description,
+            note,
             period
         )
         VALUES ('mandatory_expense', ?1, ?2, NULL, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -6359,7 +6359,7 @@ fn insert_mandatory_record_from_template_in_tx(
             template.amount_base,
             amount_minor,
             template.category.as_str(),
-            template.description.as_str(),
+            template.note.as_str(),
             template.period.as_str(),
         ),
     )
@@ -6378,14 +6378,14 @@ fn mandatory_generated_record_exists_in_tx(
          WHERE type = 'mandatory_expense'
            AND wallet_id = ?1
            AND category = ?2
-           AND description = ?3
+           AND note = ?3
            AND period = ?4
            AND date = ?5
          LIMIT 1",
         (
             template.wallet_id,
             template.category.as_str(),
-            template.description.as_str(),
+            template.note.as_str(),
             template.period.as_str(),
             date,
         ),
@@ -6584,7 +6584,7 @@ fn wallet_balance_minor_excluding_transfer_in_tx(
          FROM records
          WHERE wallet_id = ?1
            AND (transfer_id IS NULL OR transfer_id != ?2)
-          AND NOT (transfer_id IS NULL AND description = ?3)"
+          AND NOT (transfer_id IS NULL AND note = ?3)"
     );
     let delta_minor = tx
         .query_row(&sql, (wallet_id, transfer_id, marker.as_str()), |row| {
@@ -6607,7 +6607,7 @@ fn insert_transfer_record_in_tx(
     rate_value: f64,
     rate_text: &str,
     category: &str,
-    description: &str,
+    note: &str,
 ) -> StorageResult<()> {
     tx.execute(
         "INSERT INTO records (
@@ -6624,7 +6624,7 @@ fn insert_transfer_record_in_tx(
             amount_base,
             amount_base_minor,
             category,
-            description,
+            note,
             period
         )
         VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL)",
@@ -6641,7 +6641,7 @@ fn insert_transfer_record_in_tx(
             amount_value,
             amount_minor,
             category,
-            description,
+            note,
         ),
     )
     .map_err(sqlite_err)?;
@@ -7455,7 +7455,7 @@ mod tests {
                 rate_at_operation_text TEXT DEFAULT NULL,
                 amount_base REAL NOT NULL,
                 amount_base_minor INTEGER DEFAULT NULL,
-                description TEXT NOT NULL DEFAULT ''
+                note TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE mandatory_expenses (
                 id INTEGER PRIMARY KEY,
@@ -7468,7 +7468,7 @@ mod tests {
                 amount_base REAL NOT NULL,
                 amount_base_minor INTEGER DEFAULT NULL,
                 category TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
                 period TEXT DEFAULT NULL,
                 date TEXT DEFAULT NULL,
                 auto_pay INTEGER NOT NULL DEFAULT 0
@@ -7488,7 +7488,7 @@ mod tests {
                 amount_base REAL NOT NULL,
                 amount_base_minor INTEGER DEFAULT NULL,
                 category TEXT NOT NULL DEFAULT '',
-                description TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
                 period TEXT DEFAULT NULL
             );
             CREATE TABLE tags (
@@ -7572,7 +7572,7 @@ mod tests {
         conn.execute(
             "INSERT INTO transfers (
                 id, from_wallet_id, to_wallet_id, date, amount_original, amount_original_minor,
-                currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, description
+                currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, note
              ) VALUES (
                 1, 1, 2, '2026-01-04', 300.0, 30000,
                 'KZT', 1.0, '1.000000', 300.0, 30000, 'Move to card'
@@ -7584,7 +7584,7 @@ mod tests {
             "INSERT INTO mandatory_expenses (
                 id, wallet_id, amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor,
-                category, description, period, date, auto_pay
+                category, note, period, date, auto_pay
              ) VALUES (
                 1, 1, 40.0, 4000, 'KZT',
                 1.0, '1.000000', 40.0, 4000,
@@ -7594,19 +7594,19 @@ mod tests {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO records (id, type, date, wallet_id, transfer_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, description)
+            "INSERT INTO records (id, type, date, wallet_id, transfer_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, note)
              VALUES (1, 'income', '2026-01-01', 1, NULL, 200.0, 20000, 200.0, 20000, 'Salary', 'January')",
             [],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO records (id, type, date, wallet_id, transfer_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, description)
+            "INSERT INTO records (id, type, date, wallet_id, transfer_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, note)
              VALUES (2, 'expense', '2026-01-02', 1, NULL, 50.0, 5000, 50.0, 5000, 'Food', 'Groceries')",
             [],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO records (id, type, date, wallet_id, transfer_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, description)
+            "INSERT INTO records (id, type, date, wallet_id, transfer_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, note)
              VALUES (3, 'mandatory_expense', '2026-01-03', 2, NULL, 25.0, 2500, 25.0, 2500, 'Rent', 'Monthly')",
             [],
         )
@@ -7658,21 +7658,21 @@ mod tests {
         debt_id: i64,
         record_id: i64,
         payment_id: i64,
-        description: &str,
+        note: &str,
     ) {
         conn.execute(
             "INSERT INTO records (
                 id, type, date, wallet_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description
+                amount_base, amount_base_minor, category, note
              )
              VALUES (
                 ?1, 'income', '2026-01-05', 1, ?2,
                 100.0, 10000, 'KZT', 1.0, '1.000000',
                 100.0, 10000, 'Debt', ?3
              )",
-            (record_id, debt_id, description),
+            (record_id, debt_id, note),
         )
         .unwrap();
         conn.execute(
@@ -7690,21 +7690,21 @@ mod tests {
         conn: &Connection,
         debt_id: i64,
         record_id: i64,
-        description: &str,
+        note: &str,
     ) {
         conn.execute(
             "INSERT INTO records (
                 id, type, date, wallet_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description
+                amount_base, amount_base_minor, category, note
              )
              VALUES (
                 ?1, 'income', '2026-01-05', 1, ?2,
                 100.0, 10000, 'KZT', 1.0, '1.000000',
                 100.0, 10000, 'Debt', ?3
              )",
-            (record_id, debt_id, description),
+            (record_id, debt_id, note),
         )
         .unwrap();
     }
@@ -7807,7 +7807,7 @@ mod tests {
             "INSERT INTO mandatory_expenses (
                 id, wallet_id, amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor,
-                category, description, period, date, auto_pay
+                category, note, period, date, auto_pay
              ) VALUES (
                 2, 1, 25.0, 2500, 'KZT',
                 1.0, '1.000000', 25.0, 2500,
@@ -8200,13 +8200,13 @@ mod tests {
         .unwrap();
         let conn = Connection::open(&db_path).unwrap();
         conn.execute(
-            "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, description)
+            "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, note)
              VALUES ('income', '2026-01-05', ?1, 10.0, 1000, 10.0, 1000, 'Test', 'In')",
             [wallet.id],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, description)
+            "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, amount_base, amount_base_minor, category, note)
              VALUES ('expense', '2026-01-06', ?1, 10.0, 1000, 10.0, 1000, 'Test', 'Out')",
             [wallet.id],
         )
@@ -8295,7 +8295,7 @@ mod tests {
         conn.execute(
             "INSERT INTO transfers (
                 from_wallet_id, to_wallet_id, date, amount_original, amount_original_minor,
-                currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, description
+                currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, note
              ) VALUES (?1, 1, '2026-01-07', 0.0, 0, 'KZT', 1.0, '1.000000', 0.0, 0, 'Zero transfer')",
             [transfer_wallet.id],
         )
@@ -8303,7 +8303,7 @@ mod tests {
         conn.execute(
             "INSERT INTO mandatory_expenses (
                 wallet_id, amount_original, amount_original_minor, currency, rate_at_operation,
-                rate_at_operation_text, amount_base, amount_base_minor, category, description,
+                rate_at_operation_text, amount_base, amount_base_minor, category, note,
                 period, date, auto_pay
              ) VALUES (?1, 0.0, 0, 'KZT', 1.0, '1.000000', 0.0, 0, 'Zero', 'History', 'monthly', '2026-01-08', 0)",
             [mandatory_wallet.id],
@@ -8334,7 +8334,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "25.255".to_owned(),
                 category: "Utilities".to_owned(),
-                description: "Internet".to_owned(),
+                note: "Internet".to_owned(),
                 period: "monthly".to_owned(),
                 date: "2026-02-01".to_owned(),
             },
@@ -8388,7 +8388,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Mandatory".to_owned(),
-                description: "Recreated".to_owned(),
+                note: "Recreated".to_owned(),
                 period: "daily".to_owned(),
                 date: "".to_owned(),
             },
@@ -8410,7 +8410,7 @@ mod tests {
             rate_at_operation: "1".to_owned(),
             amount_base: "25".to_owned(),
             category: "Mandatory".to_owned(),
-            description: "Template".to_owned(),
+            note: "Template".to_owned(),
             period: "monthly".to_owned(),
             date: "".to_owned(),
         };
@@ -8482,7 +8482,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "2000".to_owned(),
                 category: "Rent".to_owned(),
-                description: "Too much".to_owned(),
+                note: "Too much".to_owned(),
                 period: "monthly".to_owned(),
                 date: "".to_owned(),
             },
@@ -8527,7 +8527,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "5".to_owned(),
                 category: "Daily".to_owned(),
-                description: "Coffee".to_owned(),
+                note: "Coffee".to_owned(),
                 period: "daily".to_owned(),
                 date: "2026-02-01".to_owned(),
             },
@@ -8542,7 +8542,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "7".to_owned(),
                 category: "Monthly".to_owned(),
-                description: "Month end".to_owned(),
+                note: "Month end".to_owned(),
                 period: "monthly".to_owned(),
                 date: "2026-01-31".to_owned(),
             },
@@ -8574,7 +8574,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "9".to_owned(),
                 category: "Future".to_owned(),
-                description: "Not yet".to_owned(),
+                note: "Not yet".to_owned(),
                 period: "daily".to_owned(),
                 date: "2026-03-01".to_owned(),
             },
@@ -8602,7 +8602,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "9".to_owned(),
                 category: "Future".to_owned(),
-                description: "Not yet".to_owned(),
+                note: "Not yet".to_owned(),
                 period: "daily".to_owned(),
                 date: "2099-02-28".to_owned(),
             },
@@ -8632,7 +8632,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "11".to_owned(),
                 category: "Monthly".to_owned(),
-                description: "Due on 13th".to_owned(),
+                note: "Due on 13th".to_owned(),
                 period: "monthly".to_owned(),
                 date: "2026-03-13".to_owned(),
             },
@@ -8671,7 +8671,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "4".to_owned(),
                 category: "Daily anchor".to_owned(),
-                description: "Every day after anchor".to_owned(),
+                note: "Every day after anchor".to_owned(),
                 period: "daily".to_owned(),
                 date: "2026-06-20".to_owned(),
             },
@@ -8724,7 +8724,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "6".to_owned(),
                 category: "Weekly anchor".to_owned(),
-                description: "Every Monday".to_owned(),
+                note: "Every Monday".to_owned(),
                 period: "weekly".to_owned(),
                 date: "2026-06-15".to_owned(),
             },
@@ -8778,7 +8778,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "5000".to_owned(),
                 category: "Large autopay".to_owned(),
-                description: "Legacy batch behavior".to_owned(),
+                note: "Legacy batch behavior".to_owned(),
                 period: "daily".to_owned(),
                 date: "2026-06-01".to_owned(),
             },
@@ -8811,7 +8811,7 @@ mod tests {
         let path = temp_test_path("ledgera_mandatory_import", "csv");
         fs::write(
             &path,
-            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,period\n\
+            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,period\n\
 mandatory_expense,2026-03-01,1,Rent,-100,KZT,1,100,,monthly\n\
 mandatory_expense,,2,Phone,25,KZT,1,25,Mobile,weekly\n",
         )
@@ -8829,7 +8829,7 @@ mandatory_expense,,2,Phone,25,KZT,1,25,Mobile,weekly\n",
             templates.iter().map(|row| row.id).collect::<Vec<_>>(),
             vec![1, 2]
         );
-        assert_eq!(templates[0].description, "Rent");
+        assert_eq!(templates[0].note, "Rent");
         assert!(templates[0].auto_pay);
         assert_eq!(templates[0].amount_base, 100.0);
         assert!(!templates[1].auto_pay);
@@ -8839,7 +8839,7 @@ mandatory_expense,,2,Phone,25,KZT,1,25,Mobile,weekly\n",
         assert_eq!(export.exported_rows, 2);
         let exported = fs::read_to_string(&export_path).unwrap();
         assert!(exported.starts_with(
-            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,period"
+            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,period"
         ));
         assert!(
             exported
@@ -8916,7 +8916,7 @@ mandatory_expense,,2,Phone,25,KZT,1,25,Mobile,weekly\n",
         let path = temp_test_path("ledgera_mandatory_invalid", "csv");
         fs::write(
             &path,
-            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,period\n\
+            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,period\n\
 mandatory_expense,2026-02-30,1,Rent,100,KZT,1,100,Rent,monthly\n\
 mandatory_expense,,99,Phone,25,KZT,1,25,Mobile,weekly\n\
 expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
@@ -8960,7 +8960,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let path = temp_test_path("ledgera_mandatory_empty", "csv");
         fs::write(
             &path,
-            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,period\n",
+            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,period\n",
         )
         .unwrap();
 
@@ -9021,7 +9021,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "75.25".to_owned(),
                 category: "Dining".to_owned(),
-                description: "Updated dinner".to_owned(),
+                note: "Updated dinner".to_owned(),
                 tags: vec!["work".to_owned(), "dining".to_owned(), "work".to_owned()],
             },
         )
@@ -9031,7 +9031,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(updated.wallet_id, 2);
         assert_eq!(updated.amount_original, 75.25);
         assert_eq!(updated.category, "Dining");
-        assert_eq!(updated.description, "Updated dinner");
+        assert_eq!(updated.note, "Updated dinner");
         assert_eq!(updated.tags, vec!["dining".to_owned(), "work".to_owned()]);
         assert_eq!(
             tag_names(&db_path).unwrap(),
@@ -9042,7 +9042,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             "INSERT INTO records
                 (type, date, wallet_id, amount_original, amount_original_minor, currency,
                  rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor,
-                 category, description)
+                 category, note)
              VALUES
                 ('expense', '2026-02-11', 1, 1, 100, 'KZT', 1, '1', 1, 100, ' Dining ', 'Updated dinner')",
             [],
@@ -9060,23 +9060,23 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         );
         assert_eq!(suggestions.expense_categories, vec!["Dining".to_owned()]);
         assert_eq!(
-            suggestions.expense_descriptions,
+            suggestions.expense_notes,
             vec!["Monthly".to_owned(), "Updated dinner".to_owned()]
         );
         remove_test_db(&db_path);
     }
 
     #[test]
-    fn distinct_record_descriptions_excludes_linked_rows_and_markers() {
+    fn distinct_record_notes_excludes_linked_rows_and_markers() {
         let db_path = create_balance_test_db();
         let conn = Connection::open(&db_path).unwrap();
         conn.execute(
-            "UPDATE records SET description = '' WHERE transfer_id IS NULL",
+            "UPDATE records SET note = '' WHERE transfer_id IS NULL",
             [],
         )
         .unwrap();
         conn.execute(
-            "UPDATE records SET description = 'Transfer mirror' WHERE id = 4",
+            "UPDATE records SET note = 'Transfer mirror' WHERE id = 4",
             [],
         )
         .unwrap();
@@ -9084,7 +9084,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             "INSERT INTO records
                 (id, type, date, wallet_id, amount_original, amount_original_minor, currency,
                  rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor,
-                 category, description)
+                 category, note)
              VALUES
                 (100, 'income', '2026-02-01', 1, 10, 1000, 'KZT', 1, '1', 10, 1000, 'Salary', 'Payroll'),
                 (101, 'expense', '2026-02-02', 1, 5, 500, 'KZT', 1, '1', 5, 500, 'Food', 'Lunch'),
@@ -9095,7 +9095,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         drop(conn);
 
         assert_eq!(
-            distinct_record_descriptions(&db_path, None).unwrap(),
+            distinct_record_notes(&db_path, None).unwrap(),
             vec![
                 "Lunch".to_owned(),
                 "Move to card".to_owned(),
@@ -9103,19 +9103,19 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             ]
         );
         assert_eq!(
-            distinct_record_descriptions(&db_path, Some("income")).unwrap(),
+            distinct_record_notes(&db_path, Some("income")).unwrap(),
             vec!["Payroll".to_owned()]
         );
         assert_eq!(
-            distinct_record_descriptions(&db_path, Some("expense")).unwrap(),
+            distinct_record_notes(&db_path, Some("expense")).unwrap(),
             vec!["Lunch".to_owned()]
         );
-        assert!(distinct_record_descriptions(&db_path, Some("transfer")).is_err());
+        assert!(distinct_record_notes(&db_path, Some("transfer")).is_err());
         remove_test_db(&db_path);
     }
 
     #[test]
-    fn operation_suggestions_do_not_hide_descriptions_after_alphabetical_cutoff() {
+    fn operation_suggestions_do_not_hide_notes_after_alphabetical_cutoff() {
         let db_path = create_balance_test_db();
         let conn = Connection::open(&db_path).unwrap();
         for index in 0..201 {
@@ -9123,9 +9123,9 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 "INSERT INTO records
                     (id, type, date, wallet_id, amount_original, amount_original_minor, currency,
                      rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor,
-                     category, description)
+                     category, note)
                  VALUES (?1, 'expense', '2026-02-01', 1, 1, 100, 'KZT', 1, '1', 1, 100, 'Food', ?2)",
-                rusqlite::params![1000 + index, format!("Description {index:03}")],
+                rusqlite::params![1000 + index, format!("Note {index:03}")],
             )
             .unwrap();
         }
@@ -9134,9 +9134,9 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let suggestions = operation_suggestions(&db_path).unwrap();
         assert!(
             suggestions
-                .expense_descriptions
+                .expense_notes
                 .iter()
-                .any(|value| value == "Description 200")
+                .any(|value| value == "Note 200")
         );
         remove_test_db(&db_path);
     }
@@ -9155,7 +9155,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9174,7 +9174,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9197,7 +9197,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9216,7 +9216,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9239,7 +9239,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9258,7 +9258,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9281,7 +9281,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9300,7 +9300,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9334,7 +9334,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9355,7 +9355,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9553,7 +9553,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "0".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9572,7 +9572,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "-1".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -9608,7 +9608,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                     rate_at_operation: "1".to_owned(),
                     amount_base: "10".to_owned(),
                     category: "Blocked".to_owned(),
-                    description: "".to_owned(),
+                    note: "".to_owned(),
                     tags: vec![],
                 },
             )
@@ -9668,7 +9668,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-01".to_owned(),
                 amount: "125.505".to_owned(),
                 currency: "kzt".to_owned(),
-                description: "Move funds".to_owned(),
+                note: "Move funds".to_owned(),
                 commission_amount: "".to_owned(),
                 commission_currency: "".to_owned(),
             },
@@ -9680,7 +9680,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(created.to_wallet_id, 2);
         assert_eq!(created.amount_original, 125.51);
         assert_eq!(created.currency, "KZT");
-        assert_eq!(created.description, "Move funds");
+        assert_eq!(created.note, "Move funds");
 
         let linked: Vec<RecordRow> =
             filtered_record_list_rows(&db_path, &RecordFilterPayload::default())
@@ -9717,7 +9717,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-01".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move funds".to_owned(),
+                note: "Move funds".to_owned(),
                 commission_amount: "3.5".to_owned(),
                 commission_currency: "kzt".to_owned(),
             },
@@ -9729,7 +9729,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             .iter()
             .find(|record| {
                 record.transfer_id.is_none()
-                    && record.description == format!("[transfer:{}]", created.id)
+                    && record.note == format!("[transfer:{}]", created.id)
             })
             .unwrap();
         assert_eq!(commission.record_type, "expense");
@@ -9771,7 +9771,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-10".to_owned(),
                 amount: "100".to_owned(),
                 amount_currency: "KZT".to_owned(),
-                description: "FX transfer".to_owned(),
+                note: "FX transfer".to_owned(),
                 commission_amount: "".to_owned(),
                 commission_currency: "".to_owned(),
             },
@@ -9790,7 +9790,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-10".to_owned(),
                 amount: "0.1".to_owned(),
                 amount_currency: "USD".to_owned(),
-                description: "Reverse quote".to_owned(),
+                note: "Reverse quote".to_owned(),
                 commission_amount: "".to_owned(),
                 commission_currency: "".to_owned(),
             },
@@ -9807,7 +9807,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-10".to_owned(),
                 amount: "2".to_owned(),
                 amount_currency: "USD".to_owned(),
-                description: "Insufficient funds".to_owned(),
+                note: "Insufficient funds".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "USD".to_owned(),
             },
@@ -9822,7 +9822,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-10".to_owned(),
                 amount: "100".to_owned(),
                 amount_currency: "KZT".to_owned(),
-                description: "Invalid commission currency".to_owned(),
+                note: "Invalid commission currency".to_owned(),
                 commission_amount: "1".to_owned(),
                 commission_currency: "USD".to_owned(),
             },
@@ -9863,7 +9863,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             "INSERT INTO records (
                 type, date, wallet_id, amount_original, amount_original_minor,
                 currency, rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description
+                amount_base, amount_base_minor, category, note
              ) VALUES ('income', '2026-01-05', ?1, 10000, 1000000,
                        'KZT', 1, '1', 10000, 1000000, 'Legacy', 'Legacy record')",
             [usd_wallet.id],
@@ -9879,7 +9879,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-10".to_owned(),
                 amount: "1000".to_owned(),
                 amount_currency: "USD".to_owned(),
-                description: "Should be rejected".to_owned(),
+                note: "Should be rejected".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "USD".to_owned(),
             },
@@ -9904,7 +9904,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-05".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Existing transfer".to_owned(),
+                note: "Existing transfer".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -9941,7 +9941,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-10".to_owned(),
                 amount: "100".to_owned(),
                 amount_currency: "KZT".to_owned(),
-                description: "Normalized result".to_owned(),
+                note: "Normalized result".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -9964,7 +9964,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-05".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Tail transfer".to_owned(),
+                note: "Tail transfer".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10002,7 +10002,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-10".to_owned(),
                 amount: "100".to_owned(),
                 amount_currency: "KZT".to_owned(),
-                description: "Replacement transfer".to_owned(),
+                note: "Replacement transfer".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10024,7 +10024,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-01".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Second".to_owned(),
+                note: "Second".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10041,7 +10041,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-02".to_owned(),
                 amount: "50".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Third".to_owned(),
+                note: "Third".to_owned(),
                 commission_amount: "1".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10062,12 +10062,12 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert!(rows.iter().any(|record| record.transfer_id == Some(3)));
         assert!(
             rows.iter()
-                .any(|record| record.description == "[transfer:3]")
+                .any(|record| record.note == "[transfer:3]")
         );
         assert!(
             !rows
                 .iter()
-                .any(|record| record.description == "[transfer:2]")
+                .any(|record| record.note == "[transfer:2]")
         );
         remove_test_db(&db_path);
     }
@@ -10083,7 +10083,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-01".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move funds".to_owned(),
+                note: "Move funds".to_owned(),
                 commission_amount: "3.5".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10093,7 +10093,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let commission = filtered_record_list_rows(&db_path, &RecordFilterPayload::default())
             .unwrap()
             .into_iter()
-            .find(|record| record.transfer_id.is_none() && record.description == marker)
+            .find(|record| record.transfer_id.is_none() && record.note == marker)
             .unwrap();
 
         let updated = update_standalone_record(
@@ -10108,17 +10108,17 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "7.25".to_owned(),
                 category: "Commission".to_owned(),
-                description: marker.clone(),
+                note: marker.clone(),
                 tags: vec![],
             },
         )
         .unwrap();
         assert_eq!(updated.amount_base, 7.25);
-        assert_eq!(updated.description, marker);
+        assert_eq!(updated.note, marker);
 
         assert!(delete_transfer(&db_path, created.id).unwrap());
         let rows = filtered_record_list_rows(&db_path, &RecordFilterPayload::default()).unwrap();
-        assert!(!rows.iter().any(|record| record.description == marker));
+        assert!(!rows.iter().any(|record| record.note == marker));
         remove_test_db(&db_path);
     }
 
@@ -10133,7 +10133,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-01".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move funds".to_owned(),
+                note: "Move funds".to_owned(),
                 commission_amount: "3.5".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10143,7 +10143,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let commission = filtered_record_list_rows(&db_path, &RecordFilterPayload::default())
             .unwrap()
             .into_iter()
-            .find(|record| record.transfer_id.is_none() && record.description == marker)
+            .find(|record| record.transfer_id.is_none() && record.note == marker)
             .unwrap();
 
         let update_error = update_standalone_record(
@@ -10158,7 +10158,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "7.25".to_owned(),
                 category: "Fee".to_owned(),
-                description: "edited".to_owned(),
+                note: "edited".to_owned(),
                 tags: vec![],
             },
         )
@@ -10182,7 +10182,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-10".to_owned(),
                 amount: "80.255".to_owned(),
                 currency: "kzt".to_owned(),
-                description: "Back to cash".to_owned(),
+                note: "Back to cash".to_owned(),
             },
         )
         .unwrap();
@@ -10192,7 +10192,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(updated.date, "2026-02-10");
         assert_eq!(updated.amount_original, 80.26);
         assert_eq!(updated.currency, "KZT");
-        assert_eq!(updated.description, "Back to cash");
+        assert_eq!(updated.note, "Back to cash");
 
         let linked: Vec<RecordRow> =
             filtered_record_list_rows(&db_path, &RecordFilterPayload::default())
@@ -10213,7 +10213,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(income.wallet_id, 1);
         assert_eq!(expense.date, "2026-02-10");
         assert_eq!(income.amount_base, 80.26);
-        assert_eq!(expense.description, "Back to cash");
+        assert_eq!(expense.note, "Back to cash");
         remove_test_db(&db_path);
     }
 
@@ -10228,7 +10228,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-01".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move funds".to_owned(),
+                note: "Move funds".to_owned(),
                 commission_amount: "3.5".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10244,7 +10244,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-09".to_owned(),
                 amount: "50".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Return funds".to_owned(),
+                note: "Return funds".to_owned(),
             },
         )
         .unwrap();
@@ -10254,7 +10254,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             .iter()
             .find(|record| {
                 record.transfer_id.is_none()
-                    && record.description == format!("[transfer:{}]", created.id)
+                    && record.note == format!("[transfer:{}]", created.id)
             })
             .unwrap();
         assert_eq!(commission.wallet_id, 2);
@@ -10272,7 +10272,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             date: "2026-02-01".to_owned(),
             amount: "100".to_owned(),
             currency: "KZT".to_owned(),
-            description: "".to_owned(),
+            note: "".to_owned(),
             commission_amount: "0".to_owned(),
             commission_currency: "KZT".to_owned(),
         };
@@ -10388,7 +10388,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             date: "2026-02-01".to_owned(),
             amount: "100".to_owned(),
             currency: "KZT".to_owned(),
-            description: "".to_owned(),
+            note: "".to_owned(),
         };
 
         assert!(
@@ -10499,7 +10499,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-01".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move funds".to_owned(),
+                note: "Move funds".to_owned(),
                 commission_amount: "3.5".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10517,7 +10517,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         );
         assert!(!rows.iter().any(|record| {
             record.transfer_id.is_none()
-                && record.description == format!("[transfer:{}]", created.id)
+                && record.note == format!("[transfer:{}]", created.id)
         }));
         assert_eq!(
             wallet_balance_rows(&db_path, None)
@@ -10541,7 +10541,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-01".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move funds".to_owned(),
+                note: "Move funds".to_owned(),
                 commission_amount: "3.5".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10554,7 +10554,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 "SELECT id FROM records
                  WHERE transfer_id IS NULL
                    AND category = 'Commission'
-                   AND description = ?1",
+                   AND note = ?1",
                 [marker.as_str()],
                 |row| row.get(0),
             )
@@ -10563,7 +10563,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             "INSERT INTO records (
                 id, type, date, wallet_id, transfer_id, related_debt_id,
                 amount_original, amount_original_minor, amount_base, amount_base_minor,
-                category, description
+                category, note
              ) VALUES (
                 99, 'expense', '2026-02-01', 1, NULL, NULL,
                 1.0, 100, 1.0, 100, 'General', ?1
@@ -10598,7 +10598,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let rows = filtered_record_list_rows(&db_path, &RecordFilterPayload::default()).unwrap();
         let protected_record_id = rows
             .iter()
-            .find_map(|record| (record.description == marker).then_some(record.id))
+            .find_map(|record| (record.note == marker).then_some(record.id))
             .expect("protected marker record");
         let conn = Connection::open(&db_path).unwrap();
         let record_tags: Vec<(i64, i64)> = {
@@ -10664,7 +10664,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-02-01".to_owned(),
                 amount: "100".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move funds".to_owned(),
+                note: "Move funds".to_owned(),
                 commission_amount: "3.5".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -10747,7 +10747,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Next".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -10824,7 +10824,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Next".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             },
         )
@@ -10903,7 +10903,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             .filter(|record| record.related_debt_id == Some(1))
             .collect();
         assert_eq!(debt_records.len(), 1);
-        assert_eq!(debt_records[0].description, "Debt opening");
+        assert_eq!(debt_records[0].note, "Debt opening");
         let payment_record_id: i64 = Connection::open(&db_path)
             .unwrap()
             .query_row(
@@ -10928,7 +10928,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 id, type, date, wallet_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description
+                amount_base, amount_base_minor, category, note
              )
              VALUES (
                 8, 'expense', '2026-01-06', 1, 1,
@@ -10952,7 +10952,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         fs::write(
             &path,
             concat!(
-                "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,record_id,related_debt_id,transfer_id,from_wallet_id,to_wallet_id\n",
+                "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,tags,period,record_id,related_debt_id,transfer_id,from_wallet_id,to_wallet_id\n",
                 "2026-01-06,expense,1,Debt payment,50,KZT,1,50,Repay Alex,,,8,1,,,\n"
             ),
         )
@@ -10974,7 +10974,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             .unwrap();
         let linked_record: (String, i64) = conn
             .query_row(
-                "SELECT description, related_debt_id FROM records WHERE id = ?1",
+                "SELECT note, related_debt_id FROM records WHERE id = ?1",
                 [payment_record_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
@@ -10995,7 +10995,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 id, type, date, wallet_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description
+                amount_base, amount_base_minor, category, note
              )
              VALUES (
                 7, 'expense', '2026-01-06', 1, 1,
@@ -11010,7 +11010,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 id, type, date, wallet_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description
+                amount_base, amount_base_minor, category, note
              )
              VALUES (
                 8, 'expense', '2026-01-06', 1, 1,
@@ -11034,7 +11034,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         fs::write(
             &path,
             concat!(
-                "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,record_id,related_debt_id,transfer_id,from_wallet_id,to_wallet_id\n",
+                "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,tags,period,record_id,related_debt_id,transfer_id,from_wallet_id,to_wallet_id\n",
                 "2026-01-06,expense,1,Debt payment,50,KZT,1,50,Imported repay,,,8,1,,,\n"
             ),
         )
@@ -11075,7 +11075,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 id, type, date, wallet_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description
+                amount_base, amount_base_minor, category, note
              )
              VALUES (
                 8, 'expense', '2026-01-06', 1, 1,
@@ -11090,7 +11090,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         fs::write(
             &path,
             concat!(
-                "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,record_id,related_debt_id,transfer_id,from_wallet_id,to_wallet_id\n",
+                "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,tags,period,record_id,related_debt_id,transfer_id,from_wallet_id,to_wallet_id\n",
                 "2026-01-06,expense,1,Debt payment,50,KZT,1,50,Orphan repay,,,8,1,,,\n"
             ),
         )
@@ -11139,7 +11139,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             .filter(|record| record.related_debt_id == Some(1))
             .collect();
         assert_eq!(debt_records.len(), 1);
-        assert_eq!(debt_records[0].description, "Debt opening");
+        assert_eq!(debt_records[0].note, "Debt opening");
         let payment_count: i64 = Connection::open(&db_path)
             .unwrap()
             .query_row("SELECT COUNT(*) FROM debt_payments", [], |row| row.get(0))
@@ -11489,7 +11489,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         assert_eq!(payment_record_id, 6);
         let wrong_record_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM records WHERE description = 'Wrong debt'",
+                "SELECT COUNT(*) FROM records WHERE note = 'Wrong debt'",
                 [],
                 |row| row.get(0),
             )
@@ -11548,7 +11548,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let unchanged_count: i64 = Connection::open(&db_path)
             .unwrap()
             .query_row(
-                "SELECT COUNT(*) FROM records WHERE description = 'Debt payment'",
+                "SELECT COUNT(*) FROM records WHERE note = 'Debt payment'",
                 [],
                 |row| row.get(0),
             )
@@ -11655,7 +11655,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             .filter(|record| record.related_debt_id == Some(1))
             .collect();
         assert_eq!(debt_records.len(), 1);
-        assert_eq!(debt_records[0].description, "Debt opening");
+        assert_eq!(debt_records[0].note, "Debt opening");
         let payment_record_id: i64 = Connection::open(&db_path)
             .unwrap()
             .query_row(
@@ -11688,7 +11688,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 id, type, date, wallet_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description
+                amount_base, amount_base_minor, category, note
              )
              VALUES (
                 6, 'expense', '2026-01-05', 1, 1,
@@ -12002,7 +12002,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "1".to_owned(),
                 category: "Existing".to_owned(),
-                description: "Existing tag owner".to_owned(),
+                note: "Existing tag owner".to_owned(),
                 tags: vec!["work".to_owned()],
             },
             &[TagColorAssignment {
@@ -12020,7 +12020,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         ));
         fs::write(
             &path,
-            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
+            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
              2026-02-01,income,1,Salary,100.00,KZT,1,100.00,Imported salary,\"work, main\",,,,,\n\
              2026-02-02,transfer,,Transfer,25.00,KZT,1,25.00,Imported transfer,,,7,1,2\n",
         )
@@ -12170,7 +12170,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         ));
         fs::write(
             &path,
-            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
+            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
              2026-02-01,income,1,Salary,100.00,KZT,1,100.00,Oldest,,,,,\n\
              2026-02-02,expense,1,Food,10.00,KZT,1,10.00,Same day first,,,,,\n\
              2026-02-02,expense,1,Food,20.00,KZT,1,20.00,Same day second,,,,,\n\
@@ -12184,25 +12184,25 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             .unwrap()
             .into_iter()
             .filter(|record| {
-                record.description == "Oldest"
-                    || record.description == "Same day first"
-                    || record.description == "Same day second"
-                    || record.description == "Newest transfer"
+                record.note == "Oldest"
+                    || record.note == "Same day first"
+                    || record.note == "Same day second"
+                    || record.note == "Newest transfer"
             })
             .collect();
         let oldest_id = imported_rows
             .iter()
-            .find(|record| record.description == "Oldest")
+            .find(|record| record.note == "Oldest")
             .unwrap()
             .id;
         let same_day_first_id = imported_rows
             .iter()
-            .find(|record| record.description == "Same day first")
+            .find(|record| record.note == "Same day first")
             .unwrap()
             .id;
         let same_day_second_id = imported_rows
             .iter()
-            .find(|record| record.description == "Same day second")
+            .find(|record| record.note == "Same day second")
             .unwrap()
             .id;
         assert!(oldest_id < same_day_first_id);
@@ -12210,25 +12210,25 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
 
         let journal_rows =
             filtered_record_list_rows(&db_path, &RecordFilterPayload::default()).unwrap();
-        let descriptions: Vec<_> = journal_rows
+        let notes: Vec<_> = journal_rows
             .iter()
-            .map(|record| record.description.as_str())
+            .map(|record| record.note.as_str())
             .collect();
-        let newest_transfer_position = descriptions
+        let newest_transfer_position = notes
             .iter()
-            .position(|description| *description == "Newest transfer")
+            .position(|note| *note == "Newest transfer")
             .unwrap();
-        let same_day_second_position = descriptions
+        let same_day_second_position = notes
             .iter()
-            .position(|description| *description == "Same day second")
+            .position(|note| *note == "Same day second")
             .unwrap();
-        let same_day_first_position = descriptions
+        let same_day_first_position = notes
             .iter()
-            .position(|description| *description == "Same day first")
+            .position(|note| *note == "Same day first")
             .unwrap();
-        let oldest_position = descriptions
+        let oldest_position = notes
             .iter()
-            .position(|description| *description == "Oldest")
+            .position(|note| *note == "Oldest")
             .unwrap();
         assert!(newest_transfer_position < same_day_second_position);
         assert!(same_day_second_position < same_day_first_position);
@@ -12322,25 +12322,25 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
 
         let journal_rows =
             filtered_record_list_rows(&db_path, &RecordFilterPayload::default()).unwrap();
-        let descriptions: Vec<_> = journal_rows
+        let notes: Vec<_> = journal_rows
             .iter()
-            .map(|record| record.description.as_str())
+            .map(|record| record.note.as_str())
             .collect();
-        let newest_transfer_position = descriptions
+        let newest_transfer_position = notes
             .iter()
-            .position(|description| *description == "Newest transfer")
+            .position(|note| *note == "Newest transfer")
             .unwrap();
-        let same_day_second_position = descriptions
+        let same_day_second_position = notes
             .iter()
-            .position(|description| *description == "Same day second")
+            .position(|note| *note == "Same day second")
             .unwrap();
-        let same_day_first_position = descriptions
+        let same_day_first_position = notes
             .iter()
-            .position(|description| *description == "Same day first")
+            .position(|note| *note == "Same day first")
             .unwrap();
-        let oldest_position = descriptions
+        let oldest_position = notes
             .iter()
-            .position(|description| *description == "Oldest")
+            .position(|note| *note == "Oldest")
             .unwrap();
         assert!(newest_transfer_position < same_day_second_position);
         assert!(same_day_second_position < same_day_first_position);
@@ -12362,7 +12362,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         ));
         fs::write(
             &path,
-            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
+            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
              2999-01-01,income,1,Future,10.00,KZT,1,10.00,,,,,,\n\
              2026-02-02,transfer,,Transfer,25.00,KZT,1,25.00,Bad transfer,,,1,1,1\n",
         )
@@ -12397,7 +12397,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         ));
         fs::write(
             &path,
-            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
+            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
              2026-02-01,expense,1,Commission,5.00,KZT,1,5.00,[transfer:99],,,,,\n",
         )
         .unwrap();
@@ -12453,7 +12453,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         ));
         fs::write(
             &path,
-            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,record_id,related_debt_id,transfer_id,from_wallet_id,to_wallet_id\n\
+            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,tags,period,record_id,related_debt_id,transfer_id,from_wallet_id,to_wallet_id\n\
              2026-02-01,expense,1,Commission,3.50,KZT,1,3.50,[transfer:42],,,,,,,\n\
              2026-02-01,transfer,,Transfer,100.00,KZT,1,100.00,Move funds,,,,,42,1,2\n",
         )
@@ -12471,19 +12471,19 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
         let transfer = transfer_list_rows(&db_path)
             .unwrap()
             .into_iter()
-            .find(|transfer| transfer.description == "Move funds")
+            .find(|transfer| transfer.note == "Move funds")
             .unwrap();
         let marker = format!("[transfer:{}]", transfer.id);
         let commission = record_list_rows(&db_path)
             .unwrap()
             .into_iter()
-            .find(|record| record.description == marker)
+            .find(|record| record.note == marker)
             .unwrap();
         assert!(delete_standalone_record(&db_path, commission.id).is_err());
 
         assert!(delete_transfer(&db_path, transfer.id).unwrap());
         let rows = record_list_rows(&db_path).unwrap();
-        assert!(!rows.iter().any(|record| record.description == marker));
+        assert!(!rows.iter().any(|record| record.note == marker));
 
         let _ = fs::remove_file(path);
         remove_test_db(&db_path);
@@ -12625,7 +12625,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "First".to_owned(),
+                note: "First".to_owned(),
                 tags: vec!["alpha".to_owned()],
             },
         )
@@ -12641,7 +12641,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "Second".to_owned(),
+                note: "Second".to_owned(),
                 tags: vec!["beta".to_owned()],
             },
         )
@@ -12674,7 +12674,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "First".to_owned(),
+                note: "First".to_owned(),
                 tags: vec!["alpha".to_owned()],
             },
             &[TagColorAssignment {
@@ -12707,7 +12707,7 @@ expense,,1,Food,10,KZT,1,10,Wrong,monthly\n",
             rate_at_operation: "1".to_owned(),
             amount_base: "10".to_owned(),
             category: "Food".to_owned(),
-            description: "Tagged".to_owned(),
+            note: "Tagged".to_owned(),
             tags: vec!["alpha".to_owned()],
         };
         create_standalone_record_with_tag_colors(

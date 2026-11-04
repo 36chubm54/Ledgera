@@ -735,7 +735,7 @@ pub fn parse_nbk_xml(xml: &str) -> StorageResult<Vec<ProviderRate>> {
     reader.config_mut().trim_text(true);
     let mut current_tag = String::new();
     let mut title = String::new();
-    let mut description = String::new();
+    let mut note = String::new();
     let mut rates = Vec::new();
     loop {
         match reader.read_event() {
@@ -751,15 +751,15 @@ pub fn parse_nbk_xml(xml: &str) -> StorageResult<Vec<ProviderRate>> {
                 if current_tag == "title" {
                     title = value.clone();
                 }
-                if current_tag == "description" {
-                    description = value;
+                if current_tag == "note" {
+                    note = value;
                 }
             }
             Ok(Event::End(event)) => {
                 let tag = String::from_utf8_lossy(event.name().as_ref()).to_lowercase();
                 if tag == "item" {
                     if title.len() == 3 {
-                        if let Ok(rate_text) = normalize_rate_text(&description) {
+                        if let Ok(rate_text) = normalize_rate_text(&note) {
                             rates.push(ProviderRate {
                                 currency: title.to_uppercase(),
                                 rate_text,
@@ -767,7 +767,7 @@ pub fn parse_nbk_xml(xml: &str) -> StorageResult<Vec<ProviderRate>> {
                         }
                     }
                     title.clear();
-                    description.clear();
+                    note.clear();
                 }
                 current_tag.clear();
             }
@@ -1960,7 +1960,7 @@ mod tests {
 
     #[test]
     fn parses_nbk_fixture() {
-        let xml = r#"<rss><channel><item><title>USD</title><description>457.43</description></item><item><title>EUR</title><description>512.41</description></item></channel></rss>"#;
+        let xml = r#"<rss><channel><item><title>USD</title><note>457.43</note></item><item><title>EUR</title><note>512.41</note></item></channel></rss>"#;
         let rates = parse_nbk_xml(xml).unwrap();
         assert_eq!(rates[0].currency, "USD");
         assert_eq!(rates[1].rate_text, "512.41");

@@ -69,11 +69,11 @@ class DashboardViewModel(
     fun selectCategory(category: String?) = mutableState.update { it.copy(selectedCategory = category, selectedAssetId = null) }
     fun selectGoal(goalId: Long) = mutableState.update { it.copy(selectedGoalId = goalId) }
 
-    fun createAsset(name: String, category: String, currency: String, value: String, date: String, description: String) = mutate {
-        engine.createDashboardAsset(name, category, currency, value, date, description)
+    fun createAsset(name: String, category: String, currency: String, value: String, date: String, note: String) = mutate {
+        engine.createDashboardAsset(name, category, currency, value, date, note)
     }
-    fun updateAsset(assetId: Long, name: String, category: String, currency: String, value: String, snapshotDate: String, description: String) = mutate {
-        engine.updateDashboardAsset(assetId, name, category, currency, value, snapshotDate, description)
+    fun updateAsset(assetId: Long, name: String, category: String, currency: String, value: String, snapshotDate: String, note: String) = mutate {
+        engine.updateDashboardAsset(assetId, name, category, currency, value, snapshotDate, note)
     }
     fun addAssetSnapshot(assetId: Long, value: String, date: String, note: String) = mutate {
         engine.addDashboardAssetSnapshot(assetId, value, date, note)
@@ -82,8 +82,8 @@ class DashboardViewModel(
         engine.addDashboardAssetSnapshots(updates.filter { it.value.isNotBlank() }, date)
     }
     fun setAssetActive(assetId: Long, active: Boolean) = mutate { engine.setDashboardAssetActive(assetId, active) }
-    fun createGoal(title: String, target: String, currency: String, date: String?, description: String) = mutate {
-        engine.createDashboardGoal(title, target, currency, date, description)
+    fun createGoal(title: String, target: String, currency: String, date: String?, note: String) = mutate {
+        engine.createDashboardGoal(title, target, currency, date, note)
     }
     fun setGoalCompleted(goalId: Long, completed: Boolean) = mutate { engine.setDashboardGoalCompleted(goalId, completed) }
     fun deleteGoal(goalId: Long) = mutate { engine.deleteDashboardGoal(goalId) }

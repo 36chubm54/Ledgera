@@ -478,9 +478,9 @@ private fun CreateDebtDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    value = draft.description,
-                    onValueChange = { onDraftChange(draft.copy(description = it.lineSafe())) },
-                    label = { Text("Description") },
+                    value = draft.note,
+                    onValueChange = { onDraftChange(draft.copy(note = it.lineSafe())) },
+                    label = { Text("Note") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -575,9 +575,9 @@ private fun DebtActionDialog(
                 )
                 if (draft.action != "write_off") {
                     OutlinedTextField(
-                        value = draft.description,
-                        onValueChange = { onDraftChange(draft.copy(description = it.lineSafe())) },
-                        label = { Text("Description") },
+                        value = draft.note,
+                        onValueChange = { onDraftChange(draft.copy(note = it.lineSafe())) },
+                        label = { Text("Note") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )

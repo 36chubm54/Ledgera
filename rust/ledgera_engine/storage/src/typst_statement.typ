@@ -84,18 +84,18 @@
   ..args,
 )
 
-#let operation-detail(tags, description) = {
+#let operation-detail(tags, note) = {
   if tags.len() > 0 {
     for tag in tags [
       #pill(tag.label, fill: rgb(tag.color), foreground: white)
       #h(2pt)
     ]
   }
-  if description != "" {
+  if note != "" {
     if tags.len() > 0 {
       linebreak()
     }
-    description
+    note
   }
 }
 
@@ -265,13 +265,13 @@
     [#row.date],
     [#pill(row.type_label, fill: kind-fill(row.kind), foreground: kind-color(row.kind))],
     [#row.category],
-    [#operation-detail(row.tags, row.description)],
+    [#operation-detail(row.tags, row.note)],
     [#money(row.amount, color: kind-color(row.kind))],
   )).flatten()
   styled-table(
     columns: (1.1fr, 1.1fr, 2fr, 2.2fr, 1.4fr),
     align: (left, left, left, left, right),
-    table.header([Date], [Type], [Category], [Tags / description], [Amount]),
+    table.header([Date], [Type], [Category], [Tags / note], [Amount]),
     ..operation-cells,
   )
 }

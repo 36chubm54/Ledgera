@@ -95,13 +95,13 @@ interface AnalyticsEngine {
 interface DashboardEngine {
     suspend fun dashboardSnapshot(): DashboardSnapshot = error("Dashboard is unavailable")
     suspend fun dashboardAssets(activeOnly: Boolean = true): List<DashboardAsset> = emptyList()
-    suspend fun createDashboardAsset(name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = error("Dashboard is unavailable")
-    suspend fun updateDashboardAsset(assetId: Long, name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = error("Dashboard is unavailable")
+    suspend fun createDashboardAsset(name: String, category: String, currency: String, value: String, snapshotDate: String, note: String): DashboardAsset = error("Dashboard is unavailable")
+    suspend fun updateDashboardAsset(assetId: Long, name: String, category: String, currency: String, value: String, snapshotDate: String, note: String): DashboardAsset = error("Dashboard is unavailable")
     suspend fun addDashboardAssetSnapshot(assetId: Long, value: String, snapshotDate: String, note: String): DashboardAsset = error("Dashboard is unavailable")
     suspend fun addDashboardAssetSnapshots(updates: List<DashboardAssetSnapshotUpdate>, snapshotDate: String): List<DashboardAsset> = error("Dashboard is unavailable")
     suspend fun setDashboardAssetActive(assetId: Long, active: Boolean): DashboardAsset = error("Dashboard is unavailable")
     suspend fun dashboardGoals(): List<DashboardGoal> = emptyList()
-    suspend fun createDashboardGoal(title: String, targetAmount: String, currency: String, targetDate: String?, description: String): DashboardGoal = error("Dashboard is unavailable")
+    suspend fun createDashboardGoal(title: String, targetAmount: String, currency: String, targetDate: String?, note: String): DashboardGoal = error("Dashboard is unavailable")
     suspend fun setDashboardGoalCompleted(goalId: Long, completed: Boolean) = Unit
     suspend fun deleteDashboardGoal(goalId: Long) = Unit
 }
@@ -131,7 +131,7 @@ interface OperationsEngine {
     suspend fun exportRecordsXlsx(path: String): OperationExportResult
     suspend fun listTags(): List<String>
     suspend fun listCategories(recordType: String): List<String>
-    suspend fun listRecordDescriptions(recordType: String? = null): List<String>
+    suspend fun listRecordNotes(recordType: String? = null): List<String>
     suspend fun operationSuggestions(): OperationSuggestions
     suspend fun listTagColors(): List<TagColor>
     suspend fun tagColorPalette(): List<String>

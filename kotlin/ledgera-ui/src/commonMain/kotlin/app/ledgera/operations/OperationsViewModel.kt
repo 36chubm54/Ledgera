@@ -36,11 +36,11 @@ data class OperationsUiState(
     val tagColors: Map<String, String> = emptyMap(),
     val tagPalette: List<String> = emptyList(),
     val categories: List<String> = emptyList(),
-    val descriptionSuggestions: List<String> = emptyList(),
+    val noteSuggestions: List<String> = emptyList(),
     val incomeCategories: List<String> = emptyList(),
     val expenseCategories: List<String> = emptyList(),
-    val incomeDescriptionSuggestions: List<String> = emptyList(),
-    val expenseDescriptionSuggestions: List<String> = emptyList(),
+    val incomeNoteSuggestions: List<String> = emptyList(),
+    val expenseNoteSuggestions: List<String> = emptyList(),
     val filter: OperationFilter = OperationFilter(),
     val selectedRecordId: Long? = null,
     val selectiveDeleteMode: Boolean = false,
@@ -61,7 +61,7 @@ data class OperationsUiState(
                 true
             } else {
                 (record.type == "income" || record.type == "expense" || record.type == "mandatory_expense") &&
-                    !isTransferCommissionMarker(record.description)
+                    !isTransferCommissionMarker(record.note)
             }
         }
 }
@@ -122,11 +122,11 @@ class OperationsViewModel(
                     tagColors = tagColors,
                     tagPalette = tagPalette,
                     categories = categories,
-                    descriptionSuggestions = suggestions.descriptions,
+                    noteSuggestions = suggestions.notes,
                     incomeCategories = suggestions.incomeCategories,
                     expenseCategories = suggestions.expenseCategories,
-                    incomeDescriptionSuggestions = suggestions.incomeDescriptions,
-                    expenseDescriptionSuggestions = suggestions.expenseDescriptions,
+                    incomeNoteSuggestions = suggestions.incomeNotes,
+                    expenseNoteSuggestions = suggestions.expenseNotes,
                     filter = filter,
                     selectedRecordId = currentState.selectedRecordId?.takeIf { selectedId ->
                         records.any { it.id == selectedId }
@@ -409,7 +409,7 @@ class OperationsViewModel(
         if (
             record.transferId != null ||
             (record.type != "income" && record.type != "expense" && record.type != "mandatory_expense") ||
-            isTransferCommissionMarker(record.description)
+            isTransferCommissionMarker(record.note)
         ) {
             mutableState.value = mutableState.value.copy(
                 error = "This record cannot be selected for bulk delete",
@@ -850,7 +850,7 @@ class OperationsViewModel(
             rateAtOperation = "1",
             amountBase = amountOriginal,
             category = category,
-            description = description,
+            note = note,
             tagsText = tags.joinToString(", "),
             tagColors = tags.associateWith { tag -> mutableState.value.tagColors[tag.lowercase()].orEmpty() },
         )
@@ -863,7 +863,7 @@ class OperationsViewModel(
             date = date.toDisplayDate(),
             amount = amountOriginal,
             currency = currency,
-            description = description,
+            note = note,
         )
 
     private fun OperationDraft.toUpdateRequest(): UpdateOperationRequest =
@@ -876,7 +876,7 @@ class OperationsViewModel(
             rateAtOperation = "1",
             amountBase = amountOriginal,
             category = category,
-            description = description,
+            note = note,
             tags = OperationValidation.parseTags(tagsText),
             tagColors = tagColors,
         )
@@ -888,7 +888,7 @@ class OperationsViewModel(
             date = date.toStorageDate(),
             amount = amount,
             currency = currency,
-            description = description,
+            note = note,
         )
 
     private fun launchSafely(block: suspend () -> Unit) {
@@ -909,9 +909,9 @@ private fun OperationsUiState.toOperationSuggestions(): OperationSuggestions =
         tags = tags,
         incomeCategories = incomeCategories,
         expenseCategories = expenseCategories,
-        descriptions = descriptionSuggestions,
-        incomeDescriptions = incomeDescriptionSuggestions,
-        expenseDescriptions = expenseDescriptionSuggestions,
+        notes = noteSuggestions,
+        incomeNotes = incomeNoteSuggestions,
+        expenseNotes = expenseNoteSuggestions,
     )
 
 private fun validateFilter(filter: OperationFilter): String? {
@@ -932,8 +932,8 @@ private fun String.toStorageDate(): String =
 private fun String.toDisplayDate(): String =
     DateValidation.formatYmdToDmy(this).ifBlank { trim() }
 
-private fun isTransferCommissionMarker(description: String): Boolean =
-    Regex("""^\[transfer:\d+]$""").matches(description.trim())
+private fun isTransferCommissionMarker(note: String): Boolean =
+    Regex("""^\[transfer:\d+]$""").matches(note.trim())
 
 private enum class OperationsFileFormat {
     Csv,

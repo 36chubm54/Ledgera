@@ -38,10 +38,10 @@ class MandatoryViewModelTest {
 
         viewModel.refresh()
         viewModel.openCreateDialog()
-        viewModel.updateDraft(viewModel.state.value.editDraft!!.copy(description = "", amountOriginal = "10", amountBase = "10"))
+        viewModel.updateDraft(viewModel.state.value.editDraft!!.copy(note = "", amountOriginal = "10", amountBase = "10"))
         viewModel.saveTemplate()
 
-        assertEquals("Description is required", viewModel.state.value.error)
+        assertEquals("Note is required", viewModel.state.value.error)
         assertEquals(0, engine.createCalls)
     }
 
@@ -56,7 +56,7 @@ class MandatoryViewModelTest {
             viewModel.state.value.editDraft!!.copy(
                 amountOriginal = "25",
                 amountBase = "25",
-                description = "Internet",
+                note = "Internet",
             )
         )
         viewModel.saveTemplate()
@@ -64,7 +64,7 @@ class MandatoryViewModelTest {
         assertEquals(1, engine.createCalls)
         assertNull(viewModel.state.value.editDraft)
         assertEquals("Mandatory template created (id=1)", viewModel.state.value.notice)
-        assertEquals(listOf("Internet"), viewModel.state.value.templates.map { it.description })
+        assertEquals(listOf("Internet"), viewModel.state.value.templates.map { it.note })
     }
 
     @Test
@@ -78,7 +78,7 @@ class MandatoryViewModelTest {
             viewModel.state.value.editDraft!!.copy(
                 amountOriginal = "25",
                 amountBase = "25",
-                description = "Internet",
+                note = "Internet",
                 date = "01.01.2099",
             )
         )
@@ -265,14 +265,14 @@ class MandatoryViewModelTest {
             viewModel.state.value.editDraft!!.copy(
                 amountOriginal = "25",
                 amountBase = "25",
-                description = "Internet",
+                note = "Internet",
             )
         )
         viewModel.saveTemplate()
 
         assertEquals("boom", viewModel.state.value.error)
         assertEquals(1, engine.createCalls)
-        assertEquals("Internet", viewModel.state.value.editDraft?.description)
+        assertEquals("Internet", viewModel.state.value.editDraft?.note)
     }
 
     @Test
@@ -301,7 +301,7 @@ class MandatoryViewModelTest {
 
     @Test
     fun confirmImportSuccessRefreshesAndShowsNotice() {
-        val engine = FakeMandatoryEngine(templates = mutableListOf(mandatoryTemplate(description = "Old")))
+        val engine = FakeMandatoryEngine(templates = mutableListOf(mandatoryTemplate(note = "Old")))
         val viewModel = MandatoryViewModel(engine, CoroutineScope(Dispatchers.Unconfined))
 
         viewModel.previewImportMandatory("C:\\Temp\\mandatory.csv")
@@ -310,7 +310,7 @@ class MandatoryViewModelTest {
         assertEquals(1, engine.importCsvCalls)
         assertNull(viewModel.state.value.importPreview)
         assertEquals("Mandatory templates imported: 2", viewModel.state.value.notice)
-        assertEquals(listOf("Imported"), viewModel.state.value.templates.map { it.description })
+        assertEquals(listOf("Imported"), viewModel.state.value.templates.map { it.note })
     }
 
     @Test
@@ -384,7 +384,7 @@ private class FakeMandatoryEngine(
             amountOriginal = request.amountOriginal,
             amountBase = request.amountBase,
             category = request.category,
-            description = request.description,
+            note = request.note,
             period = request.period,
             date = request.date,
         )
@@ -441,7 +441,7 @@ private class FakeMandatoryEngine(
     override suspend fun importMandatoryCsv(path: String): MandatoryImportResult {
         importCsvCalls += 1
         templates.clear()
-        templates += mandatoryTemplate(description = "Imported")
+        templates += mandatoryTemplate(note = "Imported")
         return MandatoryImportResult(imported = 2, skipped = 0, errors = emptyList(), dryRun = false)
     }
 
@@ -458,7 +458,7 @@ private class FakeMandatoryEngine(
     override suspend fun importMandatoryXlsx(path: String): MandatoryImportResult {
         importXlsxCalls += 1
         templates.clear()
-        templates += mandatoryTemplate(description = "Imported")
+        templates += mandatoryTemplate(note = "Imported")
         return MandatoryImportResult(imported = 2, skipped = 0, errors = emptyList(), dryRun = false)
     }
 
@@ -478,7 +478,7 @@ private fun mandatoryTemplate(
     amountOriginal: String = "30.00",
     amountBase: String = "30.00",
     category: String = "Rent",
-    description: String = "Monthly rent",
+    note: String = "Monthly rent",
     period: String = "monthly",
     date: String = "2026-01-01",
 ) = MandatoryTemplateItem(
@@ -489,7 +489,7 @@ private fun mandatoryTemplate(
     rateAtOperation = "1.000000",
     amountBase = amountBase,
     category = category,
-    description = description,
+    note = note,
     period = period,
     date = date,
     autoPay = date.isNotBlank(),
@@ -509,6 +509,6 @@ private fun operationRecord(
     rateAtOperation = "1.000000",
     amountBase = "10.00",
     category = "Rent",
-    description = "Monthly rent",
+    note = "Monthly rent",
     tags = emptyList(),
 )

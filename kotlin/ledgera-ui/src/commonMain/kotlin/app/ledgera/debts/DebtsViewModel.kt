@@ -160,7 +160,7 @@ class DebtsViewModel(
                         amount = draft.amount.trim(),
                         currency = draft.currency.trim().uppercase(),
                         createdAt = draft.createdAt.toStorageDate(),
-                        description = draft.description.trim(),
+                        note = draft.note.trim(),
                     )
                 )
                 mutableState.value = mutableState.value.copy(
@@ -232,7 +232,7 @@ class DebtsViewModel(
                     walletId = if (requiresWallet) draft.walletId else null,
                     amount = draft.amount.trim(),
                     paymentDate = draft.paymentDate.toStorageDate(),
-                    description = draft.description.trim(),
+                    note = draft.note.trim(),
                 )
                 val notice = when (draft.action) {
                     "write_off" -> {

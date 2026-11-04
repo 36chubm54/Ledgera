@@ -64,7 +64,7 @@ pub struct SyncRecord {
     pub amount_base: f64,
     pub amount_base_minor: i64,
     pub category: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -271,7 +271,7 @@ pub fn record_fingerprint(record: &SyncRecord) -> String {
         record.rate_at_operation_text.as_str(),
         &record.amount_base_minor.to_string(),
         record.category.as_str(),
-        record.description.as_str(),
+        record.note.as_str(),
     ]
     .join("|")
 }
@@ -397,7 +397,7 @@ fn standalone_records(db_path: &str) -> SyncResult<Vec<SyncRecord>> {
         .prepare(
             "SELECT type, date, wallet_id, amount_original, amount_original_minor,
                     currency, rate_at_operation, rate_at_operation_text,
-                    amount_base, amount_base_minor, category, description
+                    amount_base, amount_base_minor, category, note
              FROM records
              WHERE transfer_id IS NULL
                AND related_debt_id IS NULL
@@ -419,7 +419,7 @@ fn standalone_records(db_path: &str) -> SyncResult<Vec<SyncRecord>> {
                 amount_base: row.get(8)?,
                 amount_base_minor: row.get(9)?,
                 category: row.get(10)?,
-                description: row.get(11)?,
+                note: row.get(11)?,
             })
         })
         .map_err(sqlite_err)?;
@@ -469,7 +469,7 @@ fn apply_inbound_records(db_path: &str, records: &[SyncRecord]) -> SyncResult<Sy
                 type, date, wallet_id, transfer_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description, period
+                amount_base, amount_base_minor, category, note, period
              )
              VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
             params![
@@ -484,7 +484,7 @@ fn apply_inbound_records(db_path: &str, records: &[SyncRecord]) -> SyncResult<Sy
                 record.amount_base,
                 record.amount_base_minor,
                 record.category,
-                record.description,
+                record.note,
             ],
         )
         .map_err(sqlite_err)?;
@@ -525,7 +525,7 @@ fn standalone_records_from_conn(conn: &Connection) -> SyncResult<Vec<SyncRecord>
         .prepare(
             "SELECT type, date, wallet_id, amount_original, amount_original_minor,
                     currency, rate_at_operation, rate_at_operation_text,
-                    amount_base, amount_base_minor, category, description
+                    amount_base, amount_base_minor, category, note
              FROM records
              WHERE transfer_id IS NULL
                AND related_debt_id IS NULL
@@ -547,7 +547,7 @@ fn standalone_records_from_conn(conn: &Connection) -> SyncResult<Vec<SyncRecord>
                 amount_base: row.get(8)?,
                 amount_base_minor: row.get(9)?,
                 category: row.get(10)?,
-                description: row.get(11)?,
+                note: row.get(11)?,
             })
         })
         .map_err(sqlite_err)?;
@@ -638,7 +638,7 @@ mod tests {
                 amount_base REAL NOT NULL,
                 amount_base_minor INTEGER,
                 category TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
                 period TEXT
             );
             INSERT INTO wallets (id, name, currency) VALUES (1, 'Main', 'KZT');
@@ -659,7 +659,7 @@ mod tests {
                 type, date, wallet_id, transfer_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description, period
+                amount_base, amount_base_minor, category, note, period
              )
              VALUES (?, '2026-03-01', 1, ?, ?, 100.0, 10000, 'KZT', 1.0, '1.000000',
                      100.0, 10000, 'General', '', NULL)",
@@ -681,7 +681,7 @@ mod tests {
             amount_base: 100.0,
             amount_base_minor: 10000,
             category: "General".to_owned(),
-            description: "".to_owned(),
+            note: "".to_owned(),
         }
     }
 

@@ -13,7 +13,7 @@ pub struct AssetPayload {
     pub currency: String,
     pub is_active: bool,
     pub created_at: String,
-    pub description: String,
+    pub note: String,
     pub current_value_minor: i64,
     pub current_value_base: f64,
     pub current_snapshot_date: Option<String>,
@@ -42,7 +42,7 @@ pub struct GoalPayload {
     pub target_date: Option<String>,
     pub is_completed: bool,
     pub created_at: String,
-    pub description: String,
+    pub note: String,
     pub current_amount_minor: i64,
 }
 
@@ -99,7 +99,7 @@ fn validate_asset_fields(name: &str, category: &str, currency: &str) -> StorageR
 
 fn asset_from_conn(conn: &Connection, asset_id: i64) -> StorageResult<AssetPayload> {
     conn.query_row(
-        "SELECT a.id, a.name, a.category, a.currency, a.is_active, a.created_at, a.description,
+        "SELECT a.id, a.name, a.category, a.currency, a.is_active, a.created_at, a.note,
                 COALESCE(s.value_minor, 0), s.snapshot_date
          FROM assets a
          LEFT JOIN asset_snapshots s ON s.id = (
@@ -120,7 +120,7 @@ fn asset_from_conn(conn: &Connection, asset_id: i64) -> StorageResult<AssetPaylo
                 currency,
                 is_active: row.get(4)?,
                 created_at: row.get(5)?,
-                description: row.get(6)?,
+                note: row.get(6)?,
                 current_value_minor: value_minor,
                 current_snapshot_date: row.get(8)?,
             })
@@ -161,7 +161,7 @@ pub fn asset_create(
     currency: &str,
     value: &str,
     snapshot_date: &str,
-    description: &str,
+    note: &str,
 ) -> StorageResult<AssetPayload> {
     validate_asset_fields(name, category, currency)?;
     let value_minor = to_minor_units(value)?;
@@ -171,8 +171,8 @@ pub fn asset_create(
     let mut conn = Connection::open(db_path).map_err(sqlite_err)?;
     let tx = conn.transaction().map_err(sqlite_err)?;
     tx.execute(
-        "INSERT INTO assets (name, category, currency, created_at, description) VALUES (?, ?, ?, ?, ?)",
-        params![name.trim(), category, currency.trim().to_uppercase(), snapshot_date, description.trim()],
+        "INSERT INTO assets (name, category, currency, created_at, note) VALUES (?, ?, ?, ?, ?)",
+        params![name.trim(), category, currency.trim().to_uppercase(), snapshot_date, note.trim()],
     )
     .map_err(sqlite_err)?;
     let id = tx.last_insert_rowid();
@@ -195,7 +195,7 @@ pub fn asset_update(
     currency: &str,
     value: &str,
     snapshot_date: &str,
-    description: &str,
+    note: &str,
 ) -> StorageResult<AssetPayload> {
     validate_asset_fields(name, category, currency)?;
     let value_minor = to_minor_units(value)?;
@@ -206,12 +206,12 @@ pub fn asset_update(
     let tx = conn.transaction().map_err(sqlite_err)?;
     let changed = tx
         .execute(
-            "UPDATE assets SET name = ?, category = ?, currency = ?, description = ? WHERE id = ?",
+            "UPDATE assets SET name = ?, category = ?, currency = ?, note = ? WHERE id = ?",
             params![
                 name.trim(),
                 category,
                 currency.trim().to_uppercase(),
-                description.trim(),
+                note.trim(),
                 asset_id
             ],
         )
@@ -308,7 +308,7 @@ pub fn asset_set_active(db_path: &str, asset_id: i64, active: bool) -> StorageRe
 pub fn goal_rows(db_path: &str) -> StorageResult<Vec<GoalPayload>> {
     with_cached_read_connection(db_path, |conn| {
         let mut stmt = conn.prepare(
-            "SELECT id, title, target_amount_minor, currency, target_date, is_completed, created_at, description
+            "SELECT id, title, target_amount_minor, currency, target_date, is_completed, created_at, note
              FROM goals ORDER BY is_completed ASC, target_date IS NULL ASC, target_date ASC, id ASC"
         ).map_err(sqlite_err)?;
         let rows = stmt
@@ -321,7 +321,7 @@ pub fn goal_rows(db_path: &str) -> StorageResult<Vec<GoalPayload>> {
                     target_date: row.get(4)?,
                     is_completed: row.get(5)?,
                     created_at: row.get(6)?,
-                    description: row.get(7)?,
+                    note: row.get(7)?,
                     current_amount_minor: 0,
                 })
             })
@@ -336,7 +336,7 @@ pub fn goal_create(
     target_amount: &str,
     currency: &str,
     target_date: Option<&str>,
-    description: &str,
+    note: &str,
     created_at: &str,
 ) -> StorageResult<GoalPayload> {
     let target_minor = to_minor_units(target_amount)?;
@@ -348,7 +348,7 @@ pub fn goal_create(
         return Err("Invalid goal currency".to_owned());
     }
     let conn = Connection::open(db_path).map_err(sqlite_err)?;
-    conn.execute("INSERT INTO goals (title, target_amount_minor, currency, target_date, created_at, description) VALUES (?, ?, ?, ?, ?, ?)", params![title.trim(), target_minor, normalized, target_date, created_at, description.trim()]).map_err(sqlite_err)?;
+    conn.execute("INSERT INTO goals (title, target_amount_minor, currency, target_date, created_at, note) VALUES (?, ?, ?, ?, ?, ?)", params![title.trim(), target_minor, normalized, target_date, created_at, note.trim()]).map_err(sqlite_err)?;
     let id = conn.last_insert_rowid();
     storage_clear_read_connection_cache();
     let rows = goal_rows(db_path)?;
@@ -715,7 +715,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "2988".to_owned(),
                 category: "Income".to_owned(),
-                description: "base-currency delta".to_owned(),
+                note: "base-currency delta".to_owned(),
                 tags: vec![],
             },
         )

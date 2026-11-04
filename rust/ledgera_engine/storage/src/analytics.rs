@@ -701,7 +701,7 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, currency,
-                 rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, description)
+                 rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, note)
                  VALUES ('expense', '2026-01-10', 1, 12.34, 1234, 'KZT', 1, '1', 12.34, 1234, 'Food', '')",
                 [],
             )
@@ -736,7 +736,7 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, currency,
-                 rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, description)
+                 rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, note)
                  VALUES ('expense', '2026-01-11', 1, 1.00, 100, 'USD', 450, '450', 4.50, 450, 'Foreign', '')",
                 [],
             )

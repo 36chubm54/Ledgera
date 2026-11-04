@@ -62,7 +62,7 @@ pub struct ReportOperationRow {
     pub tags_text: String,
     pub amount_base: f64,
     pub amount_current: f64,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -178,7 +178,7 @@ pub(crate) struct PdfPresentationOperation {
     pub kind: String,
     pub category: String,
     pub tags: Vec<PdfPresentationTagChip>,
-    pub description: String,
+    pub note: String,
     pub amount: String,
     pub amount_current: String,
 }
@@ -313,7 +313,7 @@ pub struct ReportTransferRow {
     pub commission_amount_base: f64,
     pub commission_amount_current: f64,
     pub tags_text: String,
-    pub description: String,
+    pub note: String,
     pub integrity_status: String,
     pub integrity_message: String,
 }
@@ -332,7 +332,7 @@ struct TransferReportSource {
     target_amount: Option<f64>,
     target_currency: Option<String>,
     conversion_rate: Option<String>,
-    description: String,
+    note: String,
 }
 
 fn transfer_report_sources(db_path: &str) -> StorageResult<Vec<TransferReportSource>> {
@@ -354,7 +354,7 @@ fn transfer_report_sources(db_path: &str) -> StorageResult<Vec<TransferReportSou
                         {target_amount} AS target_amount_original,
                         {target_currency} AS target_currency,
                         {conversion_rate} AS conversion_rate_text,
-                        description
+                        note
                  FROM transfers ORDER BY id",
                 source_amount = optional_column("source_amount_original"),
                 source_currency = optional_column("source_currency"),
@@ -378,7 +378,7 @@ fn transfer_report_sources(db_path: &str) -> StorageResult<Vec<TransferReportSou
                     target_amount: row.get(9)?,
                     target_currency: row.get(10)?,
                     conversion_rate: row.get(11)?,
-                    description: row.get(12)?,
+                    note: row.get(12)?,
                 })
             })
             .map_err(sqlite_err)?;
@@ -442,7 +442,7 @@ fn build_report_transfers(
                 .push(record);
         } else if record.category.eq_ignore_ascii_case("commission") {
             if let Some(id) = record
-                .description
+                .note
                 .strip_prefix("[transfer:")
                 .and_then(|value| value.strip_suffix(']'))
                 .and_then(|value| value.parse::<i64>().ok())
@@ -654,7 +654,7 @@ fn build_report_transfers(
             commission_amount_base: commission_base,
             commission_amount_current: commission_current,
             tags_text: tags.join(" "),
-            description: transfer.description,
+            note: transfer.note,
             integrity_status: if valid {
                 "ok".to_owned()
             } else {
@@ -896,7 +896,7 @@ pub fn report_generate(db_path: &str, filters: &ReportFilters) -> StorageResult<
             tags_text: tags.join(" "),
             amount_base: fixed,
             amount_current: current,
-            description: record.description.clone(),
+            note: record.note.clone(),
         });
         let entry = category_totals.entry(record.category.clone()).or_default();
         entry.0 += 1;
@@ -1052,7 +1052,7 @@ fn csv_transfer_section(
             "Base source",
             "Base target",
             "Status",
-            "Description",
+            "Note",
             "Tags",
         ])
         .map_err(|err| err.to_string())?;
@@ -1089,7 +1089,7 @@ fn csv_transfer_section(
                 } else {
                     row.integrity_status.as_str()
                 },
-                row.description.as_str(),
+                row.note.as_str(),
                 row.tags_text.as_str(),
             ])
             .map_err(|err| err.to_string())?;
@@ -1533,7 +1533,7 @@ fn write_report_transfer_sheet(
         "Base source",
         "Base target",
         "Status",
-        "Description",
+        "Note",
         "Tags",
     ];
     for (column, title) in columns.into_iter().enumerate() {
@@ -1574,7 +1574,7 @@ fn write_report_transfer_sheet(
             } else {
                 format!("{}: {}", row.integrity_status, row.integrity_message)
             },
-            row.description.clone(),
+            row.note.clone(),
             row.tags_text.clone(),
         ];
         for (column, value) in values.into_iter().enumerate() {
@@ -2259,7 +2259,7 @@ fn build_pdf_presentation_data(
                         PdfPresentationTagChip { label, color }
                     })
                     .collect(),
-                description: operation.description.clone(),
+                note: operation.note.clone(),
                 amount: pdf_layout_row_value(operation, use_current, &report.base_currency),
                 amount_current: pdf_amount(
                     operation.amount_current,
@@ -2330,7 +2330,7 @@ fn build_pdf_presentation_data(
                         "—".to_owned()
                     },
                     status,
-                    note: [transfer.description.as_str(), transfer.tags_text.as_str()]
+                    note: [transfer.note.as_str(), transfer.tags_text.as_str()]
                         .into_iter()
                         .filter(|value| !value.is_empty())
                         .collect::<Vec<_>>()
@@ -2614,11 +2614,11 @@ fn build_pdf_statement_sections(report: &ReportResult, use_current: bool) -> Vec
                 PdfRowStyle::Data,
                 false,
             ));
-            if !transfer.description.is_empty() || !transfer.tags_text.is_empty() {
+            if !transfer.note.is_empty() || !transfer.tags_text.is_empty() {
                 rows.push(pdf_layout_row(
                     vec![format!(
                         "{}{}",
-                        transfer.description,
+                        transfer.note,
                         if transfer.tags_text.is_empty() {
                             String::new()
                         } else {
@@ -3391,9 +3391,9 @@ fn append_pdf_transfer_section(
             ],
             PdfRowStyle::Data,
         ));
-        if !row.description.is_empty() || !row.tags_text.is_empty() {
+        if !row.note.is_empty() || !row.tags_text.is_empty() {
             rows.push(PdfReportRow::merged(
-                format!("  {} {}", row.description, row.tags_text),
+                format!("  {} {}", row.note, row.tags_text),
                 PdfRowStyle::Note,
             ));
         }
@@ -3773,7 +3773,7 @@ mod tests {
                 date: "2026-01-02".to_owned(),
                 amount: "25".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move to target".to_owned(),
+                note: "Move to target".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },
@@ -3854,7 +3854,7 @@ mod tests {
                 date: "2026-01-02".to_owned(),
                 amount: "1000".to_owned(),
                 amount_currency: "KZT".to_owned(),
-                description: "Foreign transfer".to_owned(),
+                note: "Foreign transfer".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             },

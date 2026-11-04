@@ -12,7 +12,7 @@ object MandatoryValidation {
     fun validateCreateDraft(draft: MandatoryTemplateDraft, baseCurrency: String): String? {
         if (draft.walletId <= 0) return "Wallet is required"
         if (draft.category.trim().isEmpty()) return "Category is required"
-        if (draft.description.trim().isEmpty()) return "Description is required"
+        if (draft.note.trim().isEmpty()) return "Note is required"
         MoneyValidation.validatePositiveAmount(draft.amountOriginal.trim())?.let { return it }
         CurrencyValidation.validateSupportedCurrency(draft.currency.trim())?.let { return it }
         if (draft.amountBase.trim().isEmpty() && !draft.currency.trim().equals(baseCurrency.trim(), ignoreCase = true)) {

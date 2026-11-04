@@ -231,7 +231,7 @@ private fun MandatoryTemplateRow(
             verticalAlignment = Alignment.Top,
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(template.description, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(template.note, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     wallet?.let { WalletBadge(it, 26.dp) }
                     Text("${template.category} · ${template.period} · ${wallet?.name ?: "Unknown wallet"}")
@@ -257,7 +257,7 @@ private fun MandatoryActionsCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Actions", style = MaterialTheme.typography.titleMedium)
             Text(
-                selected?.let { "Selected: ${it.description}" } ?: "Select a mandatory template to add it.",
+                selected?.let { "Selected: ${it.note}" } ?: "Select a mandatory template to add it.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(
@@ -345,9 +345,9 @@ private fun MandatoryTemplateDialog(
                     enabled = draft.id == null,
                 )
                 SingleLineField(
-                    value = draft.description,
-                    onValueChange = { onDraftChange(draft.copy(description = it)) },
-                    label = "Description",
+                    value = draft.note,
+                    onValueChange = { onDraftChange(draft.copy(note = it)) },
+                    label = "Note",
                     enabled = draft.id == null,
                 )
                 PeriodChips(draft.period) { onDraftChange(draft.copy(period = it)) }

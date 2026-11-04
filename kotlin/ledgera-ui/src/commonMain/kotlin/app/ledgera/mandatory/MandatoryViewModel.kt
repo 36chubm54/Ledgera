@@ -172,7 +172,7 @@ class MandatoryViewModel(
                             rateAtOperation = draft.rateAtOperation.trim().ifBlank { "1" },
                             amountBase = draft.amountBase.trim(),
                             category = draft.category.trim(),
-                            description = draft.description.trim(),
+                            note = draft.note.trim(),
                             period = draft.period.trim().lowercase(),
                             date = draft.date.toStorageDate(),
                         )
@@ -576,7 +576,7 @@ class MandatoryViewModel(
             rateAtOperation = rateAtOperation,
             amountBase = amountBase,
             category = category,
-            description = description,
+            note = note,
             period = period,
             date = date.toDisplayDate(),
         )

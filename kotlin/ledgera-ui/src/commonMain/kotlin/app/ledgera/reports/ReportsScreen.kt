@@ -316,7 +316,7 @@ private fun ReportOperationsTable(result: app.ledgera.model.ReportResult, tagCol
                 val dateWidth = 110.dp + extraWidth * 0.1f
                 val typeWidth = 110.dp + extraWidth * 0.1f
                 val categoryWidth = 210.dp + extraWidth * 0.2f
-                val descriptionWidth = 260.dp + extraWidth * 0.3f
+                val noteWidth = 260.dp + extraWidth * 0.3f
                 val tagsWidth = 220.dp + extraWidth * 0.2f
                 val amountWidth = 150.dp + extraWidth * 0.1f
                 Column(Modifier.horizontalScroll(rememberScrollState()).width(tableWidth)) {
@@ -329,7 +329,7 @@ private fun ReportOperationsTable(result: app.ledgera.model.ReportResult, tagCol
                         ReportTableCell("Date", dateWidth, isHeader = true)
                         ReportTableCell("Type", typeWidth, isHeader = true)
                         ReportTableCell("Category", categoryWidth, isHeader = true)
-                        ReportTableCell("Description", descriptionWidth, isHeader = true)
+                        ReportTableCell("Note", noteWidth, isHeader = true)
                         ReportTableCell("Tags", tagsWidth, isHeader = true)
                         ReportTableCell("Amount", amountWidth, isHeader = true, alignEnd = true)
                     }
@@ -344,7 +344,7 @@ private fun ReportOperationsTable(result: app.ledgera.model.ReportResult, tagCol
                                     ReportTableCell(row.date, dateWidth)
                                     ReportTableCell(row.typeLabel, typeWidth)
                                     ReportTableCell(row.category, categoryWidth)
-                                    ReportTableCell(row.description.ifBlank { "-" }, descriptionWidth)
+                                    ReportTableCell(row.note.ifBlank { "-" }, noteWidth)
                                     ReportTagChips(row.tagsText, tagColors, Modifier.width(tagsWidth))
                                     ReportTableCell(
                                         reportSignedAmount(amount),
@@ -385,7 +385,7 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
                             .padding(horizontal = 0.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        listOf("Date", "ID", "From", "Amount", "To", "Rate", "Commission", "Base amount", "Status", "Description")
+                        listOf("Date", "ID", "From", "Amount", "To", "Rate", "Commission", "Base amount", "Status", "Note")
                             .forEachIndexed { index, title -> ReportTableCell(title, widths[index], isHeader = true) }
                     }
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
@@ -428,7 +428,7 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
                                         widths[8],
                                     )
                                     ReportTableCell(
-                                        row.description,
+                                        row.note,
                                         widths[9],
                                     )
                                 }

@@ -22,7 +22,7 @@ dictionary CreateRecordRequest {
     string rate_at_operation;
     string amount_base;
     string category;
-    string description;
+    string note;
     sequence<string> tags;
 };
 
@@ -35,7 +35,7 @@ dictionary UpdateRecordRequest {
     string rate_at_operation;
     string amount_base;
     string category;
-    string description;
+    string note;
     sequence<string> tags;
 };
 
@@ -45,7 +45,7 @@ dictionary CreateTransferRequest {
     string date;
     string amount;
     string currency;
-    string description;
+    string note;
     string commission_amount;
     string commission_currency;
 };
@@ -60,7 +60,7 @@ dictionary CurrencyTransferRequest {
     string date;
     string amount;
     string amount_currency;
-    string description;
+    string note;
     string commission_amount;
     string commission_currency;
 };
@@ -75,7 +75,7 @@ dictionary CurrencyTransferDto {
     string target_amount;
     string target_currency;
     string conversion_rate;
-    string description;
+    string note;
 };
 
 dictionary CurrencyTransferQuoteDto {
@@ -94,7 +94,7 @@ dictionary UpdateTransferRequest {
     string date;
     string amount;
     string currency;
-    string description;
+    string note;
 };
 
 dictionary UpdateTransferResult {
@@ -299,7 +299,7 @@ dictionary CreateDebtRequest {
     string amount;
     string currency;
     string created_at;
-    string description;
+    string note;
 };
 
 dictionary RegisterDebtPaymentRequest {
@@ -307,7 +307,7 @@ dictionary RegisterDebtPaymentRequest {
     i64? wallet_id;
     string amount;
     string payment_date;
-    string description;
+    string note;
 };
 
 dictionary CreateMandatoryTemplateRequest {
@@ -317,7 +317,7 @@ dictionary CreateMandatoryTemplateRequest {
     string rate_at_operation;
     string amount_base;
     string category;
-    string description;
+    string note;
     string period;
     string date;
 };
@@ -479,9 +479,9 @@ dictionary OperationSuggestionsDto {
     sequence<string> tags;
     sequence<string> income_categories;
     sequence<string> expense_categories;
-    sequence<string> descriptions;
-    sequence<string> income_descriptions;
-    sequence<string> expense_descriptions;
+    sequence<string> notes;
+    sequence<string> income_notes;
+    sequence<string> expense_notes;
 };
 
 dictionary TagColorDto {
@@ -526,7 +526,7 @@ dictionary RecordDto {
     string rate_at_operation;
     string amount_base;
     string category;
-    string description;
+    string note;
     sequence<string> tags;
 };
 
@@ -551,7 +551,7 @@ dictionary TransferDto {
     string currency;
     string rate_at_operation;
     string amount_base;
-    string description;
+    string note;
 };
 
 dictionary DebtDto {
@@ -585,7 +585,7 @@ dictionary MandatoryTemplateDto {
     string rate_at_operation;
     string amount_base;
     string category;
-    string description;
+    string note;
     string period;
     string date;
     boolean auto_pay;
@@ -646,7 +646,7 @@ dictionary ReportOperationRowDto {
     string tags_text;
     double amount_base;
     double amount_current;
-    string description;
+    string note;
 };
 
 dictionary ReportTransferRowDto {
@@ -670,7 +670,7 @@ dictionary ReportTransferRowDto {
     double commission_amount_base;
     double commission_amount_current;
     string tags_text;
-    string description;
+    string note;
     string integrity_status;
     string integrity_message;
 };
@@ -812,7 +812,7 @@ dictionary AssetDto {
     string currency;
     boolean is_active;
     string created_at;
-    string description;
+    string note;
     string current_value;
     i64 current_value_minor;
     string? current_snapshot_date;
@@ -845,7 +845,7 @@ dictionary GoalDto {
     string? target_date;
     boolean is_completed;
     string created_at;
-    string description;
+    string note;
     string current_amount;
     i64 current_amount_minor;
 };
@@ -883,9 +883,9 @@ interface LedgeraEngine {
     [Throws=LedgeraEngineError]
     sequence<AssetDto> dashboard_assets(boolean active_only);
     [Throws=LedgeraEngineError]
-    AssetDto dashboard_create_asset(string name, string category, string currency, string value, string snapshot_date, string description);
+    AssetDto dashboard_create_asset(string name, string category, string currency, string value, string snapshot_date, string note);
     [Throws=LedgeraEngineError]
-    AssetDto dashboard_update_asset(i64 asset_id, string name, string category, string currency, string value, string snapshot_date, string description);
+    AssetDto dashboard_update_asset(i64 asset_id, string name, string category, string currency, string value, string snapshot_date, string note);
     [Throws=LedgeraEngineError]
     AssetDto dashboard_add_asset_snapshot(i64 asset_id, string value, string snapshot_date, string note);
     [Throws=LedgeraEngineError]
@@ -895,7 +895,7 @@ interface LedgeraEngine {
     [Throws=LedgeraEngineError]
     sequence<GoalDto> dashboard_goals();
     [Throws=LedgeraEngineError]
-    GoalDto dashboard_create_goal(string title, string target_amount, string currency, string? target_date, string description);
+    GoalDto dashboard_create_goal(string title, string target_amount, string currency, string? target_date, string note);
     [Throws=LedgeraEngineError]
     void dashboard_set_goal_completed(i64 goal_id, boolean completed);
     [Throws=LedgeraEngineError]
@@ -987,7 +987,7 @@ interface LedgeraEngine {
     [Throws=LedgeraEngineError]
     sequence<string> list_categories(string record_type);
     [Throws=LedgeraEngineError]
-    sequence<string> list_record_descriptions(string? record_type);
+    sequence<string> list_record_notes(string? record_type);
     [Throws=LedgeraEngineError]
     OperationSuggestionsDto operation_suggestions();
     [Throws=LedgeraEngineError]

@@ -115,6 +115,6 @@ private fun operationRecord(
     rateAtOperation = "1.000000",
     amountBase = "10.00",
     category = category,
-    description = "",
+    note = "",
     tags = tags,
 )

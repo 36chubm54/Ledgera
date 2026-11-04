@@ -271,7 +271,7 @@ fn transfer_to_dict(py: Python<'_>, row: TransferRow) -> PyResult<Py<PyAny>> {
     payload.set_item("currency", row.currency)?;
     payload.set_item("rate_at_operation", row.rate_at_operation)?;
     payload.set_item("amount_base", row.amount_base)?;
-    payload.set_item("description", row.description)?;
+    payload.set_item("note", row.note)?;
     Ok(payload.into_any().unbind())
 }
 
@@ -284,7 +284,7 @@ fn mandatory_expense_to_dict(py: Python<'_>, row: MandatoryExpenseRow) -> PyResu
     payload.set_item("rate_at_operation", row.rate_at_operation)?;
     payload.set_item("amount_base", row.amount_base)?;
     payload.set_item("category", row.category)?;
-    payload.set_item("description", row.description)?;
+    payload.set_item("note", row.note)?;
     payload.set_item("period", row.period)?;
     payload.set_item("date", row.date)?;
     payload.set_item("auto_pay", row.auto_pay)?;
@@ -304,7 +304,7 @@ fn record_to_dict(py: Python<'_>, row: RecordRow) -> PyResult<Py<PyAny>> {
     payload.set_item("rate_at_operation", row.rate_at_operation)?;
     payload.set_item("amount_base", row.amount_base)?;
     payload.set_item("category", row.category)?;
-    payload.set_item("description", row.description)?;
+    payload.set_item("note", row.note)?;
     payload.set_item("period", row.period)?;
     payload.set_item("tags", row.tags)?;
     Ok(payload.into_any().unbind())
@@ -473,7 +473,7 @@ fn debt_record_from_dict(payload: &Bound<'_, PyDict>) -> PyResult<DebtRecordPayl
         amount_base: dict_required(payload, "amount_base")?,
         amount_base_minor: dict_required(payload, "amount_base_minor")?,
         category: dict_required(payload, "category")?,
-        description: dict_required(payload, "description")?,
+        note: dict_required(payload, "note")?,
         period: dict_optional(payload, "period")?,
     })
 }

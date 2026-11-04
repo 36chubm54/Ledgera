@@ -56,7 +56,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "10",
                 category = "",
-                description = "",
+                note = "",
             )
         )
 
@@ -79,7 +79,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "10",
                 category = "Salary",
-                description = "",
+                note = "",
             )
         )
 
@@ -102,7 +102,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "10",
                 category = "Salary",
-                description = "",
+                note = "",
             )
         )
 
@@ -125,7 +125,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "10",
                 category = "Salary",
-                description = "",
+                note = "",
             )
         )
 
@@ -148,7 +148,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "ten",
                 category = "Salary",
-                description = "",
+                note = "",
             )
         )
 
@@ -171,7 +171,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "0.004",
                 category = "Salary",
-                description = "",
+                note = "",
             )
         )
 
@@ -194,7 +194,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "10",
                 category = "Salary",
-                description = "",
+                note = "",
             )
         )
 
@@ -217,7 +217,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "10",
                 category = "Salary",
-                description = "",
+                note = "",
             )
         )
 
@@ -243,7 +243,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "10",
                 category = "Salary",
-                description = "",
+                note = "",
                 tags = listOf("123", "work"),
             )
         )
@@ -270,7 +270,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "10",
                 category = "Salary",
-                description = "",
+                note = "",
             )
         )
 
@@ -292,7 +292,7 @@ class OperationsViewModelTest {
                 date = "01.01.2026",
                 amount = "10",
                 amountCurrency = "KZT",
-                description = "Move",
+                note = "Move",
             ),
         ) { closed = true }
 
@@ -588,7 +588,7 @@ class OperationsViewModelTest {
                 rateAtOperation = "1",
                 amountBase = "10",
                 category = "Salary",
-                description = "",
+                note = "",
             )
         )
 
@@ -743,7 +743,7 @@ class OperationsViewModelTest {
                 fromWalletId = 2,
                 toWalletId = 1,
                 amount = "5.25",
-                description = "Return",
+                note = "Return",
             )
         )
         viewModel.updateSelectedTransfer()
@@ -787,7 +787,7 @@ class OperationsViewModelTest {
             records = mutableListOf(
                 operationRecord(id = 1, type = "income", walletId = 2, transferId = 42),
                 operationRecord(id = 2, type = "expense", walletId = 1, transferId = 42),
-                operationRecord(id = 3, type = "expense", walletId = 1, category = "Commission", description = "[transfer:42]"),
+                operationRecord(id = 3, type = "expense", walletId = 1, category = "Commission", note = "[transfer:42]"),
             )
         )
         val viewModel = OperationsViewModel(adapter, CoroutineScope(Dispatchers.Unconfined))
@@ -800,7 +800,7 @@ class OperationsViewModelTest {
         assertEquals(null, viewModel.state.value.transferDraft)
         assertEquals("Transfer deleted (id=42)", viewModel.state.value.notice)
         assertEquals(emptyList(), viewModel.state.value.records.mapNotNull { it.transferId })
-        assertEquals(emptyList(), viewModel.state.value.records.filter { it.description == "[transfer:42]" })
+        assertEquals(emptyList(), viewModel.state.value.records.filter { it.note == "[transfer:42]" })
         assertEquals(2, adapter.refreshCalls)
     }
 
@@ -1018,7 +1018,7 @@ class OperationsViewModelTest {
 
         assertEquals(listOf("home"), viewModel.state.value.tags)
         assertEquals(listOf("Food"), viewModel.state.value.categories)
-        assertEquals(listOf("Lunch", "Salary"), viewModel.state.value.descriptionSuggestions)
+        assertEquals(listOf("Lunch", "Salary"), viewModel.state.value.noteSuggestions)
     }
 
     @Test
@@ -1032,7 +1032,7 @@ class OperationsViewModelTest {
 
         assertEquals(listOf(1L), viewModel.state.value.records.map { it.id })
         assertEquals(null, viewModel.state.value.error)
-        assertEquals(emptyList(), viewModel.state.value.descriptionSuggestions)
+        assertEquals(emptyList(), viewModel.state.value.noteSuggestions)
     }
 }
 
@@ -1111,7 +1111,7 @@ private class FakeEngineAdapter(
             rateAtOperation = request.rateAtOperation,
             amountBase = request.amountBase,
             category = request.category,
-            description = request.description,
+            note = request.note,
             tags = request.tags,
         )
         records += record
@@ -1131,7 +1131,7 @@ private class FakeEngineAdapter(
             rateAtOperation = request.rateAtOperation,
             amountBase = request.amountBase,
             category = request.category,
-            description = request.description,
+            note = request.note,
             tags = request.tags,
         )
         val index = records.indexOfFirst { it.id == recordId }
@@ -1169,7 +1169,7 @@ private class FakeEngineAdapter(
             amountOriginal = request.amount,
             amountBase = request.amount,
             category = "Transfer",
-            description = request.description,
+            note = request.note,
             transferId = transferId,
         )
         records += operationRecord(
@@ -1179,7 +1179,7 @@ private class FakeEngineAdapter(
             amountOriginal = request.amount,
             amountBase = request.amount,
             category = "Transfer",
-            description = request.description,
+            note = request.note,
             transferId = transferId,
         )
         return CreateTransferResult(transferId = transferId)
@@ -1197,7 +1197,7 @@ private class FakeEngineAdapter(
             targetAmount = request.amount,
             targetCurrency = request.amountCurrency,
             conversionRate = "1",
-            description = request.description,
+            note = request.note,
         )
     }
 
@@ -1212,7 +1212,7 @@ private class FakeEngineAdapter(
             currency = "KZT",
             rateAtOperation = "1.000000",
             amountBase = "10.00",
-            description = "Move",
+            note = "Move",
         )
     }
 
@@ -1232,7 +1232,7 @@ private class FakeEngineAdapter(
                     amountOriginal = request.amount,
                     amountBase = request.amount,
                     currency = request.currency,
-                    description = request.description,
+                    note = request.note,
                 )
             } else {
                 record.copy(
@@ -1241,7 +1241,7 @@ private class FakeEngineAdapter(
                     amountOriginal = request.amount,
                     amountBase = request.amount,
                     currency = request.currency,
-                    description = request.description,
+                    note = request.note,
                 )
             }
         }
@@ -1251,7 +1251,7 @@ private class FakeEngineAdapter(
     override suspend fun deleteTransfer(transferId: Long): Boolean {
         deleteTransferError?.let { throw it }
         deleteTransferCalls += 1
-        records.removeIf { it.transferId == transferId || it.description == "[transfer:$transferId]" }
+        records.removeIf { it.transferId == transferId || it.note == "[transfer:$transferId]" }
         return true
     }
 
@@ -1263,7 +1263,7 @@ private class FakeEngineAdapter(
             it.transferId == null &&
                 it.relatedDebtId == null &&
                 (it.type == "income" || it.type == "expense" || it.type == "mandatory_expense") &&
-                !it.description.matches(Regex("""^\[transfer:\d+]$"""))
+                !it.note.matches(Regex("""^\[transfer:\d+]$"""))
         }.toLong()
         val deletedDebtLinkedRecords = records.count {
             it.transferId == null &&
@@ -1281,7 +1281,7 @@ private class FakeEngineAdapter(
                 (
                     it.transferId == null &&
                         (it.type == "income" || it.type == "expense" || it.type == "mandatory_expense") &&
-                        !it.description.matches(Regex("""^\[transfer:\d+]$"""))
+                        !it.note.matches(Regex("""^\[transfer:\d+]$"""))
                     )
         }
         return OperationDeleteResult(
@@ -1305,7 +1305,7 @@ private class FakeEngineAdapter(
         }.toLong()
         val deletedRecords = recordIds.size.toLong() - deletedDebtLinkedRecords
         records.removeIf { record ->
-            record.id in recordIds || record.transferId in transferIds || transferIds.any { record.description == "[transfer:$it]" }
+            record.id in recordIds || record.transferId in transferIds || transferIds.any { record.note == "[transfer:$it]" }
         }
         return OperationDeleteResult(
             deletedRecords = deletedRecords,
@@ -1355,7 +1355,7 @@ private class FakeEngineAdapter(
 
     override suspend fun listCategories(recordType: String): List<String> = listOf("Food")
 
-    override suspend fun listRecordDescriptions(recordType: String?): List<String> = listOf("Lunch", "Salary")
+    override suspend fun listRecordNotes(recordType: String?): List<String> = listOf("Lunch", "Salary")
 
     override suspend fun operationSuggestions(): OperationSuggestions {
         suggestionError?.let { throw it }
@@ -1363,9 +1363,9 @@ private class FakeEngineAdapter(
             tags = listOf("home"),
             incomeCategories = listOf("Salary"),
             expenseCategories = listOf("Food"),
-            descriptions = listOf("Lunch", "Salary"),
-            incomeDescriptions = listOf("Salary"),
-            expenseDescriptions = listOf("Lunch"),
+            notes = listOf("Lunch", "Salary"),
+            incomeNotes = listOf("Salary"),
+            expenseNotes = listOf("Lunch"),
         )
     }
 
@@ -1459,7 +1459,7 @@ private class FakeEngineAdapter(
             amountOriginal = request.amountOriginal,
             amountBase = request.amountBase,
             category = request.category,
-            description = request.description,
+            note = request.note,
             period = request.period,
             date = request.date,
         )
@@ -1532,7 +1532,7 @@ private fun validTransferRequest(
     date = date,
     amount = amount,
     currency = currency,
-    description = "Move",
+    note = "Move",
     commissionAmount = commissionAmount,
     commissionCurrency = commissionCurrency,
 )
@@ -1547,7 +1547,7 @@ private fun operationRecord(
     rateAtOperation: String = "1.000000",
     amountBase: String = "10.00",
     category: String = "General",
-    description: String = "",
+    note: String = "",
     tags: List<String> = emptyList(),
     transferId: Long? = null,
     relatedDebtId: Long? = null,
@@ -1563,7 +1563,7 @@ private fun operationRecord(
     rateAtOperation = rateAtOperation,
     amountBase = amountBase,
     category = category,
-    description = description,
+    note = note,
     tags = tags,
 )
 
@@ -1584,7 +1584,7 @@ private fun mandatoryTemplateItem(
     amountOriginal: String = "10.00",
     amountBase: String = "10.00",
     category: String = "Mandatory",
-    description: String = "Template",
+    note: String = "Template",
     period: String = "monthly",
     date: String = "",
 ) = MandatoryTemplateItem(
@@ -1595,7 +1595,7 @@ private fun mandatoryTemplateItem(
     rateAtOperation = "1.000000",
     amountBase = amountBase,
     category = category,
-    description = description,
+    note = note,
     period = period,
     date = date,
     autoPay = date.isNotBlank(),

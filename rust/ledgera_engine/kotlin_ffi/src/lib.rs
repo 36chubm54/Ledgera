@@ -29,7 +29,7 @@ use ledgera_engine_storage::{
     debt_register_payment_validated, debt_register_write_off_validated, debt_rows,
     delete_all_operations, delete_currency_provider_definition, delete_currency_rate,
     delete_operations_selection, delete_standalone_record, delete_transfer, delete_wallet,
-    distinct_record_categories, distinct_record_descriptions, distribution_available_months,
+    distinct_record_categories, distinct_record_notes, distribution_available_months,
     distribution_create_item, distribution_create_subitem, distribution_delete_item,
     distribution_delete_subitem, distribution_freeze_closed_months, distribution_frozen_rows,
     distribution_history_months, distribution_is_month_auto_fixed, distribution_is_month_fixed,
@@ -79,7 +79,7 @@ pub struct CreateRecordRequest {
     pub rate_at_operation: String,
     pub amount_base: String,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub tags: Vec<String>,
 }
 
@@ -93,7 +93,7 @@ pub struct UpdateRecordRequest {
     pub rate_at_operation: String,
     pub amount_base: String,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub tags: Vec<String>,
 }
 
@@ -116,7 +116,7 @@ pub struct CreateTransferRequest {
     pub date: String,
     pub amount: String,
     pub currency: String,
-    pub description: String,
+    pub note: String,
     pub commission_amount: String,
     pub commission_currency: String,
 }
@@ -133,7 +133,7 @@ pub struct UpdateTransferRequest {
     pub date: String,
     pub amount: String,
     pub currency: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -175,7 +175,7 @@ pub struct CreateDebtRequest {
     pub amount: String,
     pub currency: String,
     pub created_at: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -184,7 +184,7 @@ pub struct RegisterDebtPaymentRequest {
     pub wallet_id: Option<i64>,
     pub amount: String,
     pub payment_date: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -195,7 +195,7 @@ pub struct CreateMandatoryTemplateRequest {
     pub rate_at_operation: String,
     pub amount_base: String,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub period: String,
     pub date: String,
 }
@@ -376,9 +376,9 @@ pub struct OperationSuggestionsDto {
     pub tags: Vec<String>,
     pub income_categories: Vec<String>,
     pub expense_categories: Vec<String>,
-    pub descriptions: Vec<String>,
-    pub income_descriptions: Vec<String>,
-    pub expense_descriptions: Vec<String>,
+    pub notes: Vec<String>,
+    pub income_notes: Vec<String>,
+    pub expense_notes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -417,7 +417,7 @@ pub struct RecordDto {
     pub rate_at_operation: String,
     pub amount_base: String,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub tags: Vec<String>,
 }
 
@@ -454,7 +454,7 @@ pub struct TransferDto {
     pub currency: String,
     pub rate_at_operation: String,
     pub amount_base: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -491,7 +491,7 @@ pub struct MandatoryTemplateDto {
     pub rate_at_operation: String,
     pub amount_base: String,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub period: String,
     pub date: String,
     pub auto_pay: bool,
@@ -548,7 +548,7 @@ pub struct ReportOperationRowDto {
     pub tags_text: String,
     pub amount_base: f64,
     pub amount_current: f64,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -573,7 +573,7 @@ pub struct ReportTransferRowDto {
     pub commission_amount_base: f64,
     pub commission_amount_current: f64,
     pub tags_text: String,
-    pub description: String,
+    pub note: String,
     pub integrity_status: String,
     pub integrity_message: String,
 }
@@ -728,7 +728,7 @@ pub struct AssetDto {
     pub currency: String,
     pub is_active: bool,
     pub created_at: String,
-    pub description: String,
+    pub note: String,
     pub current_value: String,
     pub current_value_minor: i64,
     pub current_snapshot_date: Option<String>,
@@ -930,7 +930,7 @@ pub struct CurrencyTransferRequest {
     pub date: String,
     pub amount: String,
     pub amount_currency: String,
-    pub description: String,
+    pub note: String,
     pub commission_amount: String,
     pub commission_currency: String,
 }
@@ -946,7 +946,7 @@ pub struct CurrencyTransferDto {
     pub target_amount: String,
     pub target_currency: String,
     pub conversion_rate: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -984,7 +984,7 @@ pub struct GoalDto {
     pub target_date: Option<String>,
     pub is_completed: bool,
     pub created_at: String,
-    pub description: String,
+    pub note: String,
     pub current_amount: String,
     pub current_amount_minor: i64,
 }
@@ -1110,7 +1110,7 @@ impl LedgeraEngine {
         currency: String,
         value: String,
         snapshot_date: String,
-        description: String,
+        note: String,
     ) -> Result<AssetDto, LedgeraEngineError> {
         asset_create(
             &self.db_path,
@@ -1119,7 +1119,7 @@ impl LedgeraEngine {
             &currency,
             &value,
             &snapshot_date,
-            &description,
+            &note,
         )
         .map(asset_to_dto)
         .map_err(storage_error)
@@ -1133,7 +1133,7 @@ impl LedgeraEngine {
         currency: String,
         value: String,
         snapshot_date: String,
-        description: String,
+        note: String,
     ) -> Result<AssetDto, LedgeraEngineError> {
         asset_update(
             &self.db_path,
@@ -1143,7 +1143,7 @@ impl LedgeraEngine {
             &currency,
             &value,
             &snapshot_date,
-            &description,
+            &note,
         )
         .map(asset_to_dto)
         .map_err(storage_error)
@@ -1201,7 +1201,7 @@ impl LedgeraEngine {
         target_amount: String,
         currency: String,
         target_date: Option<String>,
-        description: String,
+        note: String,
     ) -> Result<GoalDto, LedgeraEngineError> {
         let created_at = current_local_date();
         let created_at = format!(
@@ -1214,7 +1214,7 @@ impl LedgeraEngine {
             &target_amount,
             &currency,
             target_date.as_deref(),
-            &description,
+            &note,
             &created_at,
         )
         .map(goal_to_dto)
@@ -1582,7 +1582,7 @@ impl LedgeraEngine {
             rate_at_operation: request.rate_at_operation,
             amount_base: request.amount_base,
             category: request.category,
-            description: request.description,
+            note: request.note,
             tags: request.tags,
         };
         let assignments = tag_colors
@@ -1621,7 +1621,7 @@ impl LedgeraEngine {
             rate_at_operation: request.rate_at_operation,
             amount_base: request.amount_base,
             category: request.category,
-            description: request.description,
+            note: request.note,
             tags: request.tags,
         };
         let assignments = tag_colors
@@ -1650,7 +1650,7 @@ impl LedgeraEngine {
             date: request.date,
             amount: request.amount,
             currency: request.currency,
-            description: request.description,
+            note: request.note,
             commission_amount: request.commission_amount,
             commission_currency: request.commission_currency,
         };
@@ -1673,7 +1673,7 @@ impl LedgeraEngine {
                 date: request.date,
                 amount: request.amount,
                 amount_currency: request.amount_currency,
-                description: request.description,
+                note: request.note,
                 commission_amount: request.commission_amount,
                 commission_currency: request.commission_currency,
             },
@@ -1694,7 +1694,7 @@ impl LedgeraEngine {
                 date: request.date,
                 amount: request.amount,
                 amount_currency: request.amount_currency,
-                description: request.description,
+                note: request.note,
                 commission_amount: request.commission_amount,
                 commission_currency: request.commission_currency,
             },
@@ -1723,7 +1723,7 @@ impl LedgeraEngine {
             date: request.date,
             amount: request.amount,
             currency: request.currency,
-            description: request.description,
+            note: request.note,
         };
         update_transfer(&self.db_path, transfer_id, &payload)
             .map(|row| UpdateTransferResult {
@@ -1814,11 +1814,11 @@ impl LedgeraEngine {
         distinct_record_categories(&self.db_path, &record_type).map_err(storage_error)
     }
 
-    pub fn list_record_descriptions(
+    pub fn list_record_notes(
         &self,
         record_type: Option<String>,
     ) -> Result<Vec<String>, LedgeraEngineError> {
-        distinct_record_descriptions(&self.db_path, record_type.as_deref()).map_err(storage_error)
+        distinct_record_notes(&self.db_path, record_type.as_deref()).map_err(storage_error)
     }
 
     pub fn operation_suggestions(&self) -> Result<OperationSuggestionsDto, LedgeraEngineError> {
@@ -1827,9 +1827,9 @@ impl LedgeraEngine {
                 tags: suggestions.tags,
                 income_categories: suggestions.income_categories,
                 expense_categories: suggestions.expense_categories,
-                descriptions: suggestions.descriptions,
-                income_descriptions: suggestions.income_descriptions,
-                expense_descriptions: suggestions.expense_descriptions,
+                notes: suggestions.notes,
+                income_notes: suggestions.income_notes,
+                expense_notes: suggestions.expense_notes,
             })
             .map_err(storage_error)
     }
@@ -2357,7 +2357,7 @@ impl LedgeraEngine {
             amount: request.amount,
             currency: request.currency,
             created_at: request.created_at,
-            description: request.description,
+            note: request.note,
         };
         debt_create(&self.db_path, &payload)
             .map(debt_to_dto)
@@ -2435,7 +2435,7 @@ impl LedgeraEngine {
             rate_at_operation: request.rate_at_operation,
             amount_base: request.amount_base,
             category: request.category,
-            description: request.description,
+            note: request.note,
             period: request.period,
             date: request.date,
         };
@@ -2884,7 +2884,7 @@ fn report_operation_to_dto(row: ReportOperationRow) -> ReportOperationRowDto {
         tags_text: row.tags_text,
         amount_base: row.amount_base,
         amount_current: row.amount_current,
-        description: row.description,
+        note: row.note,
     }
 }
 
@@ -2910,7 +2910,7 @@ fn report_transfer_to_dto(row: ReportTransferRow) -> ReportTransferRowDto {
         commission_amount_base: row.commission_amount_base,
         commission_amount_current: row.commission_amount_current,
         tags_text: row.tags_text,
-        description: row.description,
+        note: row.note,
         integrity_status: row.integrity_status,
         integrity_message: row.integrity_message,
     }
@@ -2972,7 +2972,7 @@ fn record_to_dto(row: RecordRow) -> RecordDto {
         rate_at_operation: format_rate(row.rate_at_operation),
         amount_base: format_money(row.amount_base),
         category: row.category,
-        description: row.description,
+        note: row.note,
         tags: row.tags,
     }
 }
@@ -3112,7 +3112,7 @@ fn currency_transfer_to_dto(row: CurrencyTransferRow) -> CurrencyTransferDto {
         target_amount: format_money(row.target_amount),
         target_currency: row.target_currency,
         conversion_rate: row.conversion_rate,
-        description: row.description,
+        note: row.note,
     }
 }
 
@@ -3207,7 +3207,7 @@ fn mandatory_template_to_dto(row: MandatoryExpenseRow) -> MandatoryTemplateDto {
         rate_at_operation: format_rate(row.rate_at_operation),
         amount_base: format_money(row.amount_base),
         category: row.category,
-        description: row.description,
+        note: row.note,
         period: row.period,
         date: row.date,
         auto_pay: row.auto_pay,
@@ -3234,7 +3234,7 @@ fn transfer_to_dto(row: TransferRow) -> TransferDto {
         currency: row.currency,
         rate_at_operation: format_rate(row.rate_at_operation),
         amount_base: format_money(row.amount_base),
-        description: row.description,
+        note: row.note,
     }
 }
 
@@ -3292,7 +3292,7 @@ fn asset_to_dto(row: AssetPayload) -> AssetDto {
         currency: row.currency,
         is_active: row.is_active,
         created_at: row.created_at,
-        description: row.description,
+        note: row.note,
         current_value: format_money(row.current_value_base),
         current_value_minor: row.current_value_minor,
         current_snapshot_date: row.current_snapshot_date,
@@ -3309,7 +3309,7 @@ fn goal_to_dto(row: GoalPayload) -> GoalDto {
         target_date: row.target_date,
         is_completed: row.is_completed,
         created_at: row.created_at,
-        description: row.description,
+        note: row.note,
         current_amount: format_money(row.current_amount_minor as f64 / 100.0),
         current_amount_minor: row.current_amount_minor,
     }
@@ -3490,7 +3490,7 @@ fn debt_payment_request_payload(request: RegisterDebtPaymentRequest) -> DebtPaym
         wallet_id: request.wallet_id,
         amount: request.amount,
         payment_date: request.payment_date,
-        description: request.description,
+        note: request.note,
     }
 }
 
@@ -3564,7 +3564,7 @@ mod tests {
                 amount_base REAL NOT NULL,
                 amount_base_minor INTEGER DEFAULT NULL,
                 category TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
                 period TEXT,
                 FOREIGN KEY(wallet_id) REFERENCES wallets(id)
             );
@@ -3580,7 +3580,7 @@ mod tests {
                 rate_at_operation_text TEXT DEFAULT NULL,
                 amount_base REAL NOT NULL,
                 amount_base_minor INTEGER DEFAULT NULL,
-                description TEXT NOT NULL DEFAULT ''
+                note TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE mandatory_expenses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3593,7 +3593,7 @@ mod tests {
                 amount_base REAL NOT NULL,
                 amount_base_minor INTEGER DEFAULT NULL,
                 category TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
                 period TEXT DEFAULT NULL,
                 date TEXT DEFAULT NULL,
                 auto_pay INTEGER NOT NULL DEFAULT 0
@@ -3812,7 +3812,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10.005".to_owned(),
                 category: "Salary".to_owned(),
-                description: "Alpha".to_owned(),
+                note: "Alpha".to_owned(),
                 tags: vec!["Work".to_owned(), "123tag".to_owned()],
             })
             .unwrap();
@@ -3862,7 +3862,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "20".to_owned(),
                 category: "Food".to_owned(),
-                description: "Lunch".to_owned(),
+                note: "Lunch".to_owned(),
                 tags: Vec::new(),
             })
             .unwrap();
@@ -3916,7 +3916,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "25".to_owned(),
                 category: "Food".to_owned(),
-                description: "Lunch".to_owned(),
+                note: "Lunch".to_owned(),
                 tags: vec!["food".to_owned()],
             })
             .unwrap();
@@ -3933,7 +3933,7 @@ mod tests {
                     rate_at_operation: "1".to_owned(),
                     amount_base: "30.125".to_owned(),
                     category: "Bonus".to_owned(),
-                    description: "Updated".to_owned(),
+                    note: "Updated".to_owned(),
                     tags: vec!["Work".to_owned(), "food".to_owned()],
                 },
             )
@@ -3949,27 +3949,27 @@ mod tests {
             vec!["Bonus"]
         );
         assert_eq!(
-            engine.list_record_descriptions(None).unwrap(),
+            engine.list_record_notes(None).unwrap(),
             vec!["Updated"]
         );
         assert_eq!(
             engine
-                .list_record_descriptions(Some("income".to_owned()))
+                .list_record_notes(Some("income".to_owned()))
                 .unwrap(),
             vec!["Updated"]
         );
         assert!(
             engine
-                .list_record_descriptions(Some("transfer".to_owned()))
+                .list_record_notes(Some("transfer".to_owned()))
                 .is_err()
         );
         let suggestions = engine.operation_suggestions().unwrap();
         assert_eq!(suggestions.tags, vec!["food", "work"]);
         assert_eq!(suggestions.income_categories, vec!["Bonus"]);
-        assert_eq!(suggestions.descriptions, vec!["Updated"]);
-        assert_eq!(suggestions.income_descriptions, vec!["Updated"]);
+        assert_eq!(suggestions.notes, vec!["Updated"]);
+        assert_eq!(suggestions.income_notes, vec!["Updated"]);
         assert!(suggestions.expense_categories.is_empty());
-        assert!(suggestions.expense_descriptions.is_empty());
+        assert!(suggestions.expense_notes.is_empty());
 
         assert!(engine.delete_record(created.id).unwrap());
         assert_eq!(engine.get_record(created.id).unwrap(), None);
@@ -3997,7 +3997,7 @@ mod tests {
                     rate_at_operation: "1".to_owned(),
                     amount_base: "10".to_owned(),
                     category: "Food".to_owned(),
-                    description: "Colored".to_owned(),
+                    note: "Colored".to_owned(),
                     tags: vec!["colored".to_owned()],
                 },
                 vec![TagColorAssignment {
@@ -4036,7 +4036,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap_err();
@@ -4056,7 +4056,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap();
@@ -4072,7 +4072,7 @@ mod tests {
                     rate_at_operation: "1".to_owned(),
                     amount_base: "10".to_owned(),
                     category: "Food".to_owned(),
-                    description: "".to_owned(),
+                    note: "".to_owned(),
                     tags: vec![],
                 },
             )
@@ -4100,7 +4100,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap_err();
@@ -4120,7 +4120,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap();
@@ -4136,7 +4136,7 @@ mod tests {
                     rate_at_operation: "1".to_owned(),
                     amount_base: "10".to_owned(),
                     category: "Food".to_owned(),
-                    description: "".to_owned(),
+                    note: "".to_owned(),
                     tags: vec![],
                 },
             )
@@ -4164,7 +4164,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap_err();
@@ -4184,7 +4184,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap();
@@ -4200,7 +4200,7 @@ mod tests {
                     rate_at_operation: "1".to_owned(),
                     amount_base: "10".to_owned(),
                     category: "Food".to_owned(),
-                    description: "".to_owned(),
+                    note: "".to_owned(),
                     tags: vec![],
                 },
             )
@@ -4225,7 +4225,7 @@ mod tests {
                 date: "2026-01-01".to_owned(),
                 amount: "20".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move".to_owned(),
+                note: "Move".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             })
@@ -4255,7 +4255,7 @@ mod tests {
                 date: "2026-01-01".to_owned(),
                 amount: "20".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move".to_owned(),
+                note: "Move".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             })
@@ -4275,7 +4275,7 @@ mod tests {
                     date: "2026-01-02".to_owned(),
                     amount: "5.25".to_owned(),
                     currency: "KZT".to_owned(),
-                    description: "Return".to_owned(),
+                    note: "Return".to_owned(),
                 },
             )
             .unwrap();
@@ -4285,7 +4285,7 @@ mod tests {
         assert_eq!(transfer.from_wallet_id, 1);
         assert_eq!(transfer.to_wallet_id, 2);
         assert_eq!(transfer.amount_original, "5.25");
-        assert_eq!(transfer.description, "Return");
+        assert_eq!(transfer.note, "Return");
         let records = engine.list_records(RecordFilterDto::default()).unwrap();
         assert!(records.iter().any(|record| {
             record.record_type == "expense"
@@ -4307,7 +4307,7 @@ mod tests {
                     date: "2026-01-02".to_owned(),
                     amount: "5.25".to_owned(),
                     currency: "KZT".to_owned(),
-                    description: "Invalid".to_owned(),
+                    note: "Invalid".to_owned(),
                 },
             )
             .unwrap_err();
@@ -4326,7 +4326,7 @@ mod tests {
                 date: "2026-01-01".to_owned(),
                 amount: "20".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move".to_owned(),
+                note: "Move".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             })
@@ -4361,7 +4361,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "Lunch".to_owned(),
+                note: "Lunch".to_owned(),
                 tags: vec!["food".to_owned()],
             })
             .unwrap();
@@ -4372,7 +4372,7 @@ mod tests {
                 date: "2026-01-02".to_owned(),
                 amount: "20".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move".to_owned(),
+                note: "Move".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             })
@@ -4408,7 +4408,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "5".to_owned(),
                 category: "Bonus".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap();
@@ -4451,7 +4451,7 @@ mod tests {
         ));
         fs::write(
             &import_path,
-            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
+            "date,type,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,tags,period,transfer_id,from_wallet_id,to_wallet_id\n\
              2026-01-01,income,1,Salary,10.00,KZT,1,10.00,Pay,work,,,,,\n\
              2026-01-02,transfer,,Transfer,5.00,KZT,1,5.00,Move,,,1,1,2\n",
         )
@@ -4510,7 +4510,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10.00".to_owned(),
                 category: "Salary".to_owned(),
-                description: "Pay".to_owned(),
+                note: "Pay".to_owned(),
                 tags: vec!["work".to_owned()],
             })
             .unwrap();
@@ -4521,7 +4521,7 @@ mod tests {
                 date: "2026-01-02".to_owned(),
                 amount: "5.00".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move".to_owned(),
+                note: "Move".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             })
@@ -4589,7 +4589,7 @@ mod tests {
                 amount: "25.50".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             })
             .expect("create debt");
         assert_eq!(debt.id, 1);
@@ -4648,7 +4648,7 @@ mod tests {
                 amount: "10.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "Loan to Bob".to_owned(),
+                note: "Loan to Bob".to_owned(),
             })
             .expect("create loan");
         assert_eq!(loan.kind, "loan");
@@ -4671,7 +4671,7 @@ mod tests {
                 amount: "999.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             })
             .expect_err("insufficient funds");
         assert!(error.to_string().contains("Insufficient funds"));
@@ -4684,7 +4684,7 @@ mod tests {
                 amount: "1.00".to_owned(),
                 currency: "USD".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             })
             .expect("foreign-currency debt");
         assert_eq!(foreign_debt.currency, "USD");
@@ -4703,7 +4703,7 @@ mod tests {
                 amount: "50.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             })
             .expect("create debt");
 
@@ -4713,7 +4713,7 @@ mod tests {
                 wallet_id: Some(1),
                 amount: "20.00".to_owned(),
                 payment_date: "2026-03-05".to_owned(),
-                description: "cash".to_owned(),
+                note: "cash".to_owned(),
             })
             .expect("payment");
         assert_eq!(payment.debt_id, debt.id);
@@ -4727,7 +4727,7 @@ mod tests {
                     wallet_id: Some(1),
                     amount: "40.00".to_owned(),
                     payment_date: "2026-03-06".to_owned(),
-                    description: "too much".to_owned(),
+                    note: "too much".to_owned(),
                 })
                 .expect_err("overpayment")
                 .to_string()
@@ -4740,7 +4740,7 @@ mod tests {
                 wallet_id: None,
                 amount: "30.00".to_owned(),
                 payment_date: "2026-03-06".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             })
             .expect("write off");
         assert_eq!(write_off.operation_type, "debt_forgive");
@@ -4758,7 +4758,7 @@ mod tests {
                 amount: "10.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             })
             .expect("create loan");
         let closed_loan = engine
@@ -4767,7 +4767,7 @@ mod tests {
                 wallet_id: Some(1),
                 amount: "0.01".to_owned(),
                 payment_date: "2026-03-07".to_owned(),
-                description: "close".to_owned(),
+                note: "close".to_owned(),
             })
             .expect("close loan");
         assert_eq!(closed_loan.status, "closed");
@@ -4796,7 +4796,7 @@ mod tests {
                 amount: "50.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             })
             .expect("create debt");
         let payment = engine
@@ -4805,7 +4805,7 @@ mod tests {
                 wallet_id: Some(1),
                 amount: "20.00".to_owned(),
                 payment_date: "2026-03-05".to_owned(),
-                description: "cash".to_owned(),
+                note: "cash".to_owned(),
             })
             .expect("payment");
         let record_id = payment.record_id.expect("linked payment record");
@@ -4889,7 +4889,7 @@ mod tests {
                 rate_at_operation: "1".to_owned(),
                 amount_base: "25.25".to_owned(),
                 category: "Rent".to_owned(),
-                description: "Monthly rent".to_owned(),
+                note: "Monthly rent".to_owned(),
                 period: "monthly".to_owned(),
                 date: "2026-02-01".to_owned(),
             })
@@ -4942,7 +4942,7 @@ mod tests {
         let export_path = std::env::temp_dir().join(format!("ledgera_mandatory_{unique}.xlsx"));
         fs::write(
             &import_path,
-            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,period\n\
+            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,period\n\
 mandatory_expense,2026-03-01,1,Rent,100,KZT,1,100,Rent,monthly\n\
 mandatory_expense,,2,Phone,25,KZT,1,25,Mobile,weekly\n",
         )
@@ -4969,7 +4969,7 @@ mandatory_expense,,2,Phone,25,KZT,1,25,Mobile,weekly\n",
 
         fs::write(
             &import_path,
-            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,description,period\n\
+            "type,date,wallet_id,category,amount_original,currency,rate_at_operation,amount_base,note,period\n\
 expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
         )
         .unwrap();
@@ -5002,7 +5002,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "5".to_owned(),
                 category: "Daily".to_owned(),
-                description: "Coffee".to_owned(),
+                note: "Coffee".to_owned(),
                 period: "daily".to_owned(),
                 date: "2026-02-01".to_owned(),
             })
@@ -5130,13 +5130,13 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
             .unwrap();
         let conn = Connection::open(&db_path).unwrap();
         conn.execute(
-            "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, description)
+            "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, note)
              VALUES ('income', '2026-01-01', ?1, 1.0, 100, 'KZT', 1.0, '1.000000', 1.0, 100, 'Test', 'In')",
             [archived_wallet.id],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, description)
+            "INSERT INTO records (type, date, wallet_id, amount_original, amount_original_minor, currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, category, note)
              VALUES ('expense', '2026-01-01', ?1, 1.0, 100, 'KZT', 1.0, '1.000000', 1.0, 100, 'Test', 'Out')",
             [archived_wallet.id],
         )
@@ -5197,7 +5197,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 date: "2026-01-01".to_owned(),
                 amount: "20".to_owned(),
                 currency: "KZT".to_owned(),
-                description: "Move".to_owned(),
+                note: "Move".to_owned(),
                 commission_amount: "0".to_owned(),
                 commission_currency: "KZT".to_owned(),
             })
@@ -5222,7 +5222,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap_err();
@@ -5238,7 +5238,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Food".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap();
@@ -5254,7 +5254,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                     rate_at_operation: "1".to_owned(),
                     amount_base: "10".to_owned(),
                     category: "Food".to_owned(),
-                    description: "".to_owned(),
+                    note: "".to_owned(),
                     tags: vec![],
                 },
             )
@@ -5279,7 +5279,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .expect_err("missing foreign-currency rate");
@@ -5299,7 +5299,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                 rate_at_operation: "1".to_owned(),
                 amount_base: "10".to_owned(),
                 category: "Salary".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
                 tags: vec![],
             })
             .unwrap();
@@ -5315,7 +5315,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
                     rate_at_operation: "1".to_owned(),
                     amount_base: "10".to_owned(),
                     category: "Salary".to_owned(),
-                    description: "".to_owned(),
+                    note: "".to_owned(),
                     tags: vec![],
                 },
             )
@@ -5335,7 +5335,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
         conn.execute(
             "INSERT INTO transfers (
                 id, from_wallet_id, to_wallet_id, date, amount_original, amount_original_minor,
-                currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, description
+                currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor, note
              ) VALUES (1, 1, 1, '2026-01-01', 10.0, 1000, 'KZT', 1.0, '1.000000', 10.0, 1000, '')",
             [],
         )
@@ -5344,7 +5344,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
             "INSERT INTO records (
                 id, type, date, wallet_id, transfer_id, amount_original, amount_original_minor,
                 currency, rate_at_operation, rate_at_operation_text, amount_base, amount_base_minor,
-                category, description
+                category, note
              ) VALUES (1, 'expense', '2026-01-01', 1, 1, 10.0, 1000, 'KZT', 1.0, '1.000000', 10.0, 1000, 'Transfer', '')",
             [],
         )
@@ -5359,7 +5359,7 @@ expense,,1,Wrong,10,KZT,1,10,Wrong,monthly\n",
             rate_at_operation: "1".to_owned(),
             amount_base: "10".to_owned(),
             category: "Transfer".to_owned(),
-            description: "".to_owned(),
+            note: "".to_owned(),
             tags: vec![],
         };
 

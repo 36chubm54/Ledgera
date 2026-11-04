@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS transfers (
     target_currency TEXT DEFAULT NULL,
     conversion_rate REAL DEFAULT NULL,
     conversion_rate_text TEXT DEFAULT NULL,
-    description TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
     FOREIGN KEY(from_wallet_id) REFERENCES wallets(id) ON UPDATE CASCADE ON DELETE RESTRICT,
     FOREIGN KEY(to_wallet_id) REFERENCES wallets(id) ON UPDATE CASCADE ON DELETE RESTRICT,
     CHECK(from_wallet_id <> to_wallet_id)
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS records (
     amount_base REAL NOT NULL CHECK(amount_base >= 0),
     amount_base_minor INTEGER DEFAULT NULL CHECK(amount_base_minor >= 0 OR amount_base_minor IS NULL),
     category TEXT NOT NULL CHECK(length(trim(category)) > 0),
-    description TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
     period TEXT CHECK(period IN ('daily', 'weekly', 'monthly', 'yearly') OR period IS NULL),
     FOREIGN KEY(wallet_id) REFERENCES wallets(id) ON UPDATE CASCADE ON DELETE RESTRICT,
     FOREIGN KEY(transfer_id) REFERENCES transfers(id) ON UPDATE CASCADE ON DELETE CASCADE,
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS assets (
     currency TEXT NOT NULL CHECK(length(trim(currency)) = 3 AND upper(trim(currency)) = trim(currency)),
     is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
     created_at TEXT NOT NULL CHECK(created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-    description TEXT NOT NULL DEFAULT ''
+    note TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS asset_snapshots (
@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS goals (
     ),
     is_completed INTEGER NOT NULL DEFAULT 0 CHECK(is_completed IN (0, 1)),
     created_at TEXT NOT NULL CHECK(created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-    description TEXT NOT NULL DEFAULT ''
+    note TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS mandatory_expenses (
@@ -215,7 +215,7 @@ CREATE TABLE IF NOT EXISTS mandatory_expenses (
     amount_base REAL NOT NULL CHECK(amount_base >= 0),
     amount_base_minor INTEGER DEFAULT NULL CHECK(amount_base_minor >= 0 OR amount_base_minor IS NULL),
     category TEXT NOT NULL CHECK(length(trim(category)) > 0),
-    description TEXT NOT NULL CHECK(length(trim(description)) > 0),
+    note TEXT NOT NULL CHECK(length(trim(note)) > 0),
     period TEXT NOT NULL CHECK(period IN ('daily', 'weekly', 'monthly', 'yearly')),
     date TEXT DEFAULT NULL,
     auto_pay INTEGER NOT NULL DEFAULT 0 CHECK(auto_pay IN (0, 1)),

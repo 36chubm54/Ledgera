@@ -8,7 +8,7 @@ internal data class OperationJournalItem(
     val title: String,
     val amount: String,
     val meta: String,
-    val description: String,
+    val note: String,
     val tags: List<String>,
     val tagColors: Map<String, String> = emptyMap(),
     val selectableRecordId: Long?,
@@ -59,14 +59,14 @@ private fun standaloneJournalItem(
 ): OperationJournalItem {
     val bulkSelectable =
         (record.type == "income" || record.type == "expense" || record.type == "mandatory_expense") &&
-            !isTransferCommissionMarker(record.description)
+            !isTransferCommissionMarker(record.note)
     val selected = selectedBulkRecordIds.contains(record.id)
     return OperationJournalItem(
         key = "record:${record.id}",
         title = record.category,
         amount = "${record.amountOriginal} ${record.currency}",
         meta = "${record.date} · ${record.type} · ${walletLabel(record.walletId, wallets)}",
-        description = record.description,
+        note = record.note,
         tags = record.tags,
         tagColors = tagColors,
         selectableRecordId = record.id,
@@ -98,7 +98,7 @@ private fun transferJournalItem(
         title = "Transfer · transfer #$transferId",
         amount = "${primary.amountOriginal} ${primary.currency}",
         meta = "${primary.date} · transfer · $direction",
-        description = primary.description,
+        note = primary.note,
         tags = emptyList(),
         selectableRecordId = null,
         transferId = transferId,
@@ -115,8 +115,8 @@ private fun transferJournalItem(
     )
 }
 
-private fun isTransferCommissionMarker(description: String): Boolean =
-    Regex("""^\[transfer:\d+]$""").matches(description.trim())
+private fun isTransferCommissionMarker(note: String): Boolean =
+    Regex("""^\[transfer:\d+]$""").matches(note.trim())
 
 private fun walletLabel(walletId: Long, wallets: List<WalletOption>): String =
     wallets.firstOrNull { it.id == walletId }?.name?.takeIf(String::isNotBlank)

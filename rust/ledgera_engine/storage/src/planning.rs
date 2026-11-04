@@ -148,7 +148,7 @@ pub struct DebtRecordPayload {
     pub amount_base: f64,
     pub amount_base_minor: i64,
     pub category: String,
-    pub description: String,
+    pub note: String,
     pub period: Option<String>,
 }
 
@@ -160,7 +160,7 @@ pub struct DebtCreatePayload {
     pub amount: String,
     pub currency: String,
     pub created_at: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -169,7 +169,7 @@ pub struct DebtPaymentRequestPayload {
     pub wallet_id: Option<i64>,
     pub amount: String,
     pub payment_date: String,
-    pub description: String,
+    pub note: String,
 }
 
 fn apply_pct(amount_minor: i64, pct_minor: i64) -> i64 {
@@ -751,7 +751,7 @@ fn insert_debt_record_row(
             type, date, wallet_id, transfer_id, related_debt_id,
             amount_original, amount_original_minor, currency,
             rate_at_operation, rate_at_operation_text,
-            amount_base, amount_base_minor, category, description, period
+            amount_base, amount_base_minor, category, note, period
          )
          VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
@@ -767,7 +767,7 @@ fn insert_debt_record_row(
             record.amount_base,
             record.amount_base_minor,
             record.category,
-            record.description,
+            record.note,
             record.period
         ],
     )
@@ -2322,7 +2322,7 @@ pub fn debt_create(db_path: &str, payload: &DebtCreatePayload) -> StorageResult<
         closed_at: None,
     };
     let debt_id = insert_debt_row(&tx, &debt, false)?;
-    let description = payload.description.trim();
+    let note = payload.note.trim();
     let record = DebtRecordPayload {
         record_type: if kind == "debt" {
             "income".to_owned()
@@ -2343,10 +2343,10 @@ pub fn debt_create(db_path: &str, payload: &DebtCreatePayload) -> StorageResult<
         } else {
             "Loan".to_owned()
         },
-        description: if description.is_empty() {
+        note: if note.is_empty() {
             contact_name.to_owned()
         } else {
-            description.to_owned()
+            note.to_owned()
         },
         period: None,
     };
@@ -2422,10 +2422,10 @@ pub fn debt_register_payment_validated(
         } else {
             "Debt payment".to_owned()
         },
-        description: if payload.description.trim().is_empty() {
+        note: if payload.note.trim().is_empty() {
             debt.contact_name
         } else {
-            payload.description.trim().to_owned()
+            payload.note.trim().to_owned()
         },
         period: None,
     };
@@ -2525,10 +2525,10 @@ pub fn debt_close_validated(
         } else {
             "Debt payment".to_owned()
         },
-        description: if payload.description.trim().is_empty() {
+        note: if payload.note.trim().is_empty() {
             debt.contact_name
         } else {
-            payload.description.trim().to_owned()
+            payload.note.trim().to_owned()
         },
         period: None,
     };
@@ -3010,7 +3010,7 @@ mod tests {
                 amount_base REAL NOT NULL,
                 amount_base_minor INTEGER,
                 category TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
                 period TEXT
             );
             CREATE TABLE wallets (
@@ -3153,7 +3153,7 @@ mod tests {
             amount_base: minor_to_money_value(amount_minor),
             amount_base_minor: amount_minor,
             category: "Debt".to_owned(),
-            description: "Alice".to_owned(),
+            note: "Alice".to_owned(),
             period: None,
         }
     }
@@ -3526,7 +3526,7 @@ mod tests {
                 id, type, date, wallet_id, transfer_id, related_debt_id,
                 amount_original, amount_original_minor, currency,
                 rate_at_operation, rate_at_operation_text,
-                amount_base, amount_base_minor, category, description
+                amount_base, amount_base_minor, category, note
              )
              VALUES (
                 99, 'income', '2026-03-05', 1, NULL, NULL,
@@ -3586,7 +3586,7 @@ mod tests {
                 amount: "500.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             },
         )
         .expect("create debt");
@@ -3613,7 +3613,7 @@ mod tests {
                 amount: "100.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-02".to_owned(),
-                description: "Loan to Bob".to_owned(),
+                note: "Loan to Bob".to_owned(),
             },
         )
         .expect("create loan");
@@ -3642,7 +3642,7 @@ mod tests {
                 amount: "500.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             },
         )
         .expect("create debt");
@@ -3654,7 +3654,7 @@ mod tests {
                 wallet_id: Some(1),
                 amount: "200.00".to_owned(),
                 payment_date: "2026-03-05".to_owned(),
-                description: "cash".to_owned(),
+                note: "cash".to_owned(),
             },
         )
         .expect("payment");
@@ -3691,7 +3691,7 @@ mod tests {
                 wallet_id: None,
                 amount: "300.00".to_owned(),
                 payment_date: "2026-03-06".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             },
         )
         .expect("write off");
@@ -3712,7 +3712,7 @@ mod tests {
                 amount: "100.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             },
         )
         .expect("create loan");
@@ -3723,7 +3723,7 @@ mod tests {
                 wallet_id: Some(1),
                 amount: "1.00".to_owned(),
                 payment_date: "2026-03-07".to_owned(),
-                description: "close".to_owned(),
+                note: "close".to_owned(),
             },
         )
         .expect("close loan");
@@ -3751,7 +3751,7 @@ mod tests {
                 amount: "200.00".to_owned(),
                 currency: "KZT".to_owned(),
                 created_at: "2026-03-01".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             },
         )
         .expect("create debt");
@@ -3761,7 +3761,7 @@ mod tests {
                 wallet_id,
                 amount: amount.to_owned(),
                 payment_date: date.to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             };
         assert!(
             debt_register_payment_validated(&db_path, &request("0", Some(1), "2026-03-05"))
@@ -3831,7 +3831,7 @@ mod tests {
                 wallet_id: None,
                 amount: "200.00".to_owned(),
                 payment_date: "2026-03-06".to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             },
         )
         .expect("close");
@@ -3843,7 +3843,7 @@ mod tests {
                     wallet_id: None,
                     amount: "1.00".to_owned(),
                     payment_date: "2026-03-07".to_owned(),
-                    description: "".to_owned(),
+                    note: "".to_owned(),
                 },
             )
             .expect_err("closed")
@@ -3870,7 +3870,7 @@ mod tests {
                 amount: amount.to_owned(),
                 currency: currency.to_owned(),
                 created_at: created_at.to_owned(),
-                description: "".to_owned(),
+                note: "".to_owned(),
             }
         };
         assert!(

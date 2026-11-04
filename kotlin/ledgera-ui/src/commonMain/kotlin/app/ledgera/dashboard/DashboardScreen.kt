@@ -383,7 +383,7 @@ private fun AssetsCard(
                 }
                 if (selectedId == asset.id) {
                     Column(Modifier.padding(start = 8.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(asset.description.ifBlank { "No description" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(asset.note.ifBlank { "No note" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Latest snapshot: ${asset.currentSnapshotDate ?: "No snapshot"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -425,7 +425,7 @@ private fun AssetDialog(asset: DashboardAsset?, viewModel: DashboardViewModel, c
     var currency by remember(asset) { mutableStateOf(asset?.currency ?: "KZT") }
     var value by remember(asset) { mutableStateOf(asset?.currentValue ?: "0") }
     var date by remember(asset) { mutableStateOf(asset?.currentSnapshotDate ?: "") }
-    var description by remember(asset) { mutableStateOf(asset?.description ?: "") }
+    var note by remember(asset) { mutableStateOf(asset?.note ?: "") }
     val validValue = MoneyValidation.isNonNegativeMoneyAmount(value)
     val validCurrency = CurrencyValidation.isValidCurrencyCode(currency)
     val dateError = DateValidation.validateGuiNotFuture(date)
@@ -457,7 +457,7 @@ private fun AssetDialog(asset: DashboardAsset?, viewModel: DashboardViewModel, c
                     showErrorOutline = false,
                     showErrorText = false,
                 )
-                OutlinedTextField(description, { description = it }, label = { Text("Description") }, singleLine = true)
+                OutlinedTextField(note, { note = it }, label = { Text("Note") }, singleLine = true)
                 validationMessages.forEach { message ->
                     Text(message, color = MaterialTheme.colorScheme.error)
                 }
@@ -467,8 +467,8 @@ private fun AssetDialog(asset: DashboardAsset?, viewModel: DashboardViewModel, c
             Button(
                 onClick = {
                     DateValidation.formatGuiDateToYmd(date)?.let { snapshotDate ->
-                        if (asset == null) viewModel.createAsset(name, category, currency, value, snapshotDate, description)
-                        else viewModel.updateAsset(asset.id, name, category, currency, value, snapshotDate, description)
+                        if (asset == null) viewModel.createAsset(name, category, currency, value, snapshotDate, note)
+                        else viewModel.updateAsset(asset.id, name, category, currency, value, snapshotDate, note)
                         close()
                     }
                 },

@@ -176,7 +176,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                         transferNetCurrent = value.transferNetCurrent,
                     )
                 },
-                operations = dto.operations.map { value -> ReportOperationRow(value.date, value.typeLabel, value.kind, value.category, value.tagsText, value.amountBase, value.amountCurrent, value.description) },
+                operations = dto.operations.map { value -> ReportOperationRow(value.date, value.typeLabel, value.kind, value.category, value.tagsText, value.amountBase, value.amountCurrent, value.note) },
                 monthly = dto.monthly.map { value -> ReportMonthlyRow(value.month, value.income, value.expenses, value.incomeCurrent, value.expensesCurrent) },
                 categories = dto.categories.map { value -> ReportCategoryRow(value.category, value.operationsCount, value.totalBase, value.totalCurrent) },
                 tags = dto.tags.map { value -> ReportTagRow(value.tag, value.operationsCount, value.totalBase, value.totalCurrent) },
@@ -203,7 +203,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                         commissionAmountBase = value.commissionAmountBase,
                         commissionAmountCurrent = value.commissionAmountCurrent,
                         tagsText = value.tagsText,
-                        description = value.description,
+                        note = value.note,
                         integrityStatus = value.integrityStatus,
                         integrityMessage = value.integrityMessage,
                     )
@@ -290,11 +290,11 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     override suspend fun dashboardAssets(activeOnly: Boolean): List<DashboardAsset> = withContext(Dispatchers.IO) {
         engine.dashboardAssets(activeOnly).map(::toDashboardAsset)
     }
-    override suspend fun createDashboardAsset(name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = withContext(Dispatchers.IO) {
-        engine.dashboardCreateAsset(name, category, currency, value, snapshotDate, description).let(::toDashboardAsset)
+    override suspend fun createDashboardAsset(name: String, category: String, currency: String, value: String, snapshotDate: String, note: String): DashboardAsset = withContext(Dispatchers.IO) {
+        engine.dashboardCreateAsset(name, category, currency, value, snapshotDate, note).let(::toDashboardAsset)
     }
-    override suspend fun updateDashboardAsset(assetId: Long, name: String, category: String, currency: String, value: String, snapshotDate: String, description: String): DashboardAsset = withContext(Dispatchers.IO) {
-        engine.dashboardUpdateAsset(assetId, name, category, currency, value, snapshotDate, description).let(::toDashboardAsset)
+    override suspend fun updateDashboardAsset(assetId: Long, name: String, category: String, currency: String, value: String, snapshotDate: String, note: String): DashboardAsset = withContext(Dispatchers.IO) {
+        engine.dashboardUpdateAsset(assetId, name, category, currency, value, snapshotDate, note).let(::toDashboardAsset)
     }
     override suspend fun addDashboardAssetSnapshot(assetId: Long, value: String, snapshotDate: String, note: String): DashboardAsset = withContext(Dispatchers.IO) {
         engine.dashboardAddAssetSnapshot(assetId, value, snapshotDate, note).let(::toDashboardAsset)
@@ -309,8 +309,8 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         engine.dashboardSetAssetActive(assetId, active).let(::toDashboardAsset)
     }
     override suspend fun dashboardGoals(): List<DashboardGoal> = withContext(Dispatchers.IO) { engine.dashboardGoals().map(::toDashboardGoal) }
-    override suspend fun createDashboardGoal(title: String, targetAmount: String, currency: String, targetDate: String?, description: String): DashboardGoal = withContext(Dispatchers.IO) {
-        engine.dashboardCreateGoal(title, targetAmount, currency, targetDate, description).let(::toDashboardGoal)
+    override suspend fun createDashboardGoal(title: String, targetAmount: String, currency: String, targetDate: String?, note: String): DashboardGoal = withContext(Dispatchers.IO) {
+        engine.dashboardCreateGoal(title, targetAmount, currency, targetDate, note).let(::toDashboardGoal)
     }
     override suspend fun setDashboardGoalCompleted(goalId: Long, completed: Boolean) = withContext(Dispatchers.IO) { engine.dashboardSetGoalCompleted(goalId, completed) }
     override suspend fun deleteDashboardGoal(goalId: Long) = withContext(Dispatchers.IO) { engine.dashboardDeleteGoal(goalId) }
@@ -491,7 +491,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                     rateAtOperation = request.rateAtOperation,
                     amountBase = request.amountBase,
                     category = request.category,
-                    description = request.description,
+                    note = request.note,
                     tags = request.tags,
                 )
             ).let(::toOperationRecord)
@@ -509,7 +509,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                     rateAtOperation = request.rateAtOperation,
                     amountBase = request.amountBase,
                     category = request.category,
-                    description = request.description,
+                    note = request.note,
                     tags = request.tags,
                 ),
                 request.tagColors.map { (name, color) ->
@@ -531,7 +531,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                     rateAtOperation = request.rateAtOperation,
                     amountBase = request.amountBase,
                     category = request.category,
-                    description = request.description,
+                    note = request.note,
                     tags = request.tags,
                 )
             ).let(::toOperationRecord)
@@ -552,7 +552,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 rateAtOperation = request.rateAtOperation,
                 amountBase = request.amountBase,
                 category = request.category,
-                description = request.description,
+                note = request.note,
                 tags = request.tags,
             ),
             request.tagColors.map { (name, color) ->
@@ -574,7 +574,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                     date = request.date,
                     amount = request.amount,
                     currency = request.currency,
-                    description = request.description,
+                    note = request.note,
                     commissionAmount = request.commissionAmount,
                     commissionCurrency = request.commissionCurrency,
                 )
@@ -589,12 +589,12 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 date = request.date,
                 amount = request.amount,
                 amountCurrency = request.amountCurrency,
-                description = request.description,
+                note = request.note,
                 commissionAmount = request.commissionAmount,
                 commissionCurrency = request.commissionCurrency,
             )
         ).let {
-            CurrencyTransferResult(it.id, it.fromWalletId, it.toWalletId, it.date, it.sourceAmount, it.sourceCurrency, it.targetAmount, it.targetCurrency, it.conversionRate, it.description)
+            CurrencyTransferResult(it.id, it.fromWalletId, it.toWalletId, it.date, it.sourceAmount, it.sourceCurrency, it.targetAmount, it.targetCurrency, it.conversionRate, it.note)
         }
     }
 
@@ -606,7 +606,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 date = request.date,
                 amount = request.amount,
                 amountCurrency = request.amountCurrency,
-                description = request.description,
+                note = request.note,
                 commissionAmount = request.commissionAmount,
                 commissionCurrency = request.commissionCurrency,
             )
@@ -629,7 +629,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 date = request.date,
                 amount = request.amount,
                 currency = request.currency,
-                description = request.description,
+                note = request.note,
             )
         ).let { UpdateTransferResult(transferId = it.transferId) }
     }
@@ -701,8 +701,8 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
         engine.listCategories(recordType)
     }
 
-    override suspend fun listRecordDescriptions(recordType: String?): List<String> = withContext(Dispatchers.IO) {
-        engine.listRecordDescriptions(recordType)
+    override suspend fun listRecordNotes(recordType: String?): List<String> = withContext(Dispatchers.IO) {
+        engine.listRecordNotes(recordType)
     }
 
     override suspend fun operationSuggestions(): OperationSuggestions = withContext(Dispatchers.IO) {
@@ -711,9 +711,9 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 tags = it.tags,
                 incomeCategories = it.incomeCategories,
                 expenseCategories = it.expenseCategories,
-                descriptions = it.descriptions,
-                incomeDescriptions = it.incomeDescriptions,
-                expenseDescriptions = it.expenseDescriptions,
+                notes = it.notes,
+                incomeNotes = it.incomeNotes,
+                expenseNotes = it.expenseNotes,
             )
         }
     }
@@ -1022,7 +1022,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 amount = request.amount,
                 currency = request.currency,
                 createdAt = request.createdAt,
-                description = request.description,
+                note = request.note,
             )
         ).let {
             toDebtItem(it)
@@ -1071,7 +1071,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
                 rateAtOperation = request.rateAtOperation,
                 amountBase = request.amountBase,
                 category = request.category,
-                description = request.description,
+                note = request.note,
                 period = request.period,
                 date = request.date,
             )
@@ -1188,7 +1188,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
             rateAtOperation = record.rateAtOperation,
             amountBase = record.amountBase,
             category = record.category,
-            description = record.description,
+            note = record.note,
             tags = record.tags,
         )
 
@@ -1202,7 +1202,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
             currency = transfer.currency,
             rateAtOperation = transfer.rateAtOperation,
             amountBase = transfer.amountBase,
-            description = transfer.description,
+            note = transfer.note,
         )
 
     private fun toBudgetItem(budget: app.ledgera.engine.BudgetDto): BudgetItem =
@@ -1252,7 +1252,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
             rateAtOperation = template.rateAtOperation,
             amountBase = template.amountBase,
             category = template.category,
-            description = template.description,
+            note = template.note,
             period = template.period,
             date = template.date,
             autoPay = template.autoPay,
@@ -1264,7 +1264,7 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
             walletId = walletId,
             amount = amount,
             paymentDate = paymentDate,
-            description = description,
+            note = note,
         )
 
     private fun OperationImportResultDto.toModel(): OperationImportResult =
@@ -1298,8 +1298,8 @@ class RustEngineAdapter(dbPath: String) : EngineAdapter {
     private fun toDistributionItem(value: app.ledgera.engine.DistributionItemDto) = DistributionItem(value.id, value.name, value.groupName, value.sortOrder, value.pct, value.pctMinor, value.isActive, value.amountBase, value.amountMinor, value.subitems.map(::toDistributionSubitem))
     private fun toDistributionMonthly(value: app.ledgera.engine.DistributionMonthlyDto) = DistributionMonthlyResult(value.month, value.netIncomeBase, value.netIncomeMinor, value.isNegative, value.items.map(::toDistributionItem))
     private fun toDistributionFrozenRow(value: app.ledgera.engine.DistributionFrozenRowDto) = DistributionFrozenRow(value.month, value.columns.map { DistributionColumn(it.key, it.label, it.value) }, value.isNegative, value.autoFixed)
-    private fun toDashboardAsset(value: app.ledgera.engine.AssetDto) = DashboardAsset(value.id, value.name, value.category, value.currency, value.isActive, value.createdAt, value.description, value.currentValue, value.currentValueMinor, value.currentSnapshotDate)
-    private fun toDashboardGoal(value: app.ledgera.engine.GoalDto) = DashboardGoal(value.id, value.title, value.targetAmount, value.targetAmountMinor, value.currency, value.targetDate, value.isCompleted, value.createdAt, value.description, value.currentAmount, value.currentAmountMinor)
+    private fun toDashboardAsset(value: app.ledgera.engine.AssetDto) = DashboardAsset(value.id, value.name, value.category, value.currency, value.isActive, value.createdAt, value.note, value.currentValue, value.currentValueMinor, value.currentSnapshotDate)
+    private fun toDashboardGoal(value: app.ledgera.engine.GoalDto) = DashboardGoal(value.id, value.title, value.targetAmount, value.targetAmountMinor, value.currency, value.targetDate, value.isCompleted, value.createdAt, value.note, value.currentAmount, value.currentAmountMinor)
     private fun app.ledgera.engine.DashboardDto.toDashboardSnapshot() = DashboardSnapshot(
         baseCurrency = baseCurrency,
         netWorth = netWorth,

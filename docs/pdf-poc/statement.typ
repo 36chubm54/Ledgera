@@ -154,7 +154,7 @@
   inset: 4pt,
   stroke: (x, y) => if y == 0 { none } else { 0.35pt + outline },
   align: (left, left, left, left, right),
-  table.header([Date], [Type], [Category], [Tags / description], [Amount]),
+  table.header([Date], [Type], [Category], [Tags / note], [Amount]),
   [01.11.2026], [#pill([Income], fill: income-container, foreground: income)], [Cashback], [#pill([\#bonus], fill: transfer-container, foreground: transfer)], [#money([+2 787.06 KZT], color: income)],
   [01.11.2026], [#pill([Expense], fill: error-container, foreground: error)], [Food and drinks], [Lunch], [#money([−94.00 KZT], color: error)],
   [31.10.2026], [#pill([Expense], fill: error-container, foreground: error)], [Stationery], [Office supplies], [#money([−290.00 KZT], color: error)],

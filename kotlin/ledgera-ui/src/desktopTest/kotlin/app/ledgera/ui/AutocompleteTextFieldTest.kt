@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 
 class AutocompleteTextFieldTest {
     @Test
-    fun autocompleteCanHideSuggestionsForBlankDescriptionInput() {
+    fun autocompleteCanHideSuggestionsForBlankNoteInput() {
         val suggestions = listOf("Lunch", "Salary")
 
         assertEquals(
