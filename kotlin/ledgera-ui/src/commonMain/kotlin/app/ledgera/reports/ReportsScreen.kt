@@ -372,7 +372,7 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val widths = listOf(
                     110.dp, 90.dp, 210.dp, 320.dp, 210.dp,
-                    130.dp, 170.dp, 230.dp, 220.dp,
+                    140.dp, 110.dp, 230.dp, 220.dp, 220.dp,
                 )
                 val minimumTableWidth = widths.fold(0.dp) { total, width -> total + width }
                 val tableWidth = maxOf(maxWidth, minimumTableWidth)
@@ -385,7 +385,7 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
                             .padding(horizontal = 0.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        listOf("Date", "ID", "From", "Amount", "To", "Rate", "Commission", "Base amount", "Status")
+                        listOf("Date", "ID", "From", "Amount", "To", "Rate", "Commission", "Base amount", "Status", "Description")
                             .forEachIndexed { index, title -> ReportTableCell(title, widths[index], isHeader = true) }
                     }
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
@@ -400,7 +400,7 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
                                 ) {
                                     ReportTableCell(row.date, widths[0])
                                     ReportTableCell("#${row.transferId}", widths[1])
-                                    ReportTableCell("${row.fromWalletName} (#${row.fromWalletId})", widths[2])
+                                    ReportTableCell("${row.fromWalletName}", widths[2])
                                     ReportTableCell(
                                         "%.2f %s -> %.2f %s".format(
                                             row.sourceAmount,
@@ -411,7 +411,7 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
                                         widths[3],
                                         textColor = MaterialTheme.colorScheme.secondary,
                                     )
-                                    ReportTableCell("${row.toWalletName} (#${row.toWalletId})", widths[4])
+                                    ReportTableCell("${row.toWalletName}", widths[4])
                                     ReportTableCell(row.historicalRate, widths[5])
                                     ReportTableCell(
                                         if (row.commissionAmount > 0.0) "-%.2f %s".format(row.commissionAmount, row.commissionCurrency) else "-",
@@ -427,13 +427,9 @@ private fun ReportTransfersTable(result: app.ledgera.model.ReportResult) {
                                         if (row.integrityStatus == "ok") "OK" else "Error: ${row.integrityMessage}",
                                         widths[8],
                                     )
-                                }
-                                if (row.description.isNotBlank() || row.tagsText.isNotBlank()) {
-                                    Text(
-                                        listOf(row.description, row.tagsText).filter(String::isNotBlank).joinToString(" · "),
-                                        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    ReportTableCell(
+                                        row.description,
+                                        widths[9],
                                     )
                                 }
                                 HorizontalDivider(Modifier.fillMaxWidth())

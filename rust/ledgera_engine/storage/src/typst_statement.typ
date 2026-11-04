@@ -20,6 +20,8 @@
 #let error-container = rgb("F9DEDC")
 #let transfer = rgb("6750A4")
 #let transfer-container = rgb("E8DEF8")
+#let tag-color = rgb("00695C")
+#let tag-container = rgb("D6F5F0")
 
 #let pill(label, fill: surface-variant, foreground: on-variant) = box(
   fill: fill,
@@ -27,8 +29,9 @@
   inset: (x: 5pt, y: 2.5pt),
 )[#text(size: 7.2pt, weight: "medium", fill: foreground)[#label]]
 
-#let card(body, fill: surface, width: 1fr) = box(
+#let card(body, fill: surface, width: 1fr, height: auto) = box(
   width: width,
+  height: height,
   fill: fill,
   stroke: 0.5pt + outline,
   radius: 7pt,
@@ -41,9 +44,9 @@
   #text(size: 13pt, weight: "medium")[#value]
   #if note != none {
     v(2pt)
-    text(size: 7.2pt, fill: on-variant)[#note]
+    note
   }
-], fill: fill)
+], fill: fill, height: 72pt)
 
 #let progress(done, total, label) = {
   let ratio = calc.min(done / total, 1)
@@ -60,6 +63,100 @@
   )
 }
 
+#let table-fill(_, y) = if y == 0 {
+  primary-container
+} else if calc.even(y) {
+  surface
+} else {
+  surface-variant
+}
+
+#let table-stroke(_, y) = if y == 0 {
+  0.5pt + outline
+} else {
+  0.35pt + outline
+}
+
+#let styled-table(..args) = table(
+  inset: (x: 5pt, y: 4pt),
+  fill: table-fill,
+  stroke: table-stroke,
+  ..args,
+)
+
+#let operation-detail(tags, description) = {
+  if tags.len() > 0 {
+    for tag in tags [
+      #pill(tag.label, fill: rgb(tag.color), foreground: white)
+      #h(2pt)
+    ]
+  }
+  if description != "" {
+    if tags.len() > 0 {
+      linebreak()
+    }
+    description
+  }
+}
+
+#let capital-dynamics(points) = {
+  if points.len() == 0 {
+    return
+  }
+  let count = points.len()
+  let plot-height = 245pt
+  let chart-height = 286pt
+  let marker = 2.3pt
+  card([
+    #grid(
+      columns: (1fr, auto),
+      align: (left, right),
+      text(size: 10pt, weight: "medium")[Capital dynamics],
+      text(size: 7.5pt, fill: on-variant)[Monthly closing capital],
+    )
+    #v(4pt)
+    #box(width: 100%, height: chart-height)[
+      #place(top + left, dx: 24pt, dy: -2pt,
+        text(size: 7pt, fill: on-variant, "Sum (" + data.base_currency + ")"))
+      #place(top + left, dx: 24pt, dy: 6pt,
+        line(end: (0pt, plot-height), stroke: 0.5pt + outline))
+      #place(top + left, dx: 24pt, dy: plot-height + 6pt,
+        line(end: (696pt, 0pt), stroke: 0.5pt + outline))
+      #for tick in data.capital_axis_ticks [
+        #let y = (1 - tick.position) * plot-height + 6pt
+        #place(top + left, dx: -20pt, dy: y - 4pt,
+          box(width: 42pt)[
+            #align(right)[#text(size: 6.5pt, fill: on-variant)[#tick.label]]
+          ])
+      ]
+      #for index in range(count - 1) [
+        #let first = points.at(index)
+        #let second = points.at(index + 1)
+        #let first-x = first.x * 1pt
+        #let second-x = second.x * 1pt
+        #let first-y = (1 - first.position) * plot-height + 6pt
+        #let second-y = (1 - second.position) * plot-height + 6pt
+        #place(top + left, dx: first-x, dy: first-y,
+          line(end: (second-x - first-x, second-y - first-y), stroke: 1.7pt + primary))
+      ]
+      #for (index, point) in points.enumerate() [
+        #let x = point.x * 1pt
+        #let y = (1 - point.position) * plot-height + 6pt
+        #place(top + left, dx: x - marker, dy: y - marker, circle(radius: marker, fill: primary))
+      ]
+    ]
+    #box(width: 720pt, height: 16pt)[
+      #for point in points [
+        #place(top + left, dx: point.x * 1pt - 24pt, dy: 0pt,
+          box(width: 48pt)[
+            #align(center)[#text(size: 6.5pt, fill: on-variant, point.month)]
+          ])
+      ]
+    ]
+    #align(right)[#text(size: 7pt, fill: on-variant)[MM-YYYY]]
+  ])
+}
+
 #let money(value, color: black) = text(weight: "medium", fill: color)[#value]
 #let kind-fill(kind) = if kind == "income" { income-container } else if kind == "expense" { error-container } else { transfer-container }
 #let kind-color(kind) = if kind == "income" { income } else if kind == "expense" { error } else { transfer }
@@ -74,26 +171,45 @@
       #text(size: 9pt, weight: "medium", fill: on-primary-container)[#data.period]
     ],
     [
-      #pill([#data.base_currency], fill: white, foreground: on-primary-container)
-      #h(4pt)
-      #pill([#data.mode], fill: white, foreground: on-primary-container)
+      #align(right)[
+        #pill([#data.base_currency], fill: white, foreground: on-primary-container)
+        #h(4pt)
+        #pill([#data.mode], fill: white, foreground: on-primary-container)
+        #linebreak()
+        #text(size: 6.5pt, fill: on-primary-container)[Ledgera · generated #data.generated_at]
+      ]
     ],
   )
 ]
 
 #v(8pt)
+#let balance-fill = if data.kpis.balance_delta_positive { income-container } else { error-container }
+#let balance-color = if data.kpis.balance_delta_positive { income } else { error }
+#let balance-symbol = if data.kpis.balance_delta_positive { "▲" } else { "▼" }
 #grid(
   columns: (1fr, 1fr, 1fr, 1fr),
   gutter: 8pt,
   kpi([Opening balance], [#data.kpis.opening_balance]),
   kpi([Income], [#money(data.kpis.income, color: income)], note: [all income]),
   kpi([Expenses], [#money(data.kpis.expenses, color: error)], note: [all expenses]),
-  kpi([Final balance], [#data.kpis.final_balance], note: [#data.mode mode], fill: primary-container),
+  kpi(
+    [Final balance],
+    [#money(data.kpis.final_balance, color: balance-color)],
+    note: [
+      #box(fill: balance-fill, radius: 4pt, inset: (x: 4pt, y: 2pt))[
+        #text(size: 7.2pt, weight: "medium", fill: balance-color)[#balance-symbol #data.kpis.balance_delta]
+      ]
+    ],
+    fill: balance-fill,
+  ),
 )
 
 #v(8pt)
+#capital-dynamics(data.capital_dynamics)
+
+#v(8pt)
 #grid(
-  columns: (1.1fr, 1fr, 1fr),
+  columns: (1.4fr, 1fr),
   gutter: 8pt,
   card([
     #text(weight: "medium", size: 10pt)[By month]
@@ -101,7 +217,7 @@
     #let cells = data.monthly.map(row => (
       [#row.month], [#money(row.income, color: income)], [#money(row.expenses, color: error)], [#row.net],
     )).flatten()
-    #table(columns: (1.3fr, 1fr, 1fr, 1fr), inset: 3pt, align: (left, right, right, right),
+    #styled-table(columns: (1.3fr, 1fr, 1fr, 1fr), align: (left, right, right, right),
       table.header([Month], [Income], [Expenses], [Net]), ..cells)
   ]),
   card([
@@ -110,18 +226,23 @@
     #let cells = data.tags.map(row => (
       [#pill(row.tag, fill: transfer-container, foreground: transfer)], [#row.operations_count], [#row.amount],
     )).flatten()
-    #table(columns: (1fr, auto, auto), inset: 3pt, align: (left, right, right), ..cells)
+    #styled-table(columns: (1fr, auto, auto), align: (left, right, right),
+      table.header([Tag], [Operations], [Amount]), ..cells)
   ]),
-  card([
-    #text(weight: "medium", size: 10pt)[Debts]
-    #v(5pt)
-    #for debt in data.debts [
-      #text(size: 8pt)[#debt.contact · #debt.kind · #debt.status]
-      #v(3pt)
-      #progress(debt.progress_percent / 100, 1, [#debt.progress_label])
-      #v(4pt)
-    ]
-  ]),
+)
+
+#v(8pt)
+#text(weight: "medium", size: 10pt)[Debts]
+#v(4pt)
+#let debt-cells = data.debts.map(debt => (
+  [#debt.contact], [#debt.kind], [#debt.status], [#debt.currency],
+  [#debt.total], [#debt.remaining], [#progress(debt.progress_percent / 100, 1, [#debt.progress_label])],
+)).flatten()
+#styled-table(
+  columns: (2fr, 1fr, 1fr, 0.8fr, 1.2fr, 1.2fr, 1.5fr),
+  align: (left, left, left, left, right, right, left),
+  table.header([Contact], [Kind], [Status], [Currency], [Total], [Remaining], [Progress]),
+  ..debt-cells,
 )
 
 #pagebreak()
@@ -131,10 +252,8 @@
   let category-cells = data.categories.map(row => (
     [#row.category], [#row.operations_count], [#money(row.amount, color: transfer)],
   )).flatten()
-  table(
+  styled-table(
     columns: (2fr, 1fr, 1.4fr),
-    inset: 4pt,
-    stroke: (x, y) => if y == 0 { none } else { 0.35pt + outline },
     align: (left, right, right),
     table.header([Category], [Operations], [Amount]),
     ..category-cells,
@@ -146,13 +265,11 @@
     [#row.date],
     [#pill(row.type_label, fill: kind-fill(row.kind), foreground: kind-color(row.kind))],
     [#row.category],
-    [#row.tags #if row.description != "" [#linebreak() #row.description]],
+    [#operation-detail(row.tags, row.description)],
     [#money(row.amount, color: kind-color(row.kind))],
   )).flatten()
-  table(
+  styled-table(
     columns: (1.1fr, 1.1fr, 2fr, 2.2fr, 1.4fr),
-    inset: 4pt,
-    stroke: (x, y) => if y == 0 { none } else { 0.35pt + outline },
     align: (left, left, left, left, right),
     table.header([Date], [Type], [Category], [Tags / description], [Amount]),
     ..operation-cells,
@@ -163,28 +280,14 @@
 #text(size: 11pt, weight: "medium")[Transfers]
 #v(4pt)
 #let transfer-cells = data.transfers.map(row => (
-  [#row.transfer_id], [#row.date], [#row.from_wallet], [#row.to_wallet],
-  [
-    #text(size: 7pt, weight: "medium", fill: on-variant)[Source]
-    #h(2pt)
-    #money(row.source_amount, color: transfer)
-    #linebreak()
-    #text(size: 7pt, weight: "medium", fill: on-variant)[Target]
-    #h(2pt)
-    #money(row.target_amount, color: transfer)
-    #linebreak()
-    #text(size: 7pt, weight: "medium", fill: on-variant)[Base]
-    #h(2pt)
-    [#row.source_base_amount / #row.target_base_amount]
-  ],
-  [#row.historical_rate], [#row.commission], [#pill(row.status, fill: income-container, foreground: income)],
+  [#row.transfer_id], [#row.date], [#row.from_wallet], [#money(row.source_amount, color: transfer)],
+  [#row.to_wallet], [#money(row.target_amount, color: transfer)],
+  [#row.historical_rate], [#row.commission], [#pill(row.status, fill: income-container, foreground: income)], [#row.note],
 )).flatten()
-#table(
-  columns: (0.6fr, 1fr, 2fr, 2fr, 1.8fr, 1fr, 1.3fr, 1.1fr),
-  inset: 4pt,
-  stroke: (x, y) => if y == 0 { none } else { 0.35pt + outline },
-  align: (left, left, left, left, right, right, left),
-  table.header([ID], [Date], [From], [To], [Source / Target], [Rate], [Commission], [Status]),
+#styled-table(
+  columns: (0.6fr, 0.9fr, 2fr, 1.35fr, 2fr, 1.35fr, 0.9fr, 1.1fr, 0.9fr, 1.5fr),
+  align: (left, left, left, right, left, right, right, left, left, left),
+  table.header([ID], [Date], [From], [Sent], [To], [Received], [Rate], [Commission], [Status], [Note]),
   ..transfer-cells,
 )
 

@@ -7018,6 +7018,64 @@ pub fn current_local_date() -> (i32, i32, i32) {
     current_local_date_impl().unwrap_or_else(today_utc)
 }
 
+pub fn current_local_timestamp_text() -> String {
+    current_local_timestamp_impl().unwrap_or_else(|| {
+        let (year, month, day) = current_local_date();
+        let seconds = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs() % 86_400)
+            .unwrap_or(0);
+        format!(
+            "{day:02}.{month:02}.{year:04} {hour:02}:{minute:02} UTC",
+            hour = seconds / 3_600,
+            minute = (seconds % 3_600) / 60,
+        )
+    })
+}
+
+#[cfg(windows)]
+fn current_local_timestamp_impl() -> Option<String> {
+    let mut local_time = SYSTEMTIME::default();
+    unsafe {
+        GetLocalTime(&mut local_time);
+    }
+    Some(format!(
+        "{:02}.{:02}.{:04} {:02}:{:02}",
+        local_time.wDay,
+        local_time.wMonth,
+        local_time.wYear,
+        local_time.wHour,
+        local_time.wMinute,
+    ))
+}
+
+#[cfg(unix)]
+fn current_local_timestamp_impl() -> Option<String> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| libc::time_t::try_from(duration.as_secs()).ok())?;
+    let mut local_time = std::mem::MaybeUninit::<libc::tm>::uninit();
+    let result = unsafe { libc::localtime_r(&timestamp, local_time.as_mut_ptr()) };
+    if result.is_null() {
+        return None;
+    }
+    let local_time = unsafe { local_time.assume_init() };
+    Some(format!(
+        "{:02}.{:02}.{:04} {:02}:{:02}",
+        local_time.tm_mday,
+        local_time.tm_mon + 1,
+        local_time.tm_year + 1900,
+        local_time.tm_hour,
+        local_time.tm_min,
+    ))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn current_local_timestamp_impl() -> Option<String> {
+    None
+}
+
 #[cfg(windows)]
 fn current_local_date_impl() -> Option<(i32, i32, i32)> {
     let mut local_time = SYSTEMTIME::default();

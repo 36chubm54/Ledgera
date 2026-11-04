@@ -6,12 +6,18 @@ use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World};
 use typst_layout::PagedDocument;
 
+use std::collections::HashMap;
+
 use super::{ReportResult, StorageResult, build_pdf_presentation_data, load_report_font};
 
 const TEMPLATE: &str = include_str!("typst_statement.typ");
 
-pub(super) fn render(report: &ReportResult, use_current: bool) -> StorageResult<Vec<u8>> {
-    let presentation = build_pdf_presentation_data(report, use_current);
+pub(super) fn render(
+    report: &ReportResult,
+    use_current: bool,
+    tag_colors: &HashMap<String, String>,
+) -> StorageResult<Vec<u8>> {
+    let presentation = build_pdf_presentation_data(report, use_current, tag_colors);
     let data = serde_json::to_string(&presentation)
         .map_err(|error| format!("failed to serialize Typst report data: {error}"))?;
     let font_data = load_report_font()?;
